@@ -1,0 +1,12 @@
+# Private configuration is never frontend source.
+atlas-credentials.env
+*.env
+.env*
+!.env.example
+.worktrees/
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
