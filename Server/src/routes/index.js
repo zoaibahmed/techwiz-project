@@ -7,6 +7,9 @@ import categoryRoutes from './category.routes.js';
 import productRoutes from './product.routes.js';
 import farmerRoutes from './farmer.routes.js';
 import pickupWindowRoutes from './pickupWindow.routes.js';
+import { orderRouter } from './order.routes.js';
+import { notificationRouter } from './notification.routes.js';
+import { aiRouter } from './ai.routes.js';
 
 const apiRouter = Router();
 
@@ -21,9 +24,12 @@ v1Router.use('/admin', adminRoutes);
 v1Router.use('/markets', marketRoutes);
 v1Router.use('/categories', categoryRoutes);
 v1Router.use('/products', productRoutes);
+v1Router.use('/pickup-windows', pickupWindowRoutes);
+v1Router.use('/', orderRouter);
 v1Router.use('/farmers', farmerRoutes);
 v1Router.use('/farmer', farmerRoutes); // Alias for farmer operations (/farmer/products, /farmer/profile, etc.)
-v1Router.use('/pickup-windows', pickupWindowRoutes);
+v1Router.use('/', notificationRouter);
+v1Router.use('/', aiRouter);
 
 // Mount versioned API at /api/v1
 apiRouter.use('/v1', v1Router);
@@ -34,8 +40,12 @@ apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/markets', marketRoutes);
 apiRouter.use('/categories', categoryRoutes);
 apiRouter.use('/products', productRoutes);
+apiRouter.use('/pickup-windows', pickupWindowRoutes);
+apiRouter.use('/', orderRouter);
 apiRouter.use('/farmers', farmerRoutes);
 apiRouter.use('/farmer', farmerRoutes);
-apiRouter.use('/pickup-windows', pickupWindowRoutes);
+apiRouter.use('/', notificationRouter);
+apiRouter.use('/', aiRouter);
 
 export default apiRouter;
+

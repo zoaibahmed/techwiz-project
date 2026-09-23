@@ -3,6 +3,12 @@ import { getDB } from '../config/db.js';
 
 export async function getPublicFarmerProfileService(farmerProfileId) {
   const db = getDB();
+  if (!ObjectId.isValid(farmerProfileId)) {
+    const err = new Error('Farmer profile not found or currently unapproved.');
+    err.code = 'NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
   const fId = new ObjectId(farmerProfileId);
 
   const profile = await db.collection('farmerProfiles').findOne({ _id: fId, approvalStatus: 'approved' });
@@ -109,6 +115,7 @@ export async function updateMyFarmerProfileService(userId, data) {
   if (data.bio !== undefined) updateFields.bio = data.bio;
   if (data.phone !== undefined) updateFields.phone = data.phone;
   if (data.address !== undefined) updateFields.address = data.address;
+  if (data.stallNumber !== undefined) updateFields.stallNumber = data.stallNumber;
   if (data.operatingDays !== undefined) updateFields.operatingDays = data.operatingDays;
 
   if (data.marketIds) {
@@ -138,3 +145,6 @@ export async function updateMyFarmerProfileService(userId, data) {
 
   return getMyFarmerProfileService(userId);
 }
+
+export const updateFarmerProfileService = updateMyFarmerProfileService;
+

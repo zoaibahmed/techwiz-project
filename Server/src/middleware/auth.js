@@ -130,3 +130,5 @@ export function requireApprovedFarmer(req, res, next) {
 
   next();
 }
+
+export const authenticate = authenticateToken;

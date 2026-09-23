@@ -45,6 +45,7 @@ export async function setupDatabaseIndexes(db) {
     await db.collection('orders').createIndex({ customerId: 1, createdAt: -1 });
     await db.collection('orders').createIndex({ farmerId: 1, status: 1 });
     await db.collection('orders').createIndex({ checkoutGroupId: 1 });
+    await db.collection('orders').createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
     // 9. Reviews (Allow reviewing farmer and each distinct product in a completed order)
     try {

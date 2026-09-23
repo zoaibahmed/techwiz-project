@@ -46,7 +46,7 @@ router.patch('/stock-offers/:id/status', authenticateToken, requireApprovedFarme
 router.get('/pickup-windows', authenticateToken, requireApprovedFarmer, listPickupWindows);
 router.post('/pickup-windows', authenticateToken, requireApprovedFarmer, createPickupWindow);
 
-// 2. Public Farmer Profile (parameterized route at end)
+// 2. Public Farmer Profile
 router.get('/:id', getPublicFarmerProfile);
 
 export default router;
