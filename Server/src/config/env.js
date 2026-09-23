@@ -30,6 +30,19 @@ export const env = {
   MONGODB_URI: process.env.MONGODB_URI || '',
   MONGODB_DB_NAME: process.env.MONGODB_DB_NAME || 'techwiz_db',
   MONGODB_USERNAME: process.env.MONGODB_USERNAME || '',
+  
+  // Market & Regional Configuration (Configurable, not hardcoded into business logic)
+  DEFAULT_CURRENCY: process.env.DEFAULT_CURRENCY || 'PKR',
+  DEFAULT_TIMEZONE: process.env.DEFAULT_TIMEZONE || 'Asia/Karachi',
+
+  // Authentication & Security
+  JWT_SECRET: process.env.JWT_SECRET || 'marketlink-dev-jwt-secret-do-not-use-in-production-2026',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  COOKIE_SECRET: process.env.COOKIE_SECRET || 'marketlink-dev-cookie-secret-2026',
+
+  // Optional AI / OpenAI Configuration (Kept server-only, never exposed to client)
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
 };
 
 export function validateEnv() {

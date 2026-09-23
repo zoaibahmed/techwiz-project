@@ -52,7 +52,8 @@ describe('Health and System Routes', () => {
   it('GET /api/unknown-endpoint should return 404 with structured JSON error', async () => {
     const res = await request(app).get('/api/non-existent-endpoint');
     expect(res.status).toBe(404);
-    expect(res.body).toHaveProperty('success', false);
+    expect(res.body).toHaveProperty('error');
     expect(res.body.error).toHaveProperty('code', 'NOT_FOUND');
+    expect(res.body.error).toHaveProperty('message');
   });
 });
