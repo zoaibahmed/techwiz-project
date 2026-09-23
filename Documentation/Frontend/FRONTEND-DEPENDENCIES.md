@@ -1,3 +1,5 @@
+> Current implementation update: the SRS has arrived and the owner authorised frontend development. The preparation record below is historical. See [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) for the current app, design, dependencies, test coverage and remaining integration work. Figma may now be used within free quota but must not block coding.
+
 # Dependencies and skills
 
 No frontend dependencies existed initially. Versions are exact in Client/package.json with a committed lockfile.
