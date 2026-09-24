@@ -43,7 +43,7 @@ try {
     );
     assert.equal(await page.locator(".demo-controls").count(), 0);
   } else {
-    assert.match(await page.locator("h1").innerText(), /Know your market/);
+    assert.match(await page.locator("h1").innerText(), /The living\s+market/);
     assert.match(
       await page.locator(".demo-banner").innerText(),
       /fictional data/,

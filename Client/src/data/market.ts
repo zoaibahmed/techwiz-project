@@ -1,3 +1,4 @@
+import { localization } from "./localization";
 // UI-only development models. These are NOT approved API DTOs or lifecycle enums.
 export type Role = "customer" | "farmer" | "admin";
 export type DemoStage =
@@ -112,9 +113,9 @@ export interface DemoState {
   checklist: string[];
 }
 export const demoDate = "2026-10-03";
-export const currency = "PKR"; // Illustrative fixture currency, not a production default.
+export const currency = localization.currency;
 export const money = (minor: number) =>
-  new Intl.NumberFormat("en-PK", {
+  new Intl.NumberFormat(localization.locale, {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
@@ -453,14 +454,14 @@ export function seed(): DemoState {
   };
 }
 export const time = (value: string) =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Karachi",
+  new Intl.DateTimeFormat(localization.dateLocale, {
+    timeZone: localization.timeZone,
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
 export const date = (value: string) =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Karachi",
+  new Intl.DateTimeFormat(localization.dateLocale, {
+    timeZone: localization.timeZone,
     weekday: "short",
     day: "numeric",
     month: "short",

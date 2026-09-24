@@ -91,7 +91,7 @@ test("public market finder preserves the chosen day and neighbourhood", async ({
     });
   }
   await page.getByLabel("Find a neighbourhood").fill("Riverside");
-  await page.getByRole("button", { name: "Find my market" }).click();
+  await page.getByRole("link", { name: "Full directory" }).click();
   await expect(page.locator(".market-result")).toHaveCount(1);
   await expect(page.locator(".market-result.selected")).toContainText(
     "Riverside Gathering",

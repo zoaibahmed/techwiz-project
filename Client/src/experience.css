@@ -1,0 +1,1328 @@
+.route-arrival-feedback {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: #b6984d;
+  transform-origin: left;
+  z-index: 300;
+  pointer-events: none;
+}
+.customer-rail nav a { position: relative; isolation: isolate; }
+.customer-rail nav a.active { background: transparent; box-shadow: none; }
+.rail-active-surface { position: absolute; inset: 0; border-radius: 4px; background: #dce4d1; border-left: 3px solid #3f6143; z-index: -1; }
+.customer-command .command-panel-heading h2 {
+  font-size: 13px;
+}
+.customer-command .command-panel-heading > a,
+.customer-command .command-panel-heading > span {
+  font-size: 10px;
+}
+.customer-command .command-pickup h3 {
+  font-size: 12px;
+}
+.customer-command .command-pickup p,
+.customer-command .command-pickup a {
+  font-size: 10px;
+}
+.customer-command .command-history td {
+  font-size: 11px;
+}
+.customer-command .command-history th {
+  font-size: 10px;
+}
+.customer-command .command-updates strong {
+  font-size: 11px;
+}
+.customer-command .command-produce .harvest-item > small {
+  font-size: 9px;
+}
+.customer-command .command-produce .harvest-item h3 {
+  font-size: 12px;
+}
+.customer-command .command-produce .harvest-price small {
+  font-size: 9px;
+}
+/* Compact customer operations: isolated from public scene styling. */
+.customer-command.market-studio {
+  padding: 22px 24px;
+  max-width: 1700px;
+}
+.command-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.command-title > div > span {
+  font-size: 10px;
+  color: #637155;
+}
+.command-title h1 {
+  font-size: 29px;
+  line-height: 1.12;
+  margin: 8px 0 0;
+  letter-spacing: -0.025em;
+}
+.command-title > div:last-child {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.command-title label,
+.command-planner {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  border: 1px solid #ccd4bd;
+  background: #faf9f1;
+  padding: 9px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.command-title select {
+  background: none;
+  border: 0;
+  padding: 0;
+  min-height: 23px;
+  font-size: 11px;
+  width: auto;
+}
+.command-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid #ccd4bf;
+  background: #fafaf2;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+.command-summary > div,
+.command-summary > a {
+  padding: 15px 18px;
+  border-right: 1px solid #d9dece;
+}
+.command-summary > a {
+  border: 0;
+}
+.command-summary span {
+  font-size: 10px;
+  color: #667359;
+  display: block;
+  margin-bottom: 8px;
+}
+.command-summary strong {
+  font-size: 25px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.command-summary small {
+  font-size: 9px;
+  line-height: 1.5;
+  color: #667758;
+  font-weight: 400;
+  max-width: 80px;
+}
+.command-summary small > svg {
+  display: inline;
+}
+.command-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 305px;
+  gap: 18px;
+}
+.command-workspace > section,
+.command-discovery,
+.command-itinerary,
+.command-updates {
+  border: 1px solid #d1d9c6;
+  background: #fbfaf3;
+  border-radius: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.command-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e0e4d6;
+}
+.command-panel-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Public Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin: 0;
+}
+.command-panel-heading > a,
+.command-panel-heading > span {
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.command-map-layout {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+}
+.command-map-layout .living-map {
+  height: 273px;
+}
+.command-map-layout .map-integration-note {
+  font-size: 9px;
+  padding: 7px 10px;
+}
+.command-market-list {
+  border-left: 1px solid #d7decb;
+  padding: 8px;
+}
+.command-market-list article {
+  display: flex;
+  align-items: center;
+  padding: 9px 5px;
+  border-bottom: 1px solid #dbe1d0;
+}
+.command-market-list article.selected {
+  background: #e8eedb;
+}
+.command-market-list button {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  text-align: left;
+  border: 0;
+  background: none;
+  flex: 1;
+  min-width: 0;
+  color: #344b2d;
+  padding: 9px 5px;
+  cursor: pointer;
+}
+.command-market-list button > span {
+  font-size: 9px;
+}
+.command-market-list strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.command-market-list small {
+  font-size: 9px;
+  color: #657857;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.command-market-list article > a {
+  padding: 5px;
+}
+.command-location-note {
+  font-size: 10px;
+  padding: 16px 10px;
+  color: #5e724f;
+  line-height: 1.8;
+}
+.command-location-note > span {
+  font-size: 8px;
+}
+.command-order-tabs {
+  display: flex;
+  padding: 10px 16px;
+  gap: 6px;
+}
+.command-order-tabs button {
+  background: none;
+  border: 1px solid #d3dcc5;
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 6px 10px;
+  color: #496039;
+  cursor: pointer;
+}
+.command-order-tabs button[aria-pressed="true"] {
+  background: #e2e9d6;
+  border-color: #a5b793;
+}
+.command-pickup.agenda-stop {
+  padding: 12px 16px;
+  gap: 14px;
+  border-bottom: 1px solid #e5e8dd;
+  display: grid;
+  grid-template-columns: 43px 1fr;
+}
+.command-pickup.agenda-stop:before {
+  display: none;
+}
+.command-pickup > time {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+.command-pickup > time > small {
+  display: block;
+  font-size: 8px;
+  color: #657957;
+  font-weight: 400;
+}
+.command-pickup h3 {
+  font-family: "Public Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 8px 0 5px;
+}
+.command-pickup p {
+  font-size: 9px;
+  margin: 0 0 7px;
+}
+.command-pickup a {
+  font-size: 9px;
+}
+.command-pickup .status {
+  font-size: 8px;
+}
+.command-all-orders {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  font-size: 10px;
+}
+.command-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #e0e5d7;
+  margin: 0 16px;
+}
+.command-search input {
+  border: 0;
+  background: none;
+  font-size: 11px;
+  min-height: 36px;
+  padding: 8px 0;
+  width: 100%;
+}
+.command-search button {
+  background: none;
+  border: 0;
+  font-size: 10px;
+  color: #526d40;
+  cursor: pointer;
+}
+.command-produce.studio-harvest {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 4px 16px;
+}
+.command-produce .harvest-item {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: 11px;
+  align-content: center;
+  min-height: 100px;
+  border-bottom: 1px solid #e0e5d7;
+  padding: 12px 10px 12px 0;
+  position: relative;
+}
+.command-produce .harvest-photo {
+  grid-column: 1;
+  grid-row: 1/4;
+  height: 69px;
+  align-self: center;
+  border-radius: 3px;
+}
+.command-produce .harvest-photo > span {
+  display: none;
+}
+.command-produce .harvest-item > small {
+  font-size: 8px;
+  line-height: 1.5;
+  margin: 1px 0 4px;
+  grid-column: 2;
+  padding-right: 28px;
+}
+.command-produce .harvest-item > a:not(.harvest-photo) {
+  grid-column: 2;
+}
+.command-produce .harvest-item h3 {
+  font-size: 11px;
+  margin: 0 0 6px;
+}
+.command-produce .harvest-price {
+  grid-column: 2;
+  align-items: center;
+  gap: 4px;
+}
+.command-produce .harvest-price strong {
+  font-size: 11px;
+}
+.command-produce .harvest-price small {
+  font-size: 8px;
+}
+.command-produce .harvest-item > .favourite {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+}
+.command-produce .favourite svg {
+  width: 14px;
+}
+.command-produce .harvest-price button {
+  width: 26px;
+  height: 26px;
+}
+.command-tools {
+  display: grid;
+  gap: 14px;
+}
+.command-companion {
+  padding: 16px;
+  background: #294834;
+  color: #f1efd9;
+  border-radius: 4px;
+}
+.command-companion > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.command-companion > div small {
+  display: block;
+  font-size: 8px;
+  margin-top: 3px;
+  color: #c7d3b7;
+}
+.command-companion p {
+  font-size: 10px;
+  line-height: 1.7;
+  color: #d2dcc4;
+  margin: 12px 0;
+}
+.command-companion button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid #859b70;
+  border-radius: 3px;
+  background: #e9e6c8;
+  padding: 9px 11px;
+  color: #28482f;
+  font-size: 10px;
+  cursor: pointer;
+}
+.command-companion > small {
+  font-size: 8px;
+  display: block;
+  color: #c7d5b5;
+  margin-top: 8px;
+}
+.command-checklist {
+  border: 1px solid #d1d9c6;
+  background: #fbfaf3;
+  border-radius: 4px;
+  padding-bottom: 8px;
+}
+.command-checklist > label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 16px;
+  font-size: 10px;
+}
+.command-checklist input {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  accent-color: #375b39;
+}
+.command-checklist > label > span {
+  flex: 1;
+}
+.command-table-scroll {
+  position: relative;
+  overflow-x: auto;
+}
+.command-history table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+.command-history th {
+  font-size: 9px;
+  padding: 12px;
+  color: #617352;
+  background: #f1f3e9;
+  font-weight: 500;
+}
+.command-history td {
+  font-size: 10px;
+  padding: 14px 12px;
+  border-top: 1px solid #e1e5d8;
+}
+.command-history .status {
+  font-size: 8px;
+}
+.command-updates > a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e1e6d7;
+}
+.command-updates > a > span:not(.update-dot) {
+  flex: 1;
+}
+.command-updates strong {
+  font-size: 10px;
+  font-weight: 500;
+  display: block;
+}
+.command-updates small {
+  font-size: 9px;
+  color: #657857;
+  display: block;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+.update-dot {
+  background: #51783e;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.command-empty {
+  font-size: 11px;
+  line-height: 1.7;
+  padding: 12px 16px;
+  color: #647955;
+}
+.command-footnote {
+  font-size: 9px;
+  color: #647655;
+  margin: 16px 0 0;
+  line-height: 1.7;
+}
+.customer-command .living-map-selection strong {
+  font-size: 9px;
+}
+.customer-command .living-map-selection small {
+  font-size: 8px;
+}
+.customer-command .living-map-label {
+  font-size: 8px;
+}
+.customer-command .living-pin > span {
+  font-size: 8px;
+}
+.customer-command .living-map-disclaimer {
+  font-size: 7px;
+}
+@media (max-width: 1199px) {
+  .arrival-title h1 {
+    font-size: 12vw;
+  }
+  .arrival-stage {
+    height: 370px;
+  }
+  .arrival-ticket {
+    width: 190px;
+    padding: 20px;
+  }
+  .arrival-ticket > strong {
+    font-size: 30px;
+  }
+  .arrival-portrait {
+    height: auto;
+  }
+  .arrival-portrait img {
+    height: 178px;
+  }
+  .arrival-side-note {
+    font-size: 19px;
+  }
+  .command-workspace {
+    grid-template-columns: minmax(0, 1fr) 265px;
+    gap: 14px;
+  }
+  .command-map-layout {
+    grid-template-columns: 1fr;
+  }
+  .command-market-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 0;
+    padding: 4px;
+  }
+  .command-location-note {
+    display: none;
+  }
+  .command-map-layout .living-map {
+    height: 230px;
+  }
+  .command-summary strong {
+    font-size: 21px;
+    gap: 8px;
+  }
+  .command-produce.studio-harvest {
+    grid-template-columns: 1fr;
+  }
+  .market-stall-scene {
+    gap: 25px;
+  }
+  .stall-intro h2 {
+    font-size: 36px;
+  }
+  .bench-body {
+    grid-template-columns: 0.7fr 1fr 1fr;
+    gap: 18px;
+  }
+  .bench-offer-list button {
+    flex-wrap: wrap;
+  }
+  .bench-heading h2 {
+    font-size: 35px;
+  }
+  .bench-details h3 {
+    font-size: 30px;
+  }
+}
+@media (max-width: 900px) {
+  .arrival-main-photo {
+    left: 13%;
+    right: 13%;
+  }
+  .arrival-portrait {
+    width: 24%;
+    left: -1%;
+    top: 80px;
+  }
+  .arrival-ticket {
+    right: -1%;
+    top: 110px;
+  }
+  .arrival-side-note {
+    display: none;
+  }
+  .explorer-workspace {
+    grid-template-columns: 250px 1fr;
+  }
+  .explorer-toolbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .explorer-toolbar > label {
+    flex-basis: 50%;
+  }
+  .explorer-heading h2 {
+    font-size: 34px;
+  }
+  .explorer-heading p {
+    font-size: 11px;
+  }
+  .market-stall-scene {
+    grid-template-columns: 1fr 1fr;
+  }
+  .stall-story {
+    grid-column: 1/-1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 28px;
+  }
+  .stall-story > svg {
+    display: none;
+  }
+  .stall-story h3 {
+    grid-column: 1;
+  }
+  .stall-story p {
+    grid-column: 2;
+    grid-row: 1/4;
+  }
+  .stall-story .stall-attendance {
+    grid-column: 2;
+    grid-row: 4;
+    margin: 0;
+  }
+  .stall-story > a {
+    grid-column: 1;
+  }
+  .bench-body {
+    grid-template-columns: 1fr 1fr;
+  }
+  .bench-offer-list {
+    grid-column: 1/-1;
+    display: flex;
+  }
+  .bench-offer-list button {
+    flex: 1;
+    flex-wrap: nowrap;
+  }
+  .bench-photo {
+    height: 400px;
+  }
+  .command-title h1 {
+    font-size: 27px;
+  }
+}
+@media (max-width: 767px) {
+  .arrival-scene {
+    padding: 16px 18px 45px;
+  }
+  .arrival-meta {
+    font-size: 9px;
+  }
+  .arrival-meta > span:last-child {
+    display: none;
+  }
+  .arrival-title p {
+    font-size: 10px;
+    margin: 25px 0 10px;
+  }
+  .arrival-title h1 {
+    font-size: 22vw;
+    line-height: 0.86;
+    max-width: 500px;
+    margin: auto;
+    letter-spacing: -0.055em;
+  }
+  .arrival-word {
+    display: block;
+  }
+  .arrival-stage {
+    height: 355px;
+    margin-top: 18px;
+  }
+  .arrival-main-photo {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 65px;
+    transform: rotate(-2deg);
+  }
+  .arrival-main-photo figcaption {
+    font-size: 7px;
+    padding: 6px 10px;
+  }
+  .arrival-main-photo > img {
+    object-position: 54% center;
+  }
+  .arrival-portrait {
+    width: 42%;
+    height: auto;
+    top: 160px;
+    left: 4%;
+    border-width: 5px;
+    transform: rotate(-6deg);
+  }
+  .arrival-portrait img {
+    height: 139px;
+    object-position: 50% 46%;
+  }
+  .arrival-portrait figcaption {
+    font-size: 14px;
+    padding: 6px 2px;
+  }
+  .arrival-portrait small {
+    font-size: 6px;
+    line-height: 1.5;
+    margin-top: 3px;
+  }
+  .arrival-ticket {
+    right: 1%;
+    top: 185px;
+    width: 47%;
+    padding: 13px;
+    transform: rotate(4deg);
+    border-top-width: 3px;
+  }
+  .arrival-ticket > svg {
+    display: none;
+  }
+  .arrival-ticket > span {
+    font-size: 8px;
+    margin: 0;
+  }
+  .arrival-ticket > strong {
+    font-size: 27px;
+    margin: 7px 0;
+  }
+  .arrival-ticket p {
+    display: none;
+  }
+  .arrival-ticket button {
+    font-size: 9px;
+    padding-top: 9px;
+    gap: 7px;
+    line-height: 1.5;
+  }
+  .arrival-bottom {
+    margin-top: 30px;
+    gap: 12px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 3;
+  }
+  .arrival-bottom > p {
+    font-size: 11px;
+    flex: 1;
+    min-width: 220px;
+    line-height: 1.8;
+  }
+  .arrival-bottom > span {
+    font-size: 8px;
+    text-align: left;
+    flex-basis: 100%;
+    max-width: 260px;
+  }
+  .arrival-down {
+    width: 38px;
+    height: 38px;
+  }
+  .arrival-connector {
+    height: 40px;
+    bottom: 0;
+    left: 35%;
+    width: 60%;
+  }
+  .market-explorer {
+    padding: 30px 16px 0;
+    scroll-margin-top: 10px;
+  }
+  .explorer-heading {
+    display: block;
+    margin-bottom: 20px;
+  }
+  .explorer-heading h2 {
+    font-size: 33px;
+    line-height: 1.05;
+    margin: 10px 0 13px;
+  }
+  .explorer-heading p {
+    font-size: 11px;
+  }
+  .explorer-heading span {
+    font-size: 10px;
+  }
+  .explorer-toolbar {
+    padding: 12px;
+    gap: 12px;
+  }
+  .explorer-toolbar > label {
+    flex-basis: 100%;
+    border-bottom: 1px solid #d8decb;
+    padding-bottom: 8px;
+  }
+  .explorer-toolbar > a {
+    font-size: 9px;
+    margin-left: auto;
+  }
+  .market-day-tabs button {
+    padding: 9px 10px;
+    gap: 6px;
+    font-size: 10px;
+  }
+  .market-day-tabs svg {
+    width: 13px;
+  }
+  .explorer-workspace {
+    grid-template-columns: 1fr;
+  }
+  .explorer-market-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .explorer-list-label {
+    grid-column: 1/-1;
+    margin-bottom: 5px;
+  }
+  .explorer-market-choice {
+    padding: 13px 8px;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .explorer-market-choice.selected {
+    padding-left: 5px;
+  }
+  .market-choice-index {
+    display: none;
+  }
+  .explorer-market-choice > svg {
+    width: 12px;
+    flex-shrink: 0;
+  }
+  .explorer-market-choice strong {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .explorer-market-choice small {
+    font-size: 9px;
+    line-height: 1.5;
+  }
+  .explorer-market-choice > span > span {
+    font-size: 9px;
+  }
+  .explorer-list-foot {
+    display: none;
+  }
+  .explorer-workspace .living-map {
+    height: 300px;
+  }
+  .map-integration-note {
+    font-size: 9px;
+  }
+  .selected-market-ribbon {
+    padding: 17px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .selected-market-ribbon strong {
+    font-size: 10px;
+    line-height: 1.6;
+    display: block;
+  }
+  .selected-market-ribbon span {
+    font-size: 8px;
+    margin-bottom: 4px;
+  }
+  .selected-market-ribbon > a {
+    font-size: 10px;
+  }
+  .market-stall-scene {
+    padding: 35px 18px;
+    gap: 25px 18px;
+    grid-template-columns: 0.9fr 1fr;
+    align-items: start;
+  }
+  .stall-intro {
+    grid-column: 1/-1;
+  }
+  .stall-intro h2 {
+    font-size: 35px;
+    margin: 12px 0;
+  }
+  .stall-intro p {
+    font-size: 11px;
+  }
+  .grower-switcher {
+    margin: 17px 0;
+  }
+  .grower-switcher button {
+    padding: 13px 8px;
+    font-size: 11px;
+  }
+  .stall-intro > a {
+    font-size: 10px;
+  }
+  .stall-person {
+    height: 295px;
+    border-width: 5px;
+    transform: rotate(1deg);
+  }
+  .stall-person figcaption {
+    padding: 10px;
+    font-size: 18px;
+  }
+  .stall-person small {
+    font-size: 7px;
+    line-height: 1.5;
+  }
+  .stall-story {
+    grid-column: auto;
+    display: block;
+  }
+  .stall-story > span {
+    margin-top: 3px;
+    font-size: 8px;
+  }
+  .stall-story h3 {
+    font-size: 27px;
+    margin: 10px 0;
+  }
+  .stall-story p {
+    font-size: 10px;
+    line-height: 1.75;
+  }
+  .stall-story .stall-attendance {
+    font-size: 8px;
+    margin: 15px 0;
+    padding-top: 12px;
+    align-items: flex-start;
+  }
+  .stall-story .stall-attendance svg {
+    flex-shrink: 0;
+  }
+  .stall-story > a {
+    font-size: 9px;
+    line-height: 1.5;
+  }
+  .reservation-bench {
+    padding: 28px 16px;
+  }
+  .bench-heading {
+    display: block;
+    margin-bottom: 20px;
+  }
+  .bench-heading h2 {
+    font-size: 32px;
+    line-height: 1.08;
+    margin: 9px 0 13px;
+  }
+  .bench-heading p {
+    font-size: 10px;
+    line-height: 1.7;
+  }
+  .bench-body {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .bench-offer-list {
+    gap: 7px;
+  }
+  .bench-offer-list button {
+    padding: 8px;
+    gap: 7px;
+    min-width: 0;
+  }
+  .bench-offer-list button > span:last-child {
+    display: none;
+  }
+  .bench-offer-list img {
+    width: 38px;
+    height: 47px;
+    flex-shrink: 0;
+  }
+  .bench-offer-list strong {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .bench-offer-list small {
+    font-size: 8px;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+  .bench-photo {
+    height: 280px;
+  }
+  .bench-details h3 {
+    font-size: 34px;
+  }
+  .bench-details > p {
+    font-size: 12px;
+  }
+  .bench-pickup small {
+    font-size: 10px;
+  }
+  .bench-add {
+    min-height: 46px;
+    font-size: 11px;
+  }
+  .bench-quantity button {
+    width: 40px;
+    height: 40px;
+  }
+  .market-bag-dock {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 19px;
+  }
+  .market-bag-dock > a {
+    font-size: 11px;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .bag-confirmation {
+    bottom: 15px;
+    padding: 14px;
+    gap: 10px;
+    font-size: 10px;
+    flex-wrap: wrap;
+    width: calc(100% - 30px);
+  }
+  .bag-confirmation small {
+    font-size: 8px;
+  }
+  .bag-confirmation a {
+    margin-left: 30px;
+  }
+  .experience-announcement {
+    padding: 18px 16px;
+  }
+  .experience-announcement .notice {
+    font-size: 10px;
+  }
+  .customer-command.market-studio {
+    padding: 17px 14px;
+  }
+  .command-title {
+    display: block;
+    margin-bottom: 15px;
+  }
+  .command-title h1 {
+    font-size: 27px;
+    margin: 7px 0 14px;
+  }
+  .command-title > div:last-child {
+    justify-content: space-between;
+  }
+  .command-title label,
+  .command-planner {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .command-summary {
+    grid-template-columns: 1fr 1fr;
+    margin-bottom: 14px;
+  }
+  .command-summary > div,
+  .command-summary > a {
+    padding: 12px;
+    border-bottom: 1px solid #d7dfcb;
+  }
+  .command-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+  .command-summary > div:nth-child(3),
+  .command-summary > a {
+    border-bottom: 0;
+  }
+  .command-summary span {
+    font-size: 9px;
+    margin-bottom: 6px;
+  }
+  .command-summary strong {
+    font-size: 22px;
+    gap: 10px;
+  }
+  .command-summary small {
+    font-size: 8px;
+    max-width: 60px;
+  }
+  .command-workspace {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .command-discovery {
+    order: 1;
+  }
+  .command-itinerary {
+    order: 0;
+  }
+  .command-harvest {
+    order: 2;
+  }
+  .command-tools {
+    order: 3;
+    grid-template-columns: 1fr;
+  }
+  .command-history {
+    order: 4;
+  }
+  .command-updates {
+    order: 5;
+  }
+  .command-map-layout .living-map {
+    height: 260px;
+  }
+  .command-market-list {
+    grid-template-columns: 1fr 1fr;
+  }
+  .command-market-list button {
+    gap: 6px;
+    padding: 8px 2px;
+  }
+  .command-market-list strong {
+    font-size: 10px;
+  }
+  .command-market-list small {
+    font-size: 8px;
+  }
+  .command-produce.studio-harvest {
+    grid-template-columns: 1fr;
+    padding: 2px 14px;
+  }
+  .command-produce .harvest-item {
+    grid-template-columns: 65px 1fr;
+    min-height: 92px;
+    padding: 10px 0;
+  }
+  .command-produce .harvest-photo {
+    height: 70px;
+  }
+  .command-produce .harvest-item > small {
+    font-size: 9px;
+  }
+  .command-produce .harvest-item h3 {
+    font-size: 12px;
+  }
+  .command-produce .harvest-price small {
+    display: inline;
+    font-size: 9px;
+  }
+  .command-produce .harvest-price button {
+    width: 32px;
+    height: 32px;
+  }
+  .command-produce .harvest-item > .favourite {
+    right: 5px;
+  }
+  .command-pickup.agenda-stop {
+    padding: 15px;
+    grid-template-columns: 45px 1fr;
+  }
+  .command-pickup h3 {
+    font-size: 12px;
+  }
+  .command-pickup p,
+  .command-pickup a {
+    font-size: 10px;
+  }
+  .command-pickup .status {
+    font-size: 9px;
+  }
+  .command-panel-heading h2 {
+    font-size: 12px;
+  }
+  .command-checklist > label {
+    padding: 10px 16px;
+    font-size: 11px;
+  }
+  .command-checklist input {
+    width: 17px;
+    height: 17px;
+  }
+  .command-companion p {
+    font-size: 11px;
+  }
+  .command-companion button {
+    font-size: 11px;
+    padding: 12px;
+  }
+  .command-companion > small {
+    font-size: 9px;
+  }
+  .command-table-scroll {
+    max-width: 100%;
+  }
+  .command-history table {
+    min-width: 570px;
+  }
+  .command-updates strong {
+    font-size: 11px;
+  }
+  .command-updates small {
+    font-size: 10px;
+  }
+  .command-footnote {
+    font-size: 9px;
+  }
+}
+@media (max-width: 359px) {
+  .arrival-title h1 {
+    font-size: 23vw;
+  }
+  .arrival-stage {
+    height: 330px;
+  }
+  .arrival-portrait {
+    top: 150px;
+    height: auto;
+    width: 43%;
+  }
+  .arrival-portrait img {
+    height: 121px;
+  }
+  .arrival-portrait figcaption {
+    font-size: 12px;
+  }
+  .arrival-ticket {
+    top: 180px;
+    padding: 11px;
+    width: 47%;
+  }
+  .arrival-ticket > strong {
+    font-size: 23px;
+  }
+  .arrival-ticket button {
+    font-size: 8px;
+  }
+  .arrival-bottom > p {
+    min-width: 200px;
+    font-size: 10px;
+  }
+  .arrival-bottom > span {
+    font-size: 7px;
+  }
+  .explorer-toolbar > a {
+    font-size: 8px;
+  }
+  .market-day-tabs button {
+    padding: 8px;
+    font-size: 9px;
+  }
+  .explorer-market-choice strong {
+    font-size: 10px;
+  }
+  .stall-person {
+    height: 290px;
+  }
+  .stall-story h3 {
+    font-size: 24px;
+  }
+  .stall-story p {
+    font-size: 9px;
+  }
+  .bench-offer-list img {
+    width: 29px;
+    height: 40px;
+  }
+  .bench-offer-list strong {
+    font-size: 9px;
+  }
+  .bench-offer-list small {
+    font-size: 7px;
+  }
+  .command-summary strong {
+    font-size: 19px;
+    gap: 7px;
+  }
+  .command-title h1 {
+    font-size: 25px;
+  }
+  .command-planner {
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrival-connector path {
+    stroke-dashoffset: 0;
+  }
+  .arrival-down {
+    scroll-behavior: auto;
+  }
+}

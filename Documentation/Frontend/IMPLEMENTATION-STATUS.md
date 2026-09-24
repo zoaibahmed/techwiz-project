@@ -4,6 +4,8 @@ This is an internal engineering record, not the student's competition submission
 
 ## Current result
 
+The homepage and customer overview now use the [creative-reset checkpoint](CREATIVE-RESET-REVIEW.md), pending owner visual approval. It replaces the rejected first visual milestone. Real map integration remains outstanding; the temporary renderer is explicitly labelled. Farmer/admin visual propagation has not started.
+
 The neutral preparation shell has been replaced by a responsive React/Vite/TypeScript MarketLink frontend. Public, customer, farmer and administrator routes share a Living Market design system, original layouts, local fonts, licensed editorial images and a central in-memory fixture gateway. No production API endpoints or DTOs have been declared approved. No Express, MongoDB or OpenAI integration has been performed.
 
 Working app: `D:\TECHWIZ7\.worktrees\frontend\Client`, branch `Client`. The alternate `D:\TECHWIZ7.worktrees\frontend\Client` path does not exist. The original checkout remains on `Server` and was not switched.

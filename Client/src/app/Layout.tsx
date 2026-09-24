@@ -21,6 +21,7 @@ import { gateway } from "../data/gateway";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
 import { CompanionContext } from "./companion-context";
+import { motion, useReducedMotion } from "motion/react";
 
 export const nav: Record<Role, [string, string][]> = {
   customer: [
@@ -61,6 +62,7 @@ export function Layout() {
   const s = useMarket();
   const act = useAction();
   const { pathname } = useLocation();
+  const reduceMotion = useReducedMotion();
   const [menu, setMenu] = useState(false);
   const [assistant, setAssistant] = useState(false);
   const [controls, setControls] = useState(false);
@@ -85,6 +87,22 @@ export function Layout() {
   }, [pathname]);
   return (
     <CompanionContext.Provider value={() => setAssistant(true)}>
+      {(pathname === "/" || pathname === "/customer") && (
+        <motion.div
+          key={pathname}
+          className="route-arrival-feedback"
+          aria-hidden="true"
+          initial={{ scaleX: 0, opacity: 1 }}
+          animate={{ scaleX: 1, opacity: 0 }}
+          transition={{
+            scaleX: { duration: reduceMotion ? 0 : 0.45, ease: "easeOut" },
+            opacity: {
+              delay: reduceMotion ? 0 : 0.45,
+              duration: reduceMotion ? 0 : 0.15,
+            },
+          }}
+        />
+      )}
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -195,6 +213,17 @@ export function Layout() {
                 ][i];
                 return (
                   <NavLink end to={path} key={path}>
+                    {pathname === path && (
+                      <motion.span
+                        aria-hidden="true"
+                        className="rail-active-surface"
+                        layoutId="customer-navigation-selection"
+                        transition={{
+                          duration: reduceMotion ? 0 : 0.24,
+                          ease: "easeOut",
+                        }}
+                      />
+                    )}
                     <Icon size={18} />
                     {label}
                   </NavLink>
