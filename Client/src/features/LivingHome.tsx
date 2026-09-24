@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown,
@@ -12,44 +12,107 @@ import {
   ShoppingBasket,
   Sprout,
   Clock,
+  Globe,
+  Sparkles,
+  ShoppingBag,
+  Users,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useMarket, useAction, Favourite, Notice } from "../components/ui";
+import { useVisitor } from "../data/visitor-context";
 import { MarketMap } from "../components/MarketMap";
-import { date, time, money, demoDate } from "../data/market";
+import {
+  countryName,
+  formatMarketDay,
+  formatMarketMoney,
+  formatMarketTime,
+  hasMarketCoverage,
+  getAvailableDays,
+  demoLocation,
+} from "../data/visitor";
 import { marketDayView } from "../data/living-selectors";
-import { localization } from "../data/localization";
 
 gsap.registerPlugin(ScrollTrigger);
 
 export function LivingHome() {
   const s = useMarket();
   const act = useAction();
+  const { visitor, openModal, resetToDemo, t, isRTL } = useVisitor();
   const reduce = useReducedMotion();
   const root = useRef<HTMLDivElement>(null);
-  const [day, setDay] = useState(demoDate);
+
+  // Active country resolution (from visitor preferences or demo default)
+  const activeCountry = visitor.country || demoLocation.country;
+  const activeCountryName = countryName(activeCountry, visitor.locale);
+
+  // Check if current country has participating markets
+  const hasCoverage = useMemo(
+    () => hasMarketCoverage(s.markets, activeCountry),
+    [s.markets, activeCountry],
+  );
+
+  // Markets belonging to active country
+  const countryMarkets = useMemo(
+    () =>
+      s.markets.filter(
+        (m) => (m.countryCode ?? "PK").toUpperCase() === activeCountry.toUpperCase(),
+      ),
+    [s.markets, activeCountry],
+  );
+
+  // Available dates for active country
+  const days = useMemo(
+    () => getAvailableDays(s.markets, activeCountry, visitor.city),
+    [s.markets, activeCountry, visitor.city],
+  );
+
+  const [day, setDay] = useState(() => visitor.day || days[0] || demoLocation.days[0]);
   const [query, setQuery] = useState("");
-  const [marketId, setMarket] = useState(s.markets[0]?.id ?? "");
+  const [marketId, setMarket] = useState(() => countryMarkets[0]?.id ?? "");
   const [farmerId, setFarmer] = useState("");
   const [productId, setProduct] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState("");
-  const days = [
-    ...new Set(s.markets.filter((m) => m.active).map((m) => m.day)),
-  ].sort();
+
+  // Sync state if country or visitor preferences change
+  useEffect(() => {
+    if (countryMarkets.length > 0) {
+      if (!countryMarkets.some((m) => m.id === marketId)) {
+        setMarket(countryMarkets[0]?.id ?? "");
+      }
+    }
+  }, [countryMarkets, marketId]);
+
+  useEffect(() => {
+    if (days.length > 0 && !days.includes(day)) {
+      setDay(days[0]);
+    }
+  }, [days, day]);
+
   const view = marketDayView(s, day);
-  const markets = view.markets.filter((m) =>
-    `${localization.city} ${m.name} ${m.area}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+
+  const markets = useMemo(() => {
+    if (!hasCoverage) return [];
+    return countryMarkets
+      .filter((m) => m.active && m.day === day)
+      .filter((m) =>
+        `${m.name} ${m.area ?? ""} ${m.city ?? ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      );
+  }, [countryMarkets, hasCoverage, day, query]);
+
   const market = markets.find((m) => m.id === marketId) ?? markets[0];
   const growers = view.growers.filter((f) => f.marketId === market?.id);
   const farmer = growers.find((f) => f.id === farmerId) ?? growers[0];
   const offers = view.products.filter((p) => p.farmerId === farmer?.id);
   const product = offers.find((p) => p.id === productId) ?? offers[0];
+
+  const marketCurrency = market?.currency ?? "PKR";
+  const marketTimeZone = market?.timeZone ?? "Asia/Karachi";
+
   const slots = s.slots.filter(
     (slot) =>
       slot.marketId === market?.id &&
@@ -57,25 +120,29 @@ export function LivingHome() {
       slot.start.startsWith(day) &&
       slot.cutoff > s.now,
   );
+
   const basketCount = Object.values(s.basket).reduce((a, b) => a + b, 0);
+
   function scrollToDiscovery() {
-    document
-      .getElementById("market-explorer")
-      ?.scrollIntoView({
-        behavior: reduce ? "instant" : "smooth",
-        block: "start",
-      });
+    document.getElementById("market-explorer")?.scrollIntoView({
+      behavior: reduce ? "instant" : "smooth",
+      block: "start",
+    });
   }
+
   function chooseDay(value: string) {
     setDay(value);
     setQuantity(1);
     setAdded("");
   }
+
   function chooseMarket(value: string) {
     setMarket(value);
     setQuantity(1);
     setAdded("");
   }
+
+  // Choreographed GSAP entrance and ScrollTrigger animation
   useEffect(() => {
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
@@ -84,20 +151,25 @@ export function LivingHome() {
         entrance
           .from(
             ".arrival-word",
-            { yPercent: 80, rotation: 3, stagger: 0.09, duration: 1.05 },
+            { yPercent: 90, rotation: 3, stagger: 0.08, duration: 1.1 },
             0,
           )
           .from(
             ".arrival-main-photo",
-            { clipPath: "inset(20% 20% 20% 20%)", scale: 0.94, duration: 1.1 },
+            { clipPath: "inset(18% 18% 18% 18%)", scale: 0.95, duration: 1.15 },
             0.12,
           )
           .from(
             ".arrival-portrait",
-            { y: 55, rotation: -9, duration: 0.9 },
+            { y: 60, rotation: -9, duration: 0.95 },
             0.25,
           )
-          .from(".arrival-ticket", { x: 24, rotation: 5, duration: 0.7 }, 0.4);
+          .from(
+            ".arrival-ticket",
+            { x: 28, rotation: 4, duration: 0.75 },
+            0.4,
+          );
+
         gsap
           .timeline({
             scrollTrigger: {
@@ -119,84 +191,110 @@ export function LivingHome() {
     });
     return () => media.revert();
   }, []);
+
   useEffect(() => {
     if (!added) return;
     const timer = setTimeout(() => setAdded(""), 3500);
     return () => clearTimeout(timer);
   }, [added]);
+
   return (
-    <div className="market-experience" ref={root}>
+    <div className="market-experience" ref={root} dir={isRTL ? "rtl" : "ltr"}>
+      {/* 1. HERO ARRIVAL SCENE */}
       <section className="arrival-scene" aria-labelledby="arrival-title">
         <div className="arrival-meta">
           <span>
             <MapPin size={14} />
-            {localization.city}, {localization.country} / demo edition
+            {activeCountryName} {visitor.city ? `(${visitor.city})` : ""}
+            {activeCountry === "PK" ? " · demo edition" : ""}
           </span>
-          <span>Reserve online. Meet at the market.</span>
+          <button
+            type="button"
+            className="change-loc-link"
+            onClick={openModal}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#385437",
+              fontSize: "11px",
+              cursor: "pointer",
+              textDecoration: "underline",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <Globe size={12} />
+            {t("change")}
+          </button>
         </div>
+
         <div className="arrival-title">
-          <p>A morning worth stepping out for.</p>
+          <p>{t("welcome")}</p>
           <h1 id="arrival-title" tabIndex={-1}>
             <span className="arrival-word">The living</span>{" "}
             <span className="arrival-word">market.</span>
           </h1>
         </div>
+
         <div className="arrival-stage">
           <figure className="arrival-main-photo">
             <img
               src="/images/market-arrival.jpg"
-              alt="Editorial street-market scene with a fruit seller and people moving between stalls"
+              alt="Editorial street-market scene with fresh produce and neighbours gathering"
               fetchPriority="high"
             />
-            <figcaption>
-              Market life, in the frame. Editorial photograph by Veera Jayanth.
-            </figcaption>
+            <figcaption>{t("editorial")}</figcaption>
           </figure>
+
           <figure className="arrival-portrait">
             <img
               src="/images/market-person.jpg"
-              alt="Editorial portrait of a vegetable vendor at his stall"
+              alt="Editorial portrait of a local grower"
             />
             <figcaption>
-              The people make the market.
-              <small>Ravi Sharma / Unsplash · not a MarketLink seller</small>
+              {t("people")}
+              <small>{t("portrait")}</small>
             </figcaption>
           </figure>
+
           <div className="arrival-ticket">
             <Sprout size={27} />
-            <span>Your next market day</span>
-            <strong>{date(day)}</strong>
+            <span>{t("day")}</span>
+            <strong>{formatMarketDay(day, visitor.locale, marketTimeZone)}</strong>
             <p>
-              Find the growers.
+              {t("fresh")}
               <br />
-              See what’s fresh.
+              {t("people")}
               <br />
-              Make it your morning.
+              {t("collect")}
             </p>
             <button onClick={scrollToDiscovery}>
-              Step into the market <ArrowDown size={17} />
+              {t("discover")} <ArrowDown size={17} />
             </button>
           </div>
         </div>
+
         <div className="arrival-bottom">
           <p>
-            Discover local stalls, reserve your produce and plan your pickup.
+            {t("lead")}
             <br />
-            <strong>A little less guesswork. A lot more market day.</strong>
+            <strong>{t("storyTitle")}</strong>
           </p>
           <button
             onClick={scrollToDiscovery}
             className="arrival-down"
-            aria-label="Explore the market below"
+            aria-label={t("discover")}
           >
             <ArrowDown />
           </button>
           <span>
-            All market records are fictional.
+            {t("demoNote")}
             <br />
-            Photos depict markets in India, not Lahore.
+            {t("editorial")}
           </span>
         </div>
+
         <svg
           className="arrival-connector"
           viewBox="0 0 600 90"
@@ -212,6 +310,66 @@ export function LivingHome() {
           />
         </svg>
       </section>
+
+      {/* 2. CONNECTED STORYTELLING SECTION: 4 MORNING STEPS */}
+      <section className="market-story-steps" aria-labelledby="story-section-title">
+        <div className="story-header">
+          <div className="story-kicker">
+            <Sprout size={16} />
+            <span>{t("living")}</span>
+          </div>
+          <h2 id="story-section-title">{t("storyTitle")}</h2>
+          <p>{t("storyBody")}</p>
+        </div>
+
+        <div className="story-grid">
+          {/* Step 1 */}
+          <div className="story-card">
+            <div className="story-card-top">
+              <span className="story-step-num">01</span>
+              <MapPin size={22} className="story-card-icon" />
+            </div>
+            <h3>{t("fresh")}</h3>
+            <p>{t("freshBody")}</p>
+            <span className="story-card-foot">{t("navMarkets")}</span>
+          </div>
+
+          {/* Step 2 */}
+          <div className="story-card">
+            <div className="story-card-top">
+              <span className="story-step-num">02</span>
+              <Users size={22} className="story-card-icon" />
+            </div>
+            <h3>{t("people")}</h3>
+            <p>{t("peopleBody")}</p>
+            <span className="story-card-foot">{t("navGrowers")}</span>
+          </div>
+
+          {/* Step 3 */}
+          <div className="story-card">
+            <div className="story-card-top">
+              <span className="story-step-num">03</span>
+              <ShoppingBag size={22} className="story-card-icon" />
+            </div>
+            <h3>{t("reserve")}</h3>
+            <p>{t("reserveBody")}</p>
+            <span className="story-card-foot">{t("reserved")}</span>
+          </div>
+
+          {/* Step 4 */}
+          <div className="story-card">
+            <div className="story-card-top">
+              <span className="story-step-num">04</span>
+              <Clock size={22} className="story-card-icon" />
+            </div>
+            <h3>{t("collect")}</h3>
+            <p>{t("collectBody")}</p>
+            <span className="story-card-foot">{t("pay")}</span>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. MARKET EXPLORER & DISCOVERY */}
       <section
         id="market-explorer"
         className="market-explorer"
@@ -219,390 +377,471 @@ export function LivingHome() {
       >
         <div className="explorer-heading">
           <div>
-            <span>Now, make it your market.</span>
-            <h2 id="explorer-title">One day. So many possibilities.</h2>
+            <span>{t("intro")}</span>
+            <h2 id="explorer-title">{t("discovery")}</h2>
           </div>
-          <p>
-            Choose a day and a market.
-            <br />
-            The growers and harvest follow your lead.
-          </p>
+          <p>{t("discoveryBody")}</p>
         </div>
+
         <div className="explorer-toolbar">
           <label>
             <MapPin size={17} />
             <input
-              aria-label="Find a neighbourhood"
-              placeholder={`${localization.city} · neighbourhood or market`}
+              aria-label={t("neighbourhood")}
+              placeholder={`${activeCountryName} · ${t("search")}`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
-          <div className="market-day-tabs" aria-label="Choose your market day">
-            {days.map((d) => (
-              <button
-                key={d}
-                aria-pressed={day === d}
-                onClick={() => chooseDay(d)}
-              >
-                {day === d && (
-                  <motion.span
-                    layoutId="selected-market-day"
-                    className="day-tab-highlight"
-                    transition={{ duration: reduce ? 0 : 0.3, type: "tween" }}
-                  />
-                )}
-                <CalendarDays size={16} />
-                <span>{date(d)}</span>
-              </button>
-            ))}
-          </div>
-          <Link to={`/markets?${new URLSearchParams({ day, q: query })}`}>
-            Full directory <ArrowUpRight size={16} />
-          </Link>
-        </div>
-        <div className="explorer-workspace">
-          <div className="explorer-market-list">
-            <div className="explorer-list-label">
-              <strong>{markets.length} markets</strong>
-              <span>{localization.city} · demo</span>
-            </div>
-            {markets.map((m, i) => (
-              <button
-                className={`explorer-market-choice ${market?.id === m.id ? "selected" : ""}`}
-                aria-pressed={market?.id === m.id}
-                key={m.id}
-                onClick={() => chooseMarket(m.id)}
-              >
-                <span className="market-choice-index">0{i + 1}</span>
-                <span>
-                  <strong>{m.name}</strong>
-                  <small>{m.area}</small>
-                  <span>
-                    <Clock size={12} />
-                    {m.hours}
-                  </span>
-                </span>
-                <ArrowUpRight size={16} />
-              </button>
-            ))}
-            {!markets.length && (
-              <div className="explorer-empty">
-                <h3>A different day, perhaps?</h3>
-                <p>No sample markets match this search.</p>
-                <button onClick={() => setQuery("")}>Clear search</button>
-              </div>
-            )}
-            <div className="explorer-list-foot">
-              <Sprout size={20} />
-              <p>
-                Choose a marker or a market.
-                <br />
-                Your selection stays connected below.
-              </p>
-            </div>
-          </div>
-          <MarketMap
-            markets={markets}
-            selected={market?.id ?? ""}
-            onSelect={chooseMarket}
-          />
-        </div>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            className="selected-market-ribbon"
-            key={`${day}-${market?.id}`}
-            initial={{ x: reduce ? 0 : 25, opacity: reduce ? 1 : 0.5 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: reduce ? 0 : -15, opacity: reduce ? 1 : 0.5 }}
-            transition={{ duration: reduce ? 0 : 0.22 }}
-          >
-            <div>
-              <span>Your selected market</span>
-              <strong>{market?.name ?? "No market selected"}</strong>
-            </div>
-            <div>
-              <span>When</span>
-              <strong>
-                {date(day)} {market ? `/ ${market.hours}` : ""}
-              </strong>
-            </div>
-            <div>
-              <span>Who’s attending</span>
-              <strong>{growers.length} approved sample growers</strong>
-            </div>
-            {market && (
-              <Link to={`/markets/${market.id}`}>
-                Market details <ArrowUpRight size={17} />
-              </Link>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </section>
-      <section className="market-stall-scene" aria-labelledby="stall-title">
-        <div className="stall-intro">
-          <span>From your selected market</span>
-          <h2 id="stall-title">
-            Not just a stall.
-            <br />
-            Someone’s hard work.
-          </h2>
-          <p>
-            Meet the sample growers attending {market?.name ?? "your market"}.
-            Choose a stall to see its available harvest and collection windows.
-          </p>
-          <div className="grower-switcher">
-            {growers.map((f, i) => (
-              <button
-                key={f.id}
-                aria-pressed={farmer?.id === f.id}
-                onClick={() => {
-                  setFarmer(f.id);
-                  setQuantity(1);
-                  setAdded("");
-                }}
-              >
-                <span>{String(i + 1).padStart(2, "0")}</span>
-                <strong>{f.name}</strong>
-                <ArrowRight size={17} />
-              </button>
-            ))}
-          </div>
-          {!growers.length && (
-            <p className="no-stall">
-              No approved growers or reservable produce are listed for this
-              sample market yet.
-            </p>
-          )}
-          <Link to="/farmers">
-            Browse all grower profiles <ArrowUpRight size={16} />
-          </Link>
-        </div>
-        <figure className="stall-person">
-          <img
-            src="/images/grower.jpg"
-            alt="Editorial photograph of a grower holding freshly harvested beetroot"
-            loading="lazy"
-          />
-          <figcaption>
-            Behind the harvest.
-            <small>
-              Heather Gill / Unsplash. Editorial image, not the selected farmer.
-            </small>
-          </figcaption>
-        </figure>
-        <div className="stall-story">
-          <Sprout size={27} />
-          <span>Fictional grower profile</span>
-          <h3>{farmer?.name ?? "A space for the next grower."}</h3>
-          <p>
-            {farmer?.story ??
-              "Check another market day to discover the available sample stalls."}
-          </p>
-          {farmer && (
-            <>
-              <p className="stall-attendance">
-                <CalendarDays size={16} />
-                {date(day)} · {market?.name}
-              </p>
-              <Link to={`/farmers/${farmer.id}`}>
-                Visit the stall profile <ArrowUpRight size={17} />
-              </Link>
-            </>
-          )}
-        </div>
-      </section>
-      <section className="reservation-bench" aria-labelledby="reserve-title">
-        <div className="bench-heading">
-          <div>
-            <span>{farmer?.name ?? "Your selected grower"}</span>
-            <h2 id="reserve-title">From this stall. Into your day.</h2>
-          </div>
-          <p>
-            {date(day)} · {market?.name ?? "Choose a market above"}
-            <br />
-            Availability is checked again at sample checkout.
-          </p>
-        </div>
-        {product ? (
-          <div className="bench-body">
-            <div className="bench-offer-list" aria-label="Available produce">
-              {offers.map((p) => (
+
+          {hasCoverage && (
+            <div className="market-day-tabs" aria-label={t("day")}>
+              {days.map((d) => (
                 <button
-                  key={p.id}
-                  aria-pressed={product.id === p.id}
+                  key={d}
+                  aria-pressed={day === d}
+                  onClick={() => chooseDay(d)}
+                >
+                  {day === d && (
+                    <motion.span
+                      layoutId="selected-market-day"
+                      className="day-tab-highlight"
+                      transition={{ duration: reduce ? 0 : 0.3, type: "tween" }}
+                    />
+                  )}
+                  <CalendarDays size={16} />
+                  <span>{formatMarketDay(d, visitor.locale, marketTimeZone)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="change-loc-pill-btn"
+            onClick={openModal}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 12px",
+              background: "#faf8f2",
+              border: "1px solid #cbd1bd",
+              borderRadius: "4px",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "#183b2b",
+            }}
+          >
+            <Globe size={14} />
+            <span>{t("change")}</span>
+          </button>
+        </div>
+
+        {hasCoverage ? (
+          <>
+            <div className="explorer-workspace">
+              <div className="explorer-market-list">
+                <div className="explorer-list-label">
+                  <strong>{markets.length} {t("markets")}</strong>
+                  <span>{activeCountryName}</span>
+                </div>
+
+                {markets.map((m, i) => (
+                  <button
+                    className={`explorer-market-choice ${market?.id === m.id ? "selected" : ""}`}
+                    aria-pressed={market?.id === m.id}
+                    key={m.id}
+                    onClick={() => chooseMarket(m.id)}
+                  >
+                    <span className="market-choice-index">0{i + 1}</span>
+                    <span>
+                      <strong>{m.name}</strong>
+                      <small>{m.area}</small>
+                      <span>
+                        <Clock size={12} />
+                        {m.hours}
+                      </span>
+                    </span>
+                    <ArrowUpRight size={16} />
+                  </button>
+                ))}
+
+                {!markets.length && (
+                  <div className="explorer-empty">
+                    <h3>{t("none")}</h3>
+                    <p>{t("noMarket")}</p>
+                    <button onClick={() => setQuery("")}>{t("clear")}</button>
+                  </div>
+                )}
+
+                <div className="explorer-list-foot">
+                  <Sprout size={20} />
+                  <p>
+                    {t("discoveryBody")}
+                  </p>
+                </div>
+              </div>
+
+              <MarketMap
+                markets={markets}
+                selected={market?.id ?? ""}
+                onSelect={chooseMarket}
+              />
+            </div>
+
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                className="selected-market-ribbon"
+                key={`${day}-${market?.id}`}
+                initial={{ x: reduce ? 0 : 25, opacity: reduce ? 1 : 0.5 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: reduce ? 0 : -15, opacity: reduce ? 1 : 0.5 }}
+                transition={{ duration: reduce ? 0 : 0.22 }}
+              >
+                <div>
+                  <span>{t("selected")}</span>
+                  <strong>{market?.name ?? t("none")}</strong>
+                </div>
+                <div>
+                  <span>{t("when")}</span>
+                  <strong>
+                    {formatMarketDay(day, visitor.locale, marketTimeZone)}{" "}
+                    {market ? `/ ${market.hours}` : ""}
+                  </strong>
+                </div>
+                <div>
+                  <span>{t("growers")}</span>
+                  <strong>{growers.length} {t("growers")}</strong>
+                </div>
+                {market && (
+                  <Link to={`/markets/${market.id}`}>
+                    {t("marketDetails")} <ArrowUpRight size={17} />
+                  </Link>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </>
+        ) : (
+          /* Empty state when selected country has no markets */
+          <div className="market-empty-coverage">
+            <div className="empty-badge">
+              <Sprout size={16} />
+              <span>{activeCountryName}</span>
+            </div>
+            <h3>{t("emptyTitle")}</h3>
+            <p>{t("emptyBody")}</p>
+            <div className="market-empty-actions">
+              <button
+                type="button"
+                className="demo-btn"
+                onClick={resetToDemo}
+              >
+                <Sparkles size={16} />
+                <span>{t("demo")}</span>
+              </button>
+              <button
+                type="button"
+                className="change-country-btn"
+                onClick={openModal}
+              >
+                <Globe size={16} />
+                <span>{t("change")}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 4. GROWER INTRODUCTIONS (Attending Stall) */}
+      {hasCoverage && (
+        <section className="market-stall-scene" aria-labelledby="stall-title">
+          <div className="stall-intro">
+            <span>{t("selected")}</span>
+            <h2 id="stall-title">
+              {t("stallTitle")}
+            </h2>
+            <p>{t("stallBody")}</p>
+
+            <div className="grower-switcher">
+              {growers.map((f, i) => (
+                <button
+                  key={f.id}
+                  aria-pressed={farmer?.id === f.id}
                   onClick={() => {
-                    setProduct(p.id);
+                    setFarmer(f.id);
                     setQuantity(1);
                     setAdded("");
                   }}
                 >
-                  <img src={p.image} alt="" />
-                  <span>
-                    <strong>{p.name}</strong>
-                    <small>
-                      {money(p.price)} / {p.unit}
-                    </small>
-                  </span>
-                  <span>{p.stock - p.reserved} left</span>
+                  <span>{String(i + 1).padStart(2, "0")}</span>
+                  <strong>{f.name}</strong>
+                  <ArrowRight size={17} />
                 </button>
               ))}
             </div>
-            <div className="bench-photo">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.img
-                  key={product.id}
-                  src={product.image}
-                  alt={product.name}
-                  initial={{
-                    clipPath: reduce ? "inset(0%)" : "inset(0 100% 0 0)",
-                  }}
-                  animate={{ clipPath: "inset(0%)" }}
-                  exit={{ opacity: reduce ? 1 : 0 }}
-                  transition={{ duration: reduce ? 0 : 0.32 }}
-                />
-              </AnimatePresence>
-              <Favourite id={product.id} />
-              <span>
-                {product.stock - product.reserved} selling units available
-              </span>
+
+            {!growers.length && (
+              <p className="no-stall">{t("noGrower")}</p>
+            )}
+
+            <Link to="/farmers">
+              {t("navGrowers")} <ArrowUpRight size={16} />
+            </Link>
+          </div>
+
+          <figure className="stall-person">
+            <img
+              src="/images/grower.jpg"
+              alt="Editorial portrait of grower with freshly harvested produce"
+              loading="lazy"
+            />
+            <figcaption>
+              {t("profile")}
+              <small>{t("portrait")}</small>
+            </figcaption>
+          </figure>
+
+          <div className="stall-story">
+            <Sprout size={27} />
+            <span>{t("profile")}</span>
+            <h3>{farmer?.name ?? t("profile")}</h3>
+            <p>
+              {farmer?.story ?? t("noGrower")}
+            </p>
+            {farmer && (
+              <>
+                <p className="stall-attendance">
+                  <CalendarDays size={16} />
+                  {formatMarketDay(day, visitor.locale, marketTimeZone)} · {market?.name}
+                </p>
+                <Link to={`/farmers/${farmer.id}`}>
+                  {t("profile")} <ArrowUpRight size={17} />
+                </Link>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* 5. AVAILABLE PRODUCE & RESERVATION BENCH */}
+      {hasCoverage && (
+        <section className="reservation-bench" aria-labelledby="reserve-title">
+          <div className="bench-heading">
+            <div>
+              <span>{farmer?.name ?? t("profile")}</span>
+              <h2 id="reserve-title">{t("reserve")}</h2>
             </div>
-            <div className="bench-details">
-              <span>
-                {farmer?.name} / {product.category}
-              </span>
-              <h3>{product.name}</h3>
-              <p>{product.description}</p>
-              <div className="bench-price">
-                <strong>{money(product.price)}</strong>
-                <span>per {product.unit}</span>
+            <p>
+              {formatMarketDay(day, visitor.locale, marketTimeZone)} ·{" "}
+              {market?.name ?? t("discover")}
+              <br />
+              {t("reserveBody")}
+            </p>
+          </div>
+
+          {product ? (
+            <div className="bench-body">
+              <div className="bench-offer-list" aria-label={t("available")}>
+                {offers.map((p) => (
+                  <button
+                    key={p.id}
+                    aria-pressed={product.id === p.id}
+                    onClick={() => {
+                      setProduct(p.id);
+                      setQuantity(1);
+                      setAdded("");
+                    }}
+                  >
+                    <img src={p.image} alt="" />
+                    <span>
+                      <strong>{p.name}</strong>
+                      <small>
+                        {formatMarketMoney(p.price, marketCurrency, visitor.locale)} / {p.unit}
+                      </small>
+                    </span>
+                    <span>{p.stock - p.reserved} {t("left")}</span>
+                  </button>
+                ))}
               </div>
-              <div className="bench-pickup">
-                <Clock size={17} />
-                <div>
-                  <strong>Collect on {date(day)}</strong>
-                  <span>
-                    {slots
-                      .map((slot) => `${time(slot.start)}–${time(slot.end)}`)
-                      .join(" or ")}
-                  </span>
-                  <small>Choose your window at checkout · pay at pickup</small>
+
+              <div className="bench-photo">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.img
+                    key={product.id}
+                    src={product.image}
+                    alt={product.name}
+                    initial={{
+                      clipPath: reduce ? "inset(0%)" : "inset(0 100% 0 0)",
+                    }}
+                    animate={{ clipPath: "inset(0%)" }}
+                    exit={{ opacity: reduce ? 1 : 0 }}
+                    transition={{ duration: reduce ? 0 : 0.32 }}
+                  />
+                </AnimatePresence>
+                <Favourite id={product.id} />
+                <span>
+                  {product.stock - product.reserved} {t("left")}
+                </span>
+              </div>
+
+              <div className="bench-details">
+                <span>
+                  {farmer?.name} / {product.category}
+                </span>
+                <h3>{product.name}</h3>
+                <p>{product.description}</p>
+
+                <div className="bench-price">
+                  <strong>{formatMarketMoney(product.price, marketCurrency, visitor.locale)}</strong>
+                  <span>/ {product.unit}</span>
                 </div>
-              </div>
-              <div className="bench-quantity">
-                <button
-                  aria-label="Decrease reservation quantity"
-                  disabled={quantity <= 1}
-                  onClick={() => setQuantity((q) => q - 1)}
-                >
-                  <Minus size={15} />
-                </button>
-                <output aria-label="Reservation quantity">{quantity}</output>
-                <button
-                  aria-label="Increase reservation quantity"
+
+                <div className="bench-pickup">
+                  <Clock size={17} />
+                  <div>
+                    <strong>
+                      {t("pickup")} {formatMarketDay(day, visitor.locale, marketTimeZone)}
+                    </strong>
+                    <span>
+                      {slots
+                        .map(
+                          (slot) =>
+                            `${formatMarketTime(slot.start, visitor.locale, marketTimeZone)}–${formatMarketTime(slot.end, visitor.locale, marketTimeZone)}`,
+                        )
+                        .join(" or ")}
+                    </span>
+                    <small>{t("pickupNote")}</small>
+                  </div>
+                </div>
+
+                <div className="bench-quantity">
+                  <button
+                    aria-label={t("decrease")}
+                    disabled={quantity <= 1}
+                    onClick={() => setQuantity((q) => q - 1)}
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <output aria-label={t("quantity")}>{quantity}</output>
+                  <button
+                    aria-label={t("increase")}
+                    disabled={
+                      quantity >=
+                      product.stock -
+                        product.reserved -
+                        (s.basket[product.id] ?? 0)
+                    }
+                    onClick={() => setQuantity((q) => q + 1)}
+                  >
+                    <Plus size={15} />
+                  </button>
+                  <span>{product.unit}</span>
+                </div>
+
+                <motion.button
+                  className="bench-add"
+                  whileTap={reduce ? {} : { scale: 0.97 }}
                   disabled={
-                    quantity >=
-                    product.stock -
-                      product.reserved -
-                      (s.basket[product.id] ?? 0)
+                    quantity + (s.basket[product.id] ?? 0) >
+                    product.stock - product.reserved
                   }
-                  onClick={() => setQuantity((q) => q + 1)}
+                  onClick={() => {
+                    if (
+                      act(
+                        {
+                          type: "basket",
+                          id: product.id,
+                          quantity: (s.basket[product.id] ?? 0) + quantity,
+                        },
+                        "", // Animated receipt owns success feedback
+                      )
+                    ) {
+                      setAdded(product.id);
+                      setQuantity(1);
+                    }
+                  }}
                 >
-                  <Plus size={15} />
-                </button>
-                <span>{product.unit}</span>
+                  {added === product.id ? (
+                    <Check size={19} />
+                  ) : (
+                    <Plus size={19} />
+                  )}{" "}
+                  {added === product.id ? t("added") : t("add")}
+                  <span>
+                    {formatMarketMoney(
+                      product.price * quantity,
+                      marketCurrency,
+                      visitor.locale,
+                    )}
+                  </span>
+                </motion.button>
+
+                <Link
+                  to={`/products/${product.id}`}
+                  className="bench-detail-link"
+                >
+                  {t("productDetails")} <ArrowUpRight size={15} />
+                </Link>
               </div>
-              <motion.button
-                className="bench-add"
-                whileTap={reduce ? {} : { scale: 0.97 }}
-                disabled={
-                  quantity + (s.basket[product.id] ?? 0) >
-                  product.stock - product.reserved
-                }
-                onClick={() => {
-                  if (
-                    act(
-                      {
-                        type: "basket",
-                        id: product.id,
-                        quantity: (s.basket[product.id] ?? 0) + quantity,
-                      },
-                      "", // The local animated receipt owns successful-add feedback.
-                    )
-                  ) {
-                    setAdded(product.id);
-                    setQuantity(1);
-                  }
-                }}
-              >
-                {added === product.id ? (
-                  <Check size={19} />
-                ) : (
-                  <Plus size={19} />
-                )}{" "}
-                {added === product.id
-                  ? "Added to your market bag"
-                  : "Add to my market bag"}
-                <span>{money(product.price * quantity)}</span>
-              </motion.button>
-              <Link
-                to={`/products/${product.id}`}
-                className="bench-detail-link"
-              >
-                Product details <ArrowUpRight size={15} />
-              </Link>
             </div>
-          </div>
-        ) : (
-          <div className="bench-empty">
-            <ShoppingBasket />
-            <h3>No reservable produce in this selection.</h3>
-            <p>Choose another market or day to find available sample offers.</p>
-            <button onClick={scrollToDiscovery}>
-              Back to market selection <ArrowUpRight size={16} />
-            </button>
-          </div>
-        )}
-        <div className="market-bag-dock">
-          <div>
-            <ShoppingBasket size={23} />
-            <motion.strong
-              key={basketCount}
-              initial={{ scale: reduce ? 1 : 1.3 }}
-              animate={{ scale: 1 }}
-            >
-              {basketCount}
-            </motion.strong>
-            <span>
-              in your market bag
-              <small>Grouped by grower. Paid at the stall.</small>
-            </span>
-          </div>
-          <Link to="/basket">
-            Review basket & plan collection <ArrowRight size={18} />
-          </Link>
-        </div>
-        <AnimatePresence>
-          {added && (
-            <motion.div
-              className="bag-confirmation"
-              role="status"
-              initial={{ y: reduce ? 0 : 60, rotate: reduce ? 0 : -3 }}
-              animate={{ y: 0, rotate: 0 }}
-              exit={{ y: reduce ? 0 : 60, opacity: 0 }}
-            >
-              <Check size={20} />
-              <span>
-                Added to your sample market bag.
-                <small>Choose the pickup window when you check out.</small>
-              </span>
-              <Link to="/basket">
-                Review bag <ArrowRight size={16} />
-              </Link>
-            </motion.div>
+          ) : (
+            <div className="bench-empty">
+              <ShoppingBasket />
+              <h3>{t("none")}</h3>
+              <p>{t("noneBody")}</p>
+              <button onClick={scrollToDiscovery}>
+                {t("back")} <ArrowUpRight size={16} />
+              </button>
+            </div>
           )}
-        </AnimatePresence>
-      </section>
+
+          {/* Persistent Basket Dock */}
+          <div className="market-bag-dock">
+            <div>
+              <ShoppingBasket size={23} />
+              <motion.strong
+                key={basketCount}
+                initial={{ scale: reduce ? 1 : 1.3 }}
+                animate={{ scale: 1 }}
+              >
+                {basketCount}
+              </motion.strong>
+              <span>
+                {t("bag")}
+                <small>{t("bagNote")}</small>
+              </span>
+            </div>
+            <Link to="/basket">
+              {t("review")} <ArrowRight size={18} />
+            </Link>
+          </div>
+
+          {/* Add-to-bag Floating Confirmation Toast */}
+          <AnimatePresence>
+            {added && (
+              <motion.div
+                className="bag-confirmation"
+                role="status"
+                initial={{ y: reduce ? 0 : 60, rotate: reduce ? 0 : -3 }}
+                animate={{ y: 0, rotate: 0 }}
+                exit={{ y: reduce ? 0 : 60, opacity: 0 }}
+              >
+                <Check size={20} />
+                <span>
+                  {t("addedNote")}
+                  <small>{t("pickupNote")}</small>
+                </span>
+                <Link to="/basket">
+                  {t("review")} <ArrowRight size={16} />
+                </Link>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+      )}
+
+      {/* Announcements */}
       {s.announcements
         .filter((a) => a.published)
         .slice(-1)

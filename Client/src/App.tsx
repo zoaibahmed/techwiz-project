@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout, Guard } from "./app/Layout";
 import { Feedback } from "./components/ui";
+import { VisitorProvider } from "./data/visitor-context";
+import { LocationModal } from "./components/LocationModal";
 import { fixtureEnabled } from "./data/gateway";
 import {
   Home,
@@ -71,9 +73,11 @@ export function App() {
     );
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <Feedback>
-          <Suspense
+      <VisitorProvider>
+        <BrowserRouter>
+          <Feedback>
+            <LocationModal />
+            <Suspense
             fallback={
               <main className="container section" role="status">
                 Opening your market workspace…
@@ -157,6 +161,7 @@ export function App() {
           </Suspense>
         </Feedback>
       </BrowserRouter>
-    </ErrorBoundary>
+    </VisitorProvider>
+  </ErrorBoundary>
   );
 }

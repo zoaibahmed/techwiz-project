@@ -15,8 +15,11 @@ import {
   UserRound,
   MapPin,
   LogOut,
+  Globe,
 } from "lucide-react";
 import { useMarket, useAction, Notice } from "../components/ui";
+import { useVisitor } from "../data/visitor-context";
+import { countryName } from "../data/visitor";
 import { gateway } from "../data/gateway";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
@@ -61,6 +64,7 @@ export const nav: Record<Role, [string, string][]> = {
 export function Layout() {
   const s = useMarket();
   const act = useAction();
+  const { visitor, openModal, t } = useVisitor();
   const { pathname } = useLocation();
   const reduceMotion = useReducedMotion();
   const [menu, setMenu] = useState(false);
@@ -104,12 +108,12 @@ export function Layout() {
         />
       )}
       <a className="skip-link" href="#main">
-        Skip to content
+        {t('skipContent')}
       </a>
       <div className="demo-banner">
-        <span>Development preview · fictional data · simulated actions</span>
+        <span>{t('demoBanner')}</span>
         <button onClick={() => setControls(!controls)} aria-expanded={controls}>
-          Demo controls
+          {t('demoControls')}
         </button>
       </div>
       {controls && (
@@ -150,14 +154,29 @@ export function Layout() {
           MarketLink<span className="brand-dot">●</span>
         </Link>
         <nav className="public-nav" aria-label="Primary">
-          <NavLink to="/markets">Markets</NavLink>
-          <NavLink to="/products">Produce</NavLink>
-          <NavLink to="/farmers">Our growers</NavLink>
-          <Link to="/help">How it works</Link>
+          <NavLink to="/markets">{t('navMarkets')}</NavLink>
+          <NavLink to="/products">{t('navProduce')}</NavLink>
+          <NavLink to="/farmers">{t('navGrowers')}</NavLink>
+          <Link to="/help">{t('navHelp')}</Link>
         </nav>
         <div className="header-actions">
+          <button
+            type="button"
+            className="header-location-pill"
+            onClick={openModal}
+            title={t('change')}
+            aria-label={t('location')}
+          >
+            <Globe size={14} />
+            <span>
+              {visitor.locale === 'ur' ? 'اردو' : 'EN'}
+              {visitor.country
+                ? ` · ${countryName(visitor.country, visitor.locale)}${visitor.city ? ` (${visitor.city})` : ''}`
+                : ` · ${t('anywhere')}`}
+            </span>
+          </button>
           <Link className="account-link" to={s.role ? `/${s.role}` : "/login"}>
-            {s.role ? "My workspace" : "Sign in"}
+            {s.role ? t('workspace') : t('signIn')}
           </Link>
           <Link
             to="/basket"
@@ -179,11 +198,29 @@ export function Layout() {
       </header>
       {menu && (
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          <Link to="/markets">Markets</Link>
-          <Link to="/products">Produce</Link>
-          <Link to="/farmers">Our growers</Link>
+          <button
+            type="button"
+            className="header-location-pill"
+            style={{ margin: "8px 16px", alignSelf: "flex-start" }}
+            onClick={() => {
+              setMenu(false);
+              openModal();
+            }}
+          >
+            <Globe size={14} />
+            <span>
+              {visitor.locale === "ur" ? "اردو" : "EN"} ·{" "}
+              {visitor.country
+                ? countryName(visitor.country, visitor.locale)
+                : t("anywhere")}
+            </span>
+          </button>
+          <Link to="/markets">{t('navMarkets')}</Link>
+          <Link to="/products">{t('navProduce')}</Link>
+          <Link to="/farmers">{t('navGrowers')}</Link>
+          <Link to="/help">{t('navHelp')}</Link>
           <Link to={s.role ? `/${s.role}` : "/login"}>
-            {s.role ? "My workspace" : "Sign in"}
+            {s.role ? t('workspace') : t('signIn')}
           </Link>
           {role &&
             nav[role].map(([path, label]) => (
@@ -356,30 +393,27 @@ export function Layout() {
               <Sprout />
               MarketLink
             </Link>
-            <h2>
-              Good food.
-              <br />A little closer.
-            </h2>
-            <p>Pre-order online. Pay at pickup.</p>
+            <h2>{t('footerTitle')}</h2>
+            <p>{t('footerBody')}</p>
           </div>
           <div>
-            <h3>Explore</h3>
-            <Link to="/markets">Find your market</Link>
-            <Link to="/products">Browse produce</Link>
-            <Link to="/farmers">Meet the growers</Link>
+            <h3>{t('explore')}</h3>
+            <Link to="/markets">{t('discover')}</Link>
+            <Link to="/products">{t('navProduce')}</Link>
+            <Link to="/farmers">{t('navGrowers')}</Link>
           </div>
           <div>
-            <h3>Come along</h3>
-            <Link to="/register/farmer">Bring your stall</Link>
-            <Link to="/about">Our purpose</Link>
-            <Link to="/contact">Contact</Link>
+            <h3>{t('come')}</h3>
+            <Link to="/register/farmer">{t('bring')}</Link>
+            <Link to="/about">{t('purpose')}</Link>
+            <Link to="/contact">{t('contact')}</Link>
             <Link to="/help">
-              Pickup help <ArrowUpRight size={14} />
+              {t('help')} <ArrowUpRight size={14} />
             </Link>
           </div>
           <p className="footer-bottom">
             The Living Market · eGreen Basket{" "}
-            <span>Development preview. All market records are fictional.</span>
+            <span>{t('demoBanner')}</span>
           </p>
         </footer>
       )}

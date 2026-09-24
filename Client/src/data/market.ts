@@ -16,6 +16,11 @@ export interface Market {
   day: string;
   hours: string;
   active: boolean;
+  countryCode?: string;
+  countryName?: string;
+  city?: string;
+  currency?: string;
+  timeZone?: string;
 }
 export interface Farmer {
   id: string;
@@ -144,8 +149,13 @@ export function seed(): DemoState {
       {
         id: "demo-m1",
         name: "The Orchard Market",
-        area: "North neighbourhood",
-        address: "Sample Orchard Square · illustrative location",
+        area: "Model Town",
+        city: "Lahore",
+        countryCode: "PK",
+        countryName: "Pakistan",
+        currency: "PKR",
+        timeZone: "Asia/Karachi",
+        address: "Model Town Sunday Organic Bazaar, Lahore",
         day: demoDate,
         hours: "08:00–13:00",
         active: true,
@@ -153,8 +163,13 @@ export function seed(): DemoState {
       {
         id: "demo-m2",
         name: "Riverside Gathering",
-        area: "Riverside neighbourhood",
-        address: "Sample Riverside Walk · illustrative location",
+        area: "Gulberg III",
+        city: "Lahore",
+        countryCode: "PK",
+        countryName: "Pakistan",
+        currency: "PKR",
+        timeZone: "Asia/Karachi",
+        address: "Liberty Roundabout, Gulberg III, Lahore",
         day: demoDate,
         hours: "09:00–14:00",
         active: true,
@@ -162,8 +177,13 @@ export function seed(): DemoState {
       {
         id: "demo-m3",
         name: "Sunday at the Grove",
-        area: "West neighbourhood",
-        address: "Sample Grove Lane · illustrative location",
+        area: "DHA Phase 5",
+        city: "Lahore",
+        countryCode: "PK",
+        countryName: "Pakistan",
+        currency: "PKR",
+        timeZone: "Asia/Karachi",
+        address: "Sector J Park, DHA Phase 5, Lahore",
         day: "2026-10-04",
         hours: "08:00–12:00",
         active: true,
