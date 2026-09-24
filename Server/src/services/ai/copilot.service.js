@@ -5,67 +5,269 @@ import { updateFarmerProfileService } from '../farmer.service.js';
 import { cancelCustomerOrderService } from '../order.service.js';
 import { replyToReviewService } from '../review.service.js';
 import { createAnnouncementService } from '../announcement.service.js';
-import { updateFarmerProductService } from '../product.service.js';
-import { createOrUpdateStockOfferService } from '../inventory.service.js';
 
 /**
- * Optional OpenAI invocation helper.
- * If OPENAI_API_KEY is configured in the environment, delegates inference to OpenAI.
- * Otherwise, falls back to the deterministic grounded domain engine.
+ * Executes a real OpenAI Chat Completion request with Tool Calling and Conversation Memory.
+ * Uses OPENAI_API_KEY from process.env or configuration.
  */
-async function tryOpenAICall(systemPrompt, userMessage, contextData) {
-  if (!env.OPENAI_API_KEY) return null;
+async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, tools = [] }) {
+  const apiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const model = process.env.OPENAI_MODEL || env.OPENAI_MODEL || 'gpt-4o-mini';
+
+  // Construct message sequence with history
+  const messages = [{ role: 'system', content: systemPrompt }];
+
+  // Sanitize and append up to 10 previous conversation turns
+  if (Array.isArray(history)) {
+    for (const h of history.slice(-10)) {
+      if (h && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string') {
+        messages.push({ role: h.role, content: h.content });
+      }
+    }
+  }
+
+  messages.push({ role: 'user', content: userMessage });
+
+  const payload = {
+    model,
+    messages,
+    temperature: 0.3,
+  };
+
+  if (Array.isArray(tools) && tools.length > 0) {
+    payload.tools = tools;
+    payload.tool_choice = 'auto';
+  }
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `User query: "${userMessage}"\n\nGrounded database records:\n${JSON.stringify(contextData, null, 2)}`,
-          },
-        ],
-        temperature: 0.2,
-      }),
-      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
-      console.warn(`[OpenAI Call Notice]: HTTP ${response.status}`);
+      const errText = await response.text().catch(() => '');
+      console.warn(`[OpenAI Chat Error]: HTTP ${response.status} - ${errText}`);
       return null;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || null;
+    const choice = data.choices?.[0];
+    if (!choice || !choice.message) return null;
+
+    return {
+      message: choice.message,
+      model,
+    };
   } catch (err) {
-    console.warn('[OpenAI Call Notice]:', err.message);
+    console.warn('[OpenAI Chat Invocation Failed]:', err.message);
     return null;
   }
 }
 
 /**
+ * Tool Definitions per Role
+ */
+function getRoleTools(role) {
+  if (role === 'farmer') {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'create_products',
+          description:
+            'Propose adding one or multiple new produce listings to the farmer catalogue. Prepares a structured preview requiring explicit farmer confirmation before saving to MongoDB.',
+          parameters: {
+            type: 'object',
+            properties: {
+              products: {
+                type: 'array',
+                description: 'The list of products to add to the catalogue',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', description: 'Produce name, e.g. "Heirloom Tomatoes"' },
+                    unit: {
+                      type: 'string',
+                      enum: ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'],
+                      description: 'Selling unit for pricing and packaging',
+                    },
+                    pricePKR: { type: 'number', description: 'Base selling price in Pakistani Rupees (PKR)' },
+                    category: { type: 'string', description: 'Produce category or produce type' },
+                    description: { type: 'string', description: 'Optional short description of the produce' },
+                  },
+                  required: ['name', 'unit', 'pricePKR'],
+                },
+              },
+            },
+            required: ['products'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'update_product_price',
+          description:
+            'Propose updating the base price and active market offer prices for a product in the catalogue.',
+          parameters: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', description: 'Product ID or exact name' },
+              newPricePKR: { type: 'number', description: 'New proposed price in PKR' },
+              reason: { type: 'string', description: 'Operational reason or competitor benchmark' },
+            },
+            required: ['productId', 'newPricePKR'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'publish_dated_stock',
+          description: 'Propose publishing dated inventory for an upcoming market day.',
+          parameters: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', description: 'Product ID or name' },
+              date: { type: 'string', description: 'Market date in YYYY-MM-DD format' },
+              totalQuantity: { type: 'number', description: 'Quantity to allocate for pre-order pickup' },
+              pricePKR: { type: 'number', description: 'Price in PKR' },
+            },
+            required: ['productId', 'date', 'totalQuantity'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'mark_sold_out',
+          description: 'Propose marking an allocated inventory item as sold out.',
+          parameters: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', description: 'Product ID or name to close' },
+            },
+            required: ['productId'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'update_stall_pin',
+          description: 'Propose updating the market stall designation or identifier.',
+          parameters: {
+            type: 'object',
+            properties: {
+              stallNumber: { type: 'string', description: 'Stall identifier, e.g. "Stall B-12"' },
+            },
+            required: ['stallNumber'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'reply_to_review',
+          description: 'Draft and propose publishing a farmer reply to a customer review.',
+          parameters: {
+            type: 'object',
+            properties: {
+              reviewId: { type: 'string', description: 'ID of the review' },
+              replyText: { type: 'string', description: 'The reply message content' },
+            },
+            required: ['reviewId', 'replyText'],
+          },
+        },
+      },
+    ];
+  }
+
+  if (role === 'customer') {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'cancel_order',
+          description: 'Propose cancelling a customer reservation order before the market cutoff window.',
+          parameters: {
+            type: 'object',
+            properties: {
+              orderId: { type: 'string', description: 'Order ID or order number' },
+              reason: { type: 'string', description: 'Cancellation reason' },
+            },
+            required: ['orderId'],
+          },
+        },
+      },
+    ];
+  }
+
+  if (role === 'admin') {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'approve_farmer',
+          description: 'Propose approving a pending farmer profile for market catalogue listing.',
+          parameters: {
+            type: 'object',
+            properties: {
+              farmerId: { type: 'string', description: 'Farmer profile ID' },
+            },
+            required: ['farmerId'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'publish_announcement',
+          description: 'Propose broadcasting a platform announcement to users.',
+          parameters: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Announcement title' },
+              message: { type: 'string', description: 'Announcement body text' },
+              type: {
+                type: 'string',
+                enum: ['general', 'market_alert', 'schedule_change'],
+                description: 'Notice category',
+              },
+            },
+            required: ['title', 'message'],
+          },
+        },
+      },
+    ];
+  }
+
+  return [];
+}
+
+/**
  * MarketLink Copilot Service
- * Multi-role AI assistance strictly grounded in authorized MongoDB records.
- * Two-phase action execution: prepares a draft requiring explicit user confirmation.
+ * Multi-role AI assistance grounded in authorized MongoDB records with 2-phase mutations.
  */
 export async function copilotChatService(user, message, context = {}) {
   const db = getDB();
   const userId = new ObjectId(user.id);
   const role = user.role;
+  const history = context.history || [];
 
   let promptContext = {};
+  let systemPrompt = '';
   let proposedAction = null;
   let replyText = '';
   let engine = 'MarketLink Grounded Domain Engine';
-
-  const lower = (message || '').toLowerCase();
 
   // =========================================================================
   // 1. CUSTOMER — MARKET COMPANION
@@ -80,7 +282,7 @@ export async function copilotChatService(user, message, context = {}) {
     const currentOffers = await db
       .collection('stockOffers')
       .find({ status: 'available', availableQuantity: { $gt: 0 } })
-      .limit(15)
+      .limit(20)
       .toArray();
 
     const productIds = currentOffers.map((o) => o.productId);
@@ -92,77 +294,43 @@ export async function copilotChatService(user, message, context = {}) {
 
     const productMap = new Map(products.map((p) => [p._id.toString(), p.name]));
     const availableProduce = currentOffers.map((o) => ({
-      name: productMap.get(o.productId.toString()) || 'Produce',
+      productId: o.productId.toString(),
+      name: productMap.get(o.productId.toString()) || 'Fresh Produce',
       date: o.date,
+      unit: o.unit,
       availableQuantity: o.availableQuantity,
-      pricePKR: (o.priceMinor / 100).toFixed(2),
+      pricePKR: (o.priceMinor / 100).toFixed(0),
     }));
 
     const customerOrders = await db
       .collection('orders')
       .find({ customerId: userId })
       .sort({ createdAt: -1 })
-      .limit(5)
+      .limit(6)
       .toArray();
 
     promptContext = {
-      markets: activeMarkets.map((m) => m.name),
+      markets: activeMarkets.map((m) => ({ name: m.name, address: m.address, days: m.operatingDays })),
       availableProduce,
-      activeOrdersCount: customerOrders.filter((o) => ['placed', 'accepted', 'ready_for_pickup'].includes(o.status)).length,
+      recentOrders: customerOrders.map((o) => ({
+        orderId: o._id.toString(),
+        orderNumber: o.orderNumber,
+        status: o.status,
+        totalPKR: ((o.totalAmountMinor || 0) / 100).toFixed(0),
+        items: (o.items || []).map((it) => `${it.name} (${it.quantity} ${it.unit})`),
+      })),
     };
 
-    // System prompt for optional OpenAI call
-    const systemPrompt = `You are MarketLink Market Companion, assisting a customer visiting farmers markets in Lahore.
-Strictly adhere to:
-1. Ground your answers exclusively in the provided authorized market and produce records.
-2. Market model: Market Pickup Only. Customers pre-order online and collect/pay in person at the stall. No delivery or online card processing.
-3. Clearly distinguish factual findings from culinary/planning suggestions.`;
+    systemPrompt = `You are MarketLink Market Companion, assisting a customer visiting farmers markets in Lahore.
+Strict Rules:
+1. Ground your answers exclusively in the authorized market and produce records provided below.
+2. Market model: Market Pickup Only. Customers reserve online and inspect, collect, and pay in person at the farmer's stall.
+3. If the customer requests to cancel an order, invoke the 'cancel_order' tool.
+4. Clearly distinguish factual availability from culinary ideas or itinerary recommendations.
+5. Tone: Helpful, warm, artisanal.
 
-    const openAiReply = await tryOpenAICall(systemPrompt, message, promptContext);
-    if (openAiReply) {
-      replyText = openAiReply;
-      engine = `OpenAI (${env.OPENAI_MODEL})`;
-    } else {
-      // Deterministic Grounded Logic
-      if (lower.includes('recipe') || lower.includes('cook') || lower.includes('dinner') || lower.includes('meal')) {
-        replyText = `Based on today's market produce in Lahore (such as fresh Bedian Tomatoes and Okra), I recommend preparing a vibrant Desi Tomato-Bhindi Karahi! You can pick up fresh vine-ripened tomatoes and farm-fresh okra directly from Greenfield Organic Orchards at Model Town Sunday Organic Bazaar.`;
-      } else if (lower.includes('market') || lower.includes('when') || lower.includes('where') || lower.includes('saturday')) {
-        const marketList = activeMarkets.map((m) => `${m.name} (${m.address})`).join('; ');
-        replyText = `We currently have verified demonstration markets in Lahore: ${marketList}. All orders are reserved online for in-person pickup and payment at the farmer's stall.`;
-      } else if (lower.includes('cancel') && customerOrders.length > 0) {
-        const cancellable = customerOrders.find((o) => ['placed', 'accepted'].includes(o.status));
-        if (cancellable) {
-          const draftDoc = {
-            userId,
-            role: 'customer',
-            actionType: 'cancel_order',
-            summary: `Cancel order ${cancellable.orderNumber || cancellable._id.toString()} before market cutoff. Reserved stock will be immediately returned to the grower.`,
-            payload: { orderId: cancellable._id.toString() },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-          const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: insertRes.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            requiresConfirmation: true,
-          };
-          replyText = `I have drafted a cancellation for reservation ${cancellable.orderNumber || cancellable._id.toString()}. Because this releases reserved produce back to the grower, please review and confirm.`;
-        } else {
-          replyText = `You do not have any active reservations currently eligible for cancellation. Completed or already terminated orders cannot be cancelled.`;
-        }
-      } else if (lower.includes('order') || lower.includes('pickup') || lower.includes('ready')) {
-        const readyOrders = customerOrders.filter((o) => o.status === 'ready_for_pickup');
-        if (readyOrders.length > 0) {
-          replyText = `You have ${readyOrders.length} order(s) marked Ready for Pickup: ${readyOrders.map((o) => o.orderNumber || o._id.toString()).join(', ')}. Head to the designated farmer stall, inspect your produce, and pay at collection.`;
-        } else {
-          replyText = `You have ${customerOrders.length} total recorded order(s). Check your pickup windows in the My Planner timetable to prepare your morning walk.`;
-        }
-      } else {
-        replyText = `Hello! I am your MarketLink Market Companion. I can help you discover seasonal produce at Lahore farmers markets, check live stock availability, and suggest recipes using fresh ingredients from approved local growers.`;
-      }
-    }
+Authorized Data Context:
+${JSON.stringify(promptContext, null, 2)}`;
   }
 
   // =========================================================================
@@ -172,19 +340,16 @@ Strictly adhere to:
     const profile = await db.collection('farmerProfiles').findOne({ userId });
     const profileId = profile ? profile._id : null;
 
-    // Load Farmer's Products
     const ownProducts = await db
       .collection('products')
-      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
+      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) }, isArchived: false })
       .toArray();
 
-    // Load Farmer's Stock Offers
     const stockOffers = await db
       .collection('stockOffers')
       .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
       .toArray();
 
-    // Load Farmer's Recent Orders
     const orders = await db
       .collection('orders')
       .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
@@ -192,7 +357,13 @@ Strictly adhere to:
       .limit(20)
       .toArray();
 
-    // Load Comparable Market Produce (other farmers at the same market)
+    const reviews = await db
+      .collection('reviews')
+      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .toArray();
+
     const marketIds = profile?.marketIds || [];
     const comparableOffers = await db
       .collection('stockOffers')
@@ -214,216 +385,59 @@ Strictly adhere to:
     const comparableList = comparableOffers.map((o) => ({
       productName: compMap.get(o.productId.toString())?.name || 'Produce',
       unit: o.unit,
-      pricePKR: (o.priceMinor / 100).toFixed(2),
+      pricePKR: (o.priceMinor / 100).toFixed(0),
       date: o.date,
     }));
 
     promptContext = {
       farm: profile ? profile.businessName : 'My Farm',
-      approvalStatus: profile ? profile.approvalStatus : 'pending',
-      activeProductsCount: ownProducts.length,
-      activeOffersCount: stockOffers.length,
-      ordersCount: orders.length,
-      comparableMarketPrices: comparableList,
+      approvalStatus: profile ? profile.approvalStatus : 'approved',
+      stallNumber: profile?.stallNumber || 'Stall A-04',
+      productsCatalogue: ownProducts.map((p) => ({
+        id: p._id.toString(),
+        name: p.name,
+        unit: p.unit,
+        pricePKR: (p.basePriceMinor / 100).toFixed(0),
+        category: p.category || 'Produce',
+      })),
+      stockAllocations: stockOffers.map((s) => ({
+        id: s._id.toString(),
+        productId: s.productId.toString(),
+        date: s.date,
+        totalQuantity: s.totalQuantity,
+        availableQuantity: s.availableQuantity,
+        reservedQuantity: s.reservedQuantity,
+        pricePKR: (s.priceMinor / 100).toFixed(0),
+        unit: s.unit,
+        status: s.status,
+      })),
+      recentOrders: orders.slice(0, 10).map((o) => ({
+        id: o._id.toString(),
+        orderNumber: o.orderNumber,
+        status: o.status,
+        totalPKR: ((o.totalAmountMinor || 0) / 100).toFixed(0),
+        items: (o.items || []).map((it) => `${it.name} (${it.quantity} ${it.unit})`),
+      })),
+      customerReviews: reviews.map((r) => ({
+        id: r._id.toString(),
+        rating: r.rating,
+        comment: r.comment,
+        hasReply: !!r.reply,
+      })),
+      marketComparablePrices: comparableList,
     };
 
-    const systemPrompt = `You are MarketLink Farm Copilot, advising an approved grower in Lahore.
-Rules:
-1. Ground all analysis strictly in the farmer's actual products, stock, orders, and comparable market records.
-2. Distinguish factual findings (e.g. current reservations, price differences) from recommendations.
-3. When comparing prices, ensure identical selling units (e.g. PKR/kg).
-4. When suggesting pricing or stock updates, describe the exact operational effect.`;
+    systemPrompt = `You are MarketLink Farm Copilot, advising an approved grower in Lahore.
+Strict Rules:
+1. Ground all analysis strictly in the farmer's actual products, stock, orders, and market records provided below.
+2. Distinguish factual findings (current reservations, inventory levels, competitor benchmarks) from strategic recommendations.
+3. ACTION EXECUTION: When the farmer asks to create products, update prices, change stall number, publish stock, mark items sold out, or draft review replies, ALWAYS call the corresponding tool.
+4. For product creation: You can propose multiple products simultaneously in the 'create_products' tool. Ensure each product has a valid selling unit (kg, g, bunch, box, dozen, litre, or item) and realistic PKR price.
+5. Missing Information: If the farmer does not specify units or prices, suggest reasonable agricultural defaults (e.g. 250 PKR/kg for tomatoes, 100 PKR/bunch for herbs) and confirm them in the proposal.
+6. Tone: Professional, agricultural, concise, action-capable.
 
-    const openAiReply = await tryOpenAICall(systemPrompt, message, promptContext);
-    if (openAiReply && !lower.includes('price') && !lower.includes('stall') && !lower.includes('sold out')) {
-      replyText = openAiReply;
-      engine = `OpenAI (${env.OPENAI_MODEL})`;
-    } else {
-      // ── A. Natural Analysis: Performance & Best Sellers ──
-      if (lower.includes('perform') || lower.includes('best') || lower.includes('selling') || lower.includes('business')) {
-        const itemSales = new Map();
-        let totalRevenueMinor = 0;
-        for (const o of orders) {
-          if (!['cancelled', 'declined'].includes(o.status)) {
-            totalRevenueMinor += o.totalAmountMinor || 0;
-            for (const it of o.items || []) {
-              const prev = itemSales.get(it.name) || { quantity: 0, revenue: 0, unit: it.unit };
-              prev.quantity += it.quantity;
-              prev.revenue += it.subtotalMinor || it.unitPriceMinor * it.quantity;
-              itemSales.set(it.name, prev);
-            }
-          }
-        }
-
-        const sorted = Array.from(itemSales.entries()).sort((a, b) => b[1].quantity - a[1].quantity);
-        const bestSeller = sorted[0];
-
-        replyText = `Factual Business Performance:
-• Recorded reservations: ${orders.length} orders
-• Total booked pre-order revenue: Rs. ${(totalRevenueMinor / 100).toFixed(0)}
-• Top selling produce: ${bestSeller ? `${bestSeller[0]} (${bestSeller[1].quantity} ${bestSeller[1].unit} reserved)` : 'Produce active'}
-• Active dated stock allocations: ${stockOffers.length}
-
-Recommendation: Keep maintaining your inventory buffer for morning walk-in customers while honoring online reservations.`;
-      }
-
-      // ── B. Natural Analysis: Saturday Prep & Packing Worklist ──
-      else if (lower.includes('prepare') || lower.includes('pack') || lower.includes('saturday') || lower.includes('tomorrow')) {
-        const activePrepOrders = orders.filter((o) => ['placed', 'accepted'].includes(o.status));
-        const packSummary = new Map();
-        for (const o of activePrepOrders) {
-          for (const it of o.items || []) {
-            const count = packSummary.get(it.name) || { quantity: 0, unit: it.unit };
-            count.quantity += it.quantity;
-            packSummary.set(it.name, count);
-          }
-        }
-
-        const itemsFormatted = Array.from(packSummary.entries())
-          .map(([name, data]) => `• ${data.quantity} ${data.unit} of ${name}`)
-          .join('\n');
-
-        replyText = `Packing Worklist for Next Market Day:
-You have ${activePrepOrders.length} active pre-orders requiring crate preparation:
-${itemsFormatted || '• No active pending pre-orders'}
-
-Operational checklist:
-1. Harvest and crate items Friday afternoon.
-2. Label crates with customer order references (${activePrepOrders.slice(0, 3).map((o) => o.orderNumber || o._id.toString()).join(', ')}).
-3. Ensure walk-in buffer remains available on stall counters.`;
-      }
-
-      // ── C. Natural Analysis: Price Comparison & Sales Improvement ──
-      else if (lower.includes('improve') || lower.includes('sales') || lower.includes('compare') || lower.includes('price')) {
-        const tomatoOffer = stockOffers.find((s) => s.unit === 'kg' && s.availableQuantity > 0);
-        const currentPriceMinor = tomatoOffer ? tomatoOffer.priceMinor : 35000;
-        const currentPrice = (currentPriceMinor / 100).toFixed(0);
-        const proposedPrice = (Math.max(200, currentPrice - 30)).toFixed(0);
-
-        // Prepare structured draft for action
-        const draftDoc = {
-          userId,
-          role: 'farmer',
-          actionType: 'update_product_price',
-          summary: `Update Heirloom Vine Tomatoes price from Rs. ${currentPrice}/kg to Rs. ${proposedPrice}/kg for Saturday market day.`,
-          payload: {
-            productId: tomatoOffer ? tomatoOffer.productId.toString() : (ownProducts[0]?._id?.toString() || '66f400000000000000000001'),
-            newPriceMinor: parseInt(proposedPrice, 10) * 100,
-          },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          createdAt: new Date(),
-        };
-
-        const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
-        proposedAction = {
-          draftId: insertRes.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          requiresConfirmation: true,
-        };
-
-        replyText = `Factual Pricing Analysis:
-• Your current price: Rs. ${currentPrice} / kg
-• Market average for comparable tomatoes at Model Town: Rs. ${(currentPrice - 20)} / kg
-• Current reservation rate: ${tomatoOffer ? `${tomatoOffer.reservedQuantity} of ${tomatoOffer.totalQuantity} kg reserved` : 'Active'}
-
-Recommendation:
-Adjusting your tomato price to Rs. ${proposedPrice} / kg or introducing a 2-kg weekend salad bundle can accelerate reservation velocity before Friday's 20:00 cutoff.
-
-I have drafted a price update preview. Review the details below and confirm to apply it to your catalogue and active market offers.`;
-      }
-
-      // ── D. Action Request: Stall Designation Update ──
-      else if (lower.includes('stall') || lower.includes('pin') || lower.includes('location')) {
-        const stallMatch = message.match(/stall\s+([A-Za-z0-9-]+)/i);
-        const newStall = stallMatch ? stallMatch[1] : 'Stall B-18';
-
-        const draftDoc = {
-          userId,
-          role: 'farmer',
-          actionType: 'update_stall_pin',
-          summary: `Update farm stall designation to "${newStall}".`,
-          payload: { stallNumber: newStall },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          createdAt: new Date(),
-        };
-
-        const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
-        proposedAction = {
-          draftId: insertRes.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          requiresConfirmation: true,
-        };
-
-        replyText = `I have drafted an action to update your market stall number to "${newStall}". Consequential changes to your farm profile require your explicit confirmation before they take effect. Would you like me to apply this update?`;
-      }
-
-      // ── E. Action Request: Mark Sold Out ──
-      else if (lower.includes('sold out') || lower.includes('close stock')) {
-        const targetOffer = stockOffers[0];
-        if (targetOffer) {
-          const draftDoc = {
-            userId,
-            role: 'farmer',
-            actionType: 'mark_sold_out',
-            summary: `Mark produce item "${targetOffer.productId}" as Sold Out for Saturday market.`,
-            payload: { stockOfferId: targetOffer._id.toString() },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: insertRes.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            requiresConfirmation: true,
-          };
-
-          replyText = `I have prepared a change to mark your remaining allocated inventory as Sold Out. Existing pre-orders will remain preserved. Confirm below to execute.`;
-        } else {
-          replyText = `No active dated stock offers were found to mark sold out.`;
-        }
-      }
-
-      // ── F. Action Request: Draft Review Response ──
-      else if (lower.includes('review') || lower.includes('reply') || lower.includes('response')) {
-        const latestReview = await db.collection('reviews').findOne({ farmerId: { $in: [userId, profileId].filter(Boolean) } });
-        const reviewText = latestReview ? latestReview.comment : 'Excellent fresh organic harvest!';
-        const draftReplyText = `Thank you for supporting local growers! We harvest fresh on Friday afternoon to ensure peak flavor for Saturday morning pickups.`;
-
-        if (latestReview) {
-          const draftDoc = {
-            userId,
-            role: 'farmer',
-            actionType: 'reply_to_review',
-            summary: `Publish farmer reply to customer review (${latestReview._id.toString()}): "${draftReplyText}"`,
-            payload: { reviewId: latestReview._id.toString(), replyText: draftReplyText },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: insertRes.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            requiresConfirmation: true,
-          };
-        }
-
-        replyText = `Here is a drafted response for customer feedback:
-"${draftReplyText}"
-
-Review and confirm below to post this reply directly to the customer's review passport.`;
-      }
-
-      // ── G. Default Farmer Overview ──
-      else {
-        replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, assist with weekly stock allocation, compare market prices, and help prepare Saturday packing worklists. How can I assist your farm today?`;
-      }
-    }
+Authorized Farmer Workspace Context:
+${JSON.stringify(promptContext, null, 2)}`;
   }
 
   // =========================================================================
@@ -433,75 +447,587 @@ Review and confirm below to post this reply directly to the customer's review pa
     const totalMarkets = await db.collection('markets').countDocuments({ isActive: true });
     const totalFarmers = await db.collection('farmerProfiles').countDocuments({});
     const pendingFarmers = await db.collection('farmerProfiles').countDocuments({ approvalStatus: 'pending' });
-    const pendingFarmerDoc = await db.collection('farmerProfiles').findOne({ approvalStatus: 'pending' });
+    const pendingFarmerDocs = await db
+      .collection('farmerProfiles')
+      .find({ approvalStatus: 'pending' })
+      .limit(5)
+      .toArray();
     const totalOrders = await db.collection('orders').countDocuments({});
     const totalCustomers = await db.collection('users').countDocuments({ role: 'customer' });
 
     promptContext = {
       totalActiveMarkets: totalMarkets,
       totalRegisteredFarmers: totalFarmers,
-      pendingFarmerApprovals: pendingFarmers,
+      pendingFarmerApprovalsCount: pendingFarmers,
+      pendingFarmers: pendingFarmerDocs.map((f) => ({
+        id: f._id.toString(),
+        farm: f.businessName,
+        contact: f.contactPerson,
+        city: f.city || 'Lahore',
+      })),
       totalOrdersPlaced: totalOrders,
       totalRegisteredCustomers: totalCustomers,
     };
 
-    if (lower.includes('approval') || lower.includes('pending') || lower.includes('applicant')) {
-      if (pendingFarmerDoc) {
+    systemPrompt = `You are MarketLink Market Intelligence, assisting the platform administrator in Lahore.
+Strict Rules:
+1. Ground all summaries and operational metrics in authorized platform records provided below.
+2. If the admin asks to approve a farmer, invoke the 'approve_farmer' tool.
+3. If the admin asks to broadcast a platform notice, invoke the 'publish_announcement' tool.
+4. Tone: Executive, concise, operational.
+
+Platform Intelligence Context:
+${JSON.stringify(promptContext, null, 2)}`;
+  }
+
+  // =========================================================================
+  // TRY OPENAI WITH TOOLS & CONVERSATION MEMORY
+  // =========================================================================
+  const roleTools = getRoleTools(role);
+  const openAiResult = await callOpenAiWithTools({
+    systemPrompt,
+    history,
+    userMessage: message,
+    tools: roleTools,
+  });
+
+  if (openAiResult && openAiResult.message) {
+    const aiMsg = openAiResult.message;
+    engine = `OpenAI (${openAiResult.model})`;
+
+    // Check if OpenAI initiated a tool call
+    if (Array.isArray(aiMsg.tool_calls) && aiMsg.tool_calls.length > 0) {
+      const toolCall = aiMsg.tool_calls[0];
+      const fnName = toolCall.function.name;
+      let args = {};
+      try {
+        args = JSON.parse(toolCall.function.arguments);
+      } catch (err) {
+        args = {};
+      }
+
+      // Handle farmer: create_products
+      if (fnName === 'create_products' && role === 'farmer') {
+        const rawProds = Array.isArray(args.products) ? args.products : [];
+        const validatedProds = rawProds.map((p, idx) => ({
+          name: (p.name || `Produce Item ${idx + 1}`).trim(),
+          unit: ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'].includes(p.unit) ? p.unit : 'kg',
+          pricePKR: Math.max(10, Math.round(Number(p.pricePKR) || 150)),
+          category: p.category || 'Fresh Vegetables',
+          description: p.description || '',
+        }));
+
+        if (validatedProds.length > 0) {
+          const summary =
+            `Proposed Creation of ${validatedProds.length} Catalogue Product(s):\n` +
+            validatedProds
+              .map(
+                (p, idx) =>
+                  `${idx + 1}. ${p.name} — Rs. ${p.pricePKR} / ${p.unit} (${p.category})`
+              )
+              .join('\n');
+
+          const draftDoc = {
+            userId,
+            role: 'farmer',
+            actionType: 'create_products',
+            summary,
+            payload: { products: validatedProds },
+            details: { products: validatedProds },
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          };
+
+          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftDoc.actionType,
+            summary: draftDoc.summary,
+            details: draftDoc.details,
+            requiresConfirmation: true,
+          };
+
+          replyText =
+            aiMsg.content ||
+            `I have prepared a structured proposal to add ${validatedProds.length} new product(s) to your harvest catalogue. Please inspect the proposed details below and click confirm to write them to your database.`;
+        }
+      }
+
+      // Handle farmer: update_product_price
+      else if (fnName === 'update_product_price' && role === 'farmer') {
+        const targetProd =
+          promptContext.productsCatalogue?.find(
+            (p) =>
+              p.id === args.productId ||
+              p.name.toLowerCase().includes((args.productId || '').toLowerCase())
+          ) || promptContext.productsCatalogue?.[0];
+
+        const pId = targetProd ? targetProd.id : '66f400000000000000000001';
+        const pName = targetProd ? targetProd.name : 'Produce Item';
+        const currPrice = targetProd ? targetProd.pricePKR : '250';
+        const newPrice = Math.round(Number(args.newPricePKR) || 200);
+
+        const summary = `Update "${pName}" catalogue price from Rs. ${currPrice} to Rs. ${newPrice} / ${targetProd?.unit || 'unit'}.`;
         const draftDoc = {
           userId,
-          role: 'admin',
-          actionType: 'approve_farmer',
-          summary: `Approve farmer profile "${pendingFarmerDoc.businessName}" (${pendingFarmerDoc._id.toString()}) for public catalogue listing.`,
-          payload: { farmerId: pendingFarmerDoc._id.toString() },
+          role: 'farmer',
+          actionType: 'update_product_price',
+          summary,
+          payload: { productId: pId, newPriceMinor: newPrice * 100 },
+          details: { productName: pName, oldPrice: currPrice, newPrice },
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           createdAt: new Date(),
         };
 
-        const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
         proposedAction = {
-          draftId: insertRes.insertedId.toString(),
+          draftId: ins.insertedId.toString(),
           actionType: draftDoc.actionType,
           summary: draftDoc.summary,
+          details: draftDoc.details,
           requiresConfirmation: true,
         };
 
-        replyText = `Pending Grower Approvals:
-There is currently ${pendingFarmers} pending applicant requiring review:
-• Farm: ${pendingFarmerDoc.businessName}
-• Contact: ${pendingFarmerDoc.contactPerson || 'Grower'}
-• Region: ${pendingFarmerDoc.city || 'Lahore'}
-
-I have prepared an approval action draft. Confirm below to grant this farmer permission to publish stock and attend scheduled markets.`;
-      } else {
-        replyText = `All registered farmer applications have been reviewed. There are currently zero pending approvals.`;
+        replyText =
+          aiMsg.content ||
+          `I have prepared a price update preview for "${pName}". Review the proposed change below and confirm to apply it to your catalogue and market offers.`;
       }
-    } else if (lower.includes('announcement') || lower.includes('notice') || lower.includes('broadcast')) {
-      const draftMessage = 'Market day reminder: All Lahore markets open Saturday at 08:00. Remember to bring your reusable bag and pay your grower directly at the stall.';
+
+      // Handle farmer: update_stall_pin
+      else if (fnName === 'update_stall_pin' && role === 'farmer') {
+        const stallNumber = args.stallNumber || 'Stall B-12';
+        const draftDoc = {
+          userId,
+          role: 'farmer',
+          actionType: 'update_stall_pin',
+          summary: `Update farm stall designation to "${stallNumber}".`,
+          payload: { stallNumber },
+          details: { stallNumber },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        };
+
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftDoc.actionType,
+          summary: draftDoc.summary,
+          details: draftDoc.details,
+          requiresConfirmation: true,
+        };
+
+        replyText =
+          aiMsg.content ||
+          `I have drafted an update to set your market stall designation to "${stallNumber}". Please confirm below to apply.`;
+      }
+
+      // Handle farmer: mark_sold_out
+      else if (fnName === 'mark_sold_out' && role === 'farmer') {
+        const offer = promptContext.stockAllocations?.[0];
+        if (offer) {
+          const draftDoc = {
+            userId,
+            role: 'farmer',
+            actionType: 'mark_sold_out',
+            summary: `Mark produce item allocated for ${offer.date} as Sold Out.`,
+            payload: { stockOfferId: offer.id },
+            details: { date: offer.date },
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          };
+
+          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftDoc.actionType,
+            summary: draftDoc.summary,
+            details: draftDoc.details,
+            requiresConfirmation: true,
+          };
+
+          replyText =
+            aiMsg.content ||
+            `I have prepared an action to mark your remaining stock as Sold Out. Existing customer reservations will be preserved. Confirm below.`;
+        }
+      }
+
+      // Handle farmer: reply_to_review
+      else if (fnName === 'reply_to_review' && role === 'farmer') {
+        const rev = promptContext.customerReviews?.[0];
+        const revId = args.reviewId || rev?.id || '6ab53dd2223e8a12c2e053ae';
+        const replyContent =
+          args.replyText || 'Thank you for supporting our organic farm! We look forward to seeing you Saturday.';
+
+        const draftDoc = {
+          userId,
+          role: 'farmer',
+          actionType: 'reply_to_review',
+          summary: `Publish farmer reply to customer review: "${replyContent}"`,
+          payload: { reviewId: revId, replyText: replyContent },
+          details: { replyText: replyContent },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        };
+
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftDoc.actionType,
+          summary: draftDoc.summary,
+          details: draftDoc.details,
+          requiresConfirmation: true,
+        };
+
+        replyText =
+          aiMsg.content ||
+          `Here is your drafted response to the customer feedback. Review and confirm below to publish.`;
+      }
+
+      // Handle customer: cancel_order
+      else if (fnName === 'cancel_order' && role === 'customer') {
+        const order = promptContext.recentOrders?.find((o) => ['placed', 'accepted'].includes(o.status));
+        if (order) {
+          const draftDoc = {
+            userId,
+            role: 'customer',
+            actionType: 'cancel_order',
+            summary: `Cancel order ${order.orderNumber || order.orderId} and release reserved produce back to grower.`,
+            payload: { orderId: order.orderId },
+            details: { orderNumber: order.orderNumber },
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          };
+
+          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftDoc.actionType,
+            summary: draftDoc.summary,
+            details: draftDoc.details,
+            requiresConfirmation: true,
+          };
+
+          replyText =
+            aiMsg.content ||
+            `I have prepared a cancellation draft for order ${order.orderNumber}. Confirm below to release the allocation.`;
+        }
+      }
+
+      // Handle admin: approve_farmer
+      else if (fnName === 'approve_farmer' && role === 'admin') {
+        const farmer = promptContext.pendingFarmers?.[0];
+        if (farmer) {
+          const draftDoc = {
+            userId,
+            role: 'admin',
+            actionType: 'approve_farmer',
+            summary: `Approve farmer profile "${farmer.farm}" (${farmer.id}) for public catalogue listing.`,
+            payload: { farmerId: farmer.id },
+            details: { farm: farmer.farm },
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          };
+
+          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftDoc.actionType,
+            summary: draftDoc.summary,
+            details: draftDoc.details,
+            requiresConfirmation: true,
+          };
+
+          replyText =
+            aiMsg.content ||
+            `I have prepared an approval action for grower "${farmer.farm}". Confirm below to grant listing privileges.`;
+        }
+      }
+
+      // Handle admin: publish_announcement
+      else if (fnName === 'publish_announcement' && role === 'admin') {
+        const title = args.title || 'Market Morning Notice';
+        const msg = args.message || 'All Lahore markets open at 08:00 this Saturday.';
+        const draftDoc = {
+          userId,
+          role: 'admin',
+          actionType: 'publish_announcement',
+          summary: `Publish platform announcement: "${title}"`,
+          payload: { title, message: msg, type: args.type || 'general' },
+          details: { title, message: msg },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        };
+
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftDoc.actionType,
+          summary: draftDoc.summary,
+          details: draftDoc.details,
+          requiresConfirmation: true,
+        };
+
+        replyText =
+          aiMsg.content ||
+          `I have drafted an announcement for broadcast. Review and confirm below to publish.`;
+      }
+    } else {
+      // Natural conversation without tool calling
+      replyText = aiMsg.content || 'How can I assist your market day?';
+    }
+
+    return {
+      role,
+      reply: replyText,
+      contextSummary: promptContext,
+      proposedAction,
+      engine,
+    };
+  }
+
+  // =========================================================================
+  // GROUNDED DOMAIN ENGINE FALLBACK (If OPENAI_API_KEY is not yet configured)
+  // =========================================================================
+  const lower = (message || '').toLowerCase();
+
+  if (role === 'farmer') {
+    // ── Check if user wants to create multiple products ──
+    const isCreateIntent =
+      lower.includes('create') ||
+      lower.includes('add') ||
+      lower.includes('new product') ||
+      lower.includes('catalogue');
+
+    if (isCreateIntent && (lower.includes('product') || lower.includes('produce') || lower.includes('tomatoes') || lower.includes('spinach') || lower.includes('mint') || lower.includes('strawberr'))) {
+      // Intelligently parse product entries from the text
+      const parsedProducts = [];
+
+      // Look for multiple listed items
+      const lines = message.split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        // e.g. "Heirloom Tomatoes (250/kg)" or "Organic Spinach 120/bunch" or "4. Strawberries 400/box"
+        const match = line.match(/(?:(?:create|add|\d+[\.\)]|\-|\*)\s*)?([A-Za-z\s]+?)(?:\s*\(|\s+)(?:Rs\.?|PKR\s*)?(\d+)(?:\s*(?:\/|per)\s*([A-Za-z]+))?/i);
+        if (match && match[1] && match[2]) {
+          const name = match[1].replace(/^(?:create|add|four|4|new|products?|produce)\s+/i, '').trim();
+          const price = parseInt(match[2], 10);
+          const rawUnit = (match[3] || 'kg').toLowerCase().trim();
+          const unit = ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'].includes(rawUnit) ? rawUnit : 'kg';
+
+          if (name.length > 2 && price > 0) {
+            parsedProducts.push({
+              name,
+              unit,
+              pricePKR: price,
+              category: name.toLowerCase().includes('fruit') || name.toLowerCase().includes('strawberr') ? 'Orchard Fruits' : 'Fresh Vegetables',
+              description: `Farm-fresh ${name} harvested for Lahore market pickup.`,
+            });
+          }
+        }
+      }
+
+      // If user said "create four products" without specifying exact details or parse yielded fewer
+      if (parsedProducts.length === 0 && (lower.includes('four') || lower.includes('4'))) {
+        parsedProducts.push(
+          { name: 'Heirloom Vine Tomatoes', unit: 'kg', pricePKR: 250, category: 'Fresh Vegetables', description: 'Naturally vine-ripened organic tomatoes.' },
+          { name: 'Crisp Organic Spinach', unit: 'bunch', pricePKR: 120, category: 'Fresh Vegetables', description: 'Tender baby spinach leaves.' },
+          { name: 'Aromatic Field Mint', unit: 'bunch', pricePKR: 50, category: 'Herbs', description: 'Freshly cut fragrant desi pudina.' },
+          { name: 'Sweet Alpine Strawberries', unit: 'box', pricePKR: 400, category: 'Orchard Fruits', description: 'Hand-picked ripe strawberry punnets.' }
+        );
+      } else if (parsedProducts.length === 0) {
+        // Single item default
+        parsedProducts.push({
+          name: 'Seasonal Farm Produce',
+          unit: 'kg',
+          pricePKR: 200,
+          category: 'Fresh Vegetables',
+          description: 'Fresh seasonal harvest for Lahore market pickup.',
+        });
+      }
+
+      const summary =
+        `Proposed Creation of ${parsedProducts.length} Catalogue Product(s):\n` +
+        parsedProducts
+          .map(
+            (p, idx) =>
+              `${idx + 1}. ${p.name} — Rs. ${p.pricePKR} / ${p.unit} (${p.category})`
+          )
+          .join('\n');
+
       const draftDoc = {
         userId,
-        role: 'admin',
-        actionType: 'publish_announcement',
-        summary: `Publish platform announcement: "${draftMessage}"`,
-        payload: { title: 'Saturday Market Morning Reminder', message: draftMessage, type: 'general' },
+        role: 'farmer',
+        actionType: 'create_products',
+        summary,
+        payload: { products: parsedProducts },
+        details: { products: parsedProducts },
         expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         createdAt: new Date(),
       };
 
-      const insertRes = await db.collection('aiActionDrafts').insertOne(draftDoc);
+      const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
       proposedAction = {
-        draftId: insertRes.insertedId.toString(),
+        draftId: ins.insertedId.toString(),
         actionType: draftDoc.actionType,
         summary: draftDoc.summary,
+        details: draftDoc.details,
         requiresConfirmation: true,
       };
 
-      replyText = `I have drafted an announcement for public broadcasting:
-Title: "Saturday Market Morning Reminder"
-Message: "${draftMessage}"
+      replyText = `I have drafted a proposal to create ${parsedProducts.length} produce listings in your catalogue with standard units and fair market pricing. Please review the item breakdown below and click confirm to write them permanently to MongoDB.`;
+    }
 
-Confirm below to publish this notice across public and workspace dashboards.`;
+    // ── Performance & Best Sellers ──
+    else if (lower.includes('perform') || lower.includes('best') || lower.includes('selling') || lower.includes('business')) {
+      const orders = promptContext.recentOrders || [];
+      replyText = `Factual Business Performance:
+• Recorded reservations: ${orders.length} orders
+• Active catalogue listings: ${promptContext.productsCatalogue?.length || 0}
+• Active dated stock allocations: ${promptContext.stockAllocations?.length || 0}
+• Benchmark stalls: Comparable vendors at Model Town average Rs. 200–350/kg for fresh produce.
+
+Recommendation: Maintain healthy buffers for morning walk-ins while prioritizing reserved orders.`;
+    }
+
+    // ── Prep Worklist ──
+    else if (lower.includes('prepare') || lower.includes('pack') || lower.includes('saturday') || lower.includes('tomorrow')) {
+      const orders = promptContext.recentOrders || [];
+      replyText = `Saturday Harvest & Packing Worklist:
+You have ${orders.length} active customer reservations scheduled for collection.
+Operational steps:
+1. Harvest perishable greens Friday afternoon.
+2. Weigh and pre-crate customer bag orders.
+3. Keep reserved crates labelled behind stall counters.`;
+    }
+
+    // ── Price Comparison ──
+    else if (lower.includes('price') || lower.includes('compare') || lower.includes('improve')) {
+      const tomato = promptContext.productsCatalogue?.find((p) => p.name.toLowerCase().includes('tomato')) || promptContext.productsCatalogue?.[0];
+      const pId = tomato?.id || '66f400000000000000000001';
+      const currPrice = tomato ? parseInt(tomato.pricePKR, 10) : 250;
+      const proposedPrice = Math.max(180, currPrice - 30);
+
+      const summary = `Update "${tomato?.name || 'Produce'}" price from Rs. ${currPrice} to Rs. ${proposedPrice} / ${tomato?.unit || 'kg'}.`;
+      const draftDoc = {
+        userId,
+        role: 'farmer',
+        actionType: 'update_product_price',
+        summary,
+        payload: { productId: pId, newPriceMinor: proposedPrice * 100 },
+        details: { productName: tomato?.name, oldPrice: currPrice, newPrice: proposedPrice },
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        createdAt: new Date(),
+      };
+
+      const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+      proposedAction = {
+        draftId: ins.insertedId.toString(),
+        actionType: draftDoc.actionType,
+        summary: draftDoc.summary,
+        details: draftDoc.details,
+        requiresConfirmation: true,
+      };
+
+      replyText = `Factual Pricing Analysis:
+• Your current price: Rs. ${currPrice} / ${tomato?.unit || 'kg'}
+• Comparable market price: Rs. ${(currPrice - 20)} / ${tomato?.unit || 'kg'}
+
+Recommendation: Adjusting your price to Rs. ${proposedPrice} improves reservation velocity. Confirm below to apply.`;
+    }
+
+    // ── Stall Pin ──
+    else if (lower.includes('stall')) {
+      const specificMatch = message.match(/stall\s+([A-Za-z]\s*-\s*\d+|\d+)/i) || message.match(/([A-Za-z]\s*-\s*\d+)/i);
+      const newStall = specificMatch ? `Stall ${specificMatch[1].replace(/\s+/g, '')}` : 'Stall B-18';
+      const draftDoc = {
+        userId,
+        role: 'farmer',
+        actionType: 'update_stall_pin',
+        summary: `Update farm stall designation to "${newStall}".`,
+        payload: { stallNumber: newStall },
+        details: { stallNumber: newStall },
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        createdAt: new Date(),
+      };
+
+      const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+      proposedAction = {
+        draftId: ins.insertedId.toString(),
+        actionType: draftDoc.actionType,
+        summary: draftDoc.summary,
+        details: draftDoc.details,
+        requiresConfirmation: true,
+      };
+
+      replyText = `I have drafted an action to update your stall designation to "${newStall}". Confirm below to apply.`;
+    }
+
+    // ── Default ──
+    else {
+      replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, assist with stock allocations, compare competitor prices, and create catalogue products. How can I assist your farm today?`;
+    }
+  } else if (role === 'customer') {
+    if (lower.includes('recipe') || lower.includes('cook') || lower.includes('dinner') || lower.includes('meal') || lower.includes('tomato')) {
+      replyText = `Based on today's fresh harvest in Lahore (such as fresh Bedian Tomatoes and Okra), I recommend preparing a vibrant Desi Tomato-Bhindi Karahi or Fresh Herb Salad! You can pick up fresh vine-ripened tomatoes directly from Greenfield Organic Orchards at Model Town Sunday Organic Bazaar.`;
+    } else if (lower.includes('cancel')) {
+      const order = promptContext.recentOrders?.[0];
+      if (order) {
+        const draftDoc = {
+          userId,
+          role: 'customer',
+          actionType: 'cancel_order',
+          summary: `Cancel order ${order.orderNumber || order.orderId} and release reserved stock.`,
+          payload: { orderId: order.orderId },
+          details: { orderNumber: order.orderNumber },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        };
+
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftDoc.actionType,
+          summary: draftDoc.summary,
+          details: draftDoc.details,
+          requiresConfirmation: true,
+        };
+
+        replyText = `I have prepared a cancellation draft for order ${order.orderNumber}. Confirm below to execute.`;
+      } else {
+        replyText = `You do not have any active reservations currently eligible for cancellation.`;
+      }
     } else {
-      replyText = `MarketLink Intelligence Overview: Currently managing ${totalMarkets} active markets in Lahore, ${totalFarmers} registered farmers (${pendingFarmers} pending administrative approval), ${totalCustomers} active customers, and ${totalOrders} total market pre-orders placed. All checkout operations adhere to Market Pickup Only and atomic stock reservations.`;
+      replyText = `Hello! I am your Market Companion. I can help you discover seasonal produce at Lahore farmers markets, check live stock availability, and suggest recipes using fresh ingredients from approved local growers.`;
+    }
+  } else if (role === 'admin') {
+    if (lower.includes('approval') || lower.includes('pending')) {
+      const farmer = promptContext.pendingFarmers?.[0];
+      if (farmer) {
+        const draftDoc = {
+          userId,
+          role: 'admin',
+          actionType: 'approve_farmer',
+          summary: `Approve farmer profile "${farmer.farm}" (${farmer.id}) for public catalogue listing.`,
+          payload: { farmerId: farmer.id },
+          details: { farm: farmer.farm },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        };
+
+        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftDoc.actionType,
+          summary: draftDoc.summary,
+          details: draftDoc.details,
+          requiresConfirmation: true,
+        };
+
+        replyText = `There is currently a pending grower applicant: "${farmer.farm}". Confirm below to grant approval.`;
+      } else {
+        replyText = `All registered farmer applications have been reviewed. There are currently zero pending approvals.`;
+      }
+    } else {
+      replyText = `MarketLink Intelligence Overview: Currently managing ${promptContext.totalActiveMarkets} active markets in Lahore, ${promptContext.totalRegisteredFarmers} registered farmers, and ${promptContext.totalOrdersPlaced} pre-orders placed.`;
     }
   }
 
@@ -541,8 +1067,71 @@ export async function confirmCopilotActionService(user, draftId) {
 
   let executionResult = null;
 
-  // 1. Farmer: Update Stall Pin
-  if (draft.actionType === 'update_stall_pin' && user.role === 'farmer') {
+  // 1. Farmer: Create Multiple Catalogue Products
+  if (draft.actionType === 'create_products' && user.role === 'farmer') {
+    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
+    if (!profile) {
+      const err = new Error('Farmer profile not found for this account.');
+      err.code = 'NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const categories = await db.collection('categories').find({}).toArray();
+    const defaultCat =
+      categories.find((c) => c.slug === 'fresh-vegetables') ||
+      categories[0] || { _id: new ObjectId('66f300000000000000000001') };
+
+    const createdItems = [];
+    const now = new Date();
+
+    for (const item of draft.payload.products || []) {
+      const matchedCat =
+        categories.find(
+          (c) =>
+            item.category &&
+            (c.name.toLowerCase().includes(item.category.toLowerCase()) ||
+              item.category.toLowerCase().includes(c.name.toLowerCase()))
+        ) || defaultCat;
+
+      const unit = ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'].includes(item.unit)
+        ? item.unit
+        : 'kg';
+      const basePriceMinor = Math.round(Number(item.pricePKR || 100) * 100);
+
+      const productDoc = {
+        farmerId: profile._id,
+        name: item.name.trim(),
+        description: item.description || `Fresh produce grown by ${profile.businessName}`,
+        categoryId: matchedCat._id,
+        unit,
+        basePriceMinor,
+        currency: 'PKR',
+        imageUrl: item.imageUrl || '/images/tomatoes.jpg',
+        isArchived: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const result = await db.collection('products').insertOne(productDoc);
+      createdItems.push({
+        id: result.insertedId.toString(),
+        name: productDoc.name,
+        unit: productDoc.unit,
+        basePriceMinor: productDoc.basePriceMinor,
+        currency: productDoc.currency,
+        categoryId: matchedCat._id.toString(),
+      });
+    }
+
+    executionResult = {
+      count: createdItems.length,
+      products: createdItems,
+    };
+  }
+
+  // 2. Farmer: Update Stall Pin
+  else if (draft.actionType === 'update_stall_pin' && user.role === 'farmer') {
     const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
     if (!profile) {
       const err = new Error('Farmer profile not found for this account.');
@@ -555,7 +1144,7 @@ export async function confirmCopilotActionService(user, draftId) {
     });
   }
 
-  // 2. Farmer: Update Product Price
+  // 3. Farmer: Update Product Price
   else if (draft.actionType === 'update_product_price' && user.role === 'farmer') {
     const pId = new ObjectId(draft.payload.productId);
     const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
@@ -585,7 +1174,7 @@ export async function confirmCopilotActionService(user, draftId) {
     };
   }
 
-  // 3. Farmer: Mark Sold Out
+  // 4. Farmer: Mark Sold Out
   else if (draft.actionType === 'mark_sold_out' && user.role === 'farmer') {
     const soId = new ObjectId(draft.payload.stockOfferId);
     await db.collection('stockOffers').updateOne(
@@ -595,12 +1184,12 @@ export async function confirmCopilotActionService(user, draftId) {
     executionResult = { stockOfferId: draft.payload.stockOfferId, status: 'sold_out' };
   }
 
-  // 4. Farmer: Reply to Review
+  // 5. Farmer: Reply to Review
   else if (draft.actionType === 'reply_to_review' && user.role === 'farmer') {
     executionResult = await replyToReviewService(user.id, draft.payload.reviewId, draft.payload.replyText);
   }
 
-  // 5. Customer: Cancel Order
+  // 6. Customer: Cancel Order
   else if (draft.actionType === 'cancel_order' && user.role === 'customer') {
     executionResult = await cancelCustomerOrderService(
       user.id,
@@ -609,12 +1198,12 @@ export async function confirmCopilotActionService(user, draftId) {
     );
   }
 
-  // 6. Admin: Publish Announcement
+  // 7. Admin: Publish Announcement
   else if (draft.actionType === 'publish_announcement' && user.role === 'admin') {
     executionResult = await createAnnouncementService(user.id, draft.payload);
   }
 
-  // 7. Admin: Approve Farmer
+  // 8. Admin: Approve Farmer
   else if (draft.actionType === 'approve_farmer' && user.role === 'admin') {
     const fId = new ObjectId(draft.payload.farmerId);
     await db.collection('farmerProfiles').updateOne(
@@ -640,6 +1229,7 @@ export async function confirmCopilotActionService(user, draftId) {
     draftId: dId,
     payload: draft.payload,
     summary: draft.summary,
+    result: executionResult,
     executedAt: new Date(),
   });
 

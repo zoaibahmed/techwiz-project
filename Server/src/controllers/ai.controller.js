@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { copilotChatService, confirmCopilotActionService } from '../services/ai/copilot.service.js';
 
 const chatInputSchema = z.object({
-  message: z.string().min(1).max(1000),
+  message: z.string().min(1).max(4000),
   context: z.record(z.any()).optional().default({}),
 });
 
