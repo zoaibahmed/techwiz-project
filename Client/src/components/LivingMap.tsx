@@ -1,11 +1,79 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { MapPin, Plus, Minus, ArrowUpRight, Compass } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import type { Market } from "../data/market";
-import { sampleMapPositions } from "../data/living-selectors";
+/**
+ * MarketLink — Real interactive map using Leaflet
+ * Replaces the illustrative SVG with actual OpenStreetMap tiles
+ * and real market coordinates from the backend or demo fixtures.
+ */
+import { useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, Compass } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import type { Market } from '../data/market';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-export function LivingMap({
+// Fix Leaflet's default icon path issue with bundlers
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
+
+// MarketLink brand marker — forest green
+const defaultPin = L.divIcon({
+  className: 'ml-map-marker',
+  html: `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#1b3a2d"/>
+    <circle cx="14" cy="13" r="5.5" fill="#faf8ef"/>
+  </svg>`,
+  iconSize: [28, 40],
+  iconAnchor: [14, 40],
+  popupAnchor: [0, -36],
+});
+
+const selectedPin = L.divIcon({
+  className: 'ml-map-marker ml-map-marker--active',
+  html: `<svg width="34" height="48" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#d4a853"/>
+    <circle cx="14" cy="13" r="5.5" fill="#1b3a2d"/>
+  </svg>`,
+  iconSize: [34, 48],
+  iconAnchor: [17, 48],
+  popupAnchor: [0, -44],
+});
+
+// Real Lahore coordinates for demo markets (actual recognisable locations)
+const DEMO_COORDS: Record<string, [number, number]> = {
+  'demo-m1': [31.4834, 74.3225],   // Model Town, Lahore
+  'demo-m2': [31.5204, 74.3487],   // Gulberg III / Liberty, Lahore
+  'demo-m3': [31.4697, 74.3761],   // DHA Phase 5, Lahore
+};
+
+export interface MapMarket {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  area?: string;
+  hours?: string;
+  farmerCount?: number;
+}
+
+function getCoords(m: Market): [number, number] | null {
+  // Prefer live coordinates from API-enriched market objects
+  const any = m as any;
+  if (any.coordinates?.latitude && any.coordinates?.longitude) {
+    return [any.coordinates.latitude, any.coordinates.longitude];
+  }
+  // Fall back to demo coordinates
+  return DEMO_COORDS[m.id] || null;
+}
+
+export function InteractiveMap({
   markets,
   selected,
   onSelect,
@@ -14,126 +82,156 @@ export function LivingMap({
   selected: string;
   onSelect: (id: string) => void;
 }) {
-  const [zoom, setZoom] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const reduce = useReducedMotion();
+
   const current = markets.find((m) => m.id === selected);
+
+  // Compute map markets with coordinates
+  const mapMarkets = useMemo(() => {
+    return markets
+      .map((m) => {
+        const coords = getCoords(m);
+        if (!coords) return null;
+        return { market: m, coords };
+      })
+      .filter(Boolean) as { market: Market; coords: [number, number] }[];
+  }, [markets]);
+
+  // Initialize Leaflet map
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    // Center on Lahore by default; adjust dynamically based on data
+    const center: L.LatLngExpression = mapMarkets.length
+      ? [
+          mapMarkets.reduce((s, m) => s + m.coords[0], 0) / mapMarkets.length,
+          mapMarkets.reduce((s, m) => s + m.coords[1], 0) / mapMarkets.length,
+        ]
+      : [31.5204, 74.3587]; // Lahore default
+
+    const map = L.map(containerRef.current, {
+      center,
+      zoom: 12,
+      zoomControl: false,
+      attributionControl: false,
+      scrollWheelZoom: true,
+    });
+
+    // OpenStreetMap tiles — free, no API key required
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Attribution in bottom-right, subtle
+    L.control.attribution({
+      position: 'bottomright',
+      prefix: false,
+    }).addTo(map).addAttribution(
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    );
+
+    // Zoom control on right side
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update markers when markets change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove old markers
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current.clear();
+
+    // Add markers for each market with coordinates
+    mapMarkets.forEach(({ market, coords }) => {
+      const isSelected = market.id === selected;
+      const marker = L.marker(coords, {
+        icon: isSelected ? selectedPin : defaultPin,
+        title: market.name,
+        alt: market.name,
+        zIndexOffset: isSelected ? 1000 : 0,
+      });
+
+      marker.on('click', () => onSelect(market.id));
+
+      marker.bindTooltip(market.name, {
+        direction: 'top',
+        offset: [0, -42],
+        className: 'ml-map-tooltip',
+      });
+
+      marker.addTo(map);
+      markersRef.current.set(market.id, marker);
+    });
+
+    // Fit bounds if multiple markets
+    if (mapMarkets.length > 1) {
+      const bounds = L.latLngBounds(mapMarkets.map((m) => m.coords));
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    } else if (mapMarkets.length === 1) {
+      map.setView(mapMarkets[0].coords, 14);
+    }
+  }, [mapMarkets, selected, onSelect]);
+
+  // Pan to selected market
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selected) return;
+
+    const entry = mapMarkets.find((m) => m.market.id === selected);
+    if (entry) {
+      map.panTo(entry.coords, { animate: !reduce, duration: 0.4 });
+    }
+
+    // Update marker icons for selection state
+    markersRef.current.forEach((marker, id) => {
+      marker.setIcon(id === selected ? selectedPin : defaultPin);
+      marker.setZIndexOffset(id === selected ? 1000 : 0);
+    });
+  }, [selected, mapMarkets, reduce]);
+
+  const hasCoords = mapMarkets.length > 0;
+
   return (
-    <div className="living-map" aria-label="Illustrative market map">
-      <div className="map-cartography" style={{ transform: `scale(${zoom})` }}>
-        <svg
-          viewBox="0 0 800 480"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <rect width="800" height="480" fill="#e9eadc" />
-          <g fill="#d8e0c7" stroke="#cbd6b9" strokeWidth="1">
-            <path d="M32 24H180V137H48Z" />
-            <path d="M315 32H434L474 131H332Z" />
-            <path d="M100 322H260L239 455H63Z" />
-            <path d="M615 17H783V139H650Z" />
-            <path d="M590 323H789V466H612Z" />
-          </g>
-          <path
-            d="M470 -30C384 90 592 175 476 263S489 410 548 510"
-            fill="none"
-            stroke="#afc9ca"
-            strokeWidth="57"
-          />
-          <path
-            d="M470 -30C384 90 592 175 476 263S489 410 548 510"
-            fill="none"
-            stroke="#c4dad8"
-            strokeWidth="45"
-          />
-          <g stroke="#faf8ef" fill="none" strokeWidth="19">
-            <path d="M-30 175L820 123M-20 323L820 259M237 -30L172 510M635 -20L676 510" />
-            <path d="M-30 432L817 352M66 -10L382 490" strokeWidth="10" />
-            <path
-              d="M315 -20L400 500M740 -20L735 490M-20 74L820 213"
-              strokeWidth="8"
-            />
-          </g>
-          <g fill="#d0d1c2">
-            <path d="M254 190H299V245H249Z" />
-            <path d="M317 181H356V239H328Z" />
-            <path d="M81 203H130V253H92Z" />
-            <path d="M554 181H604V218H560Z" />
-            <path d="M285 365H347V401H280Z" />
-            <path d="M710 286H765V321H708Z" />
-          </g>
-          <g fill="#9baa84">
-            <circle cx="108" cy="62" r="8" />
-            <circle cx="136" cy="87" r="6" />
-            <circle cx="98" cy="105" r="7" />
-            <circle cx="374" cy="74" r="10" />
-            <circle cx="403" cy="103" r="7" />
-            <circle cx="140" cy="383" r="9" />
-            <circle cx="174" cy="398" r="7" />
-            <circle cx="696" cy="403" r="9" />
-          </g>
-          <g
-            fill="#68725b"
-            fontSize="12"
-            fontFamily="Public Sans, sans-serif"
-            letterSpacing="2"
-          >
-            <text x="55" y="155">
-              ORCHARD QUARTER
-            </text>
-            <text x="525" y="450">
-              RIVERSIDE
-            </text>
-            <text x="614" y="58">
-              THE GROVE
-            </text>
-          </g>
-        </svg>
-        {markets.map((m, i) => {
-          const pos = sampleMapPositions[m.id] ?? [
-            25 + (i % 3) * 22,
-            40 + (i % 2) * 24,
-          ];
-          return (
-            <motion.button
-              key={m.id}
-              className={`living-pin ${selected === m.id ? "is-selected" : ""}`}
-              style={{ left: `${pos[0]}%`, top: `${pos[1]}%` }}
-              aria-label={`Select ${m.name}`}
-              aria-pressed={selected === m.id}
-              onClick={() => onSelect(m.id)}
-              animate={{ scale: selected === m.id ? 1.12 : 1 }}
-              transition={{ duration: reduce ? 0 : 0.2 }}
-            >
-              <MapPin size={20} />
-              <span>{m.name}</span>
-            </motion.button>
-          );
-        })}
-      </div>
-      <span className="living-map-label">
-        <Compass size={15} /> Living Market Map
-      </span>
-      <div className="living-map-zoom">
-        <button
-          aria-label="Zoom in map"
-          disabled={zoom >= 1.4}
-          onClick={() => setZoom(1.4)}
-        >
-          <Plus size={16} />
-        </button>
-        <button
-          aria-label="Zoom out map"
-          disabled={zoom === 1}
-          onClick={() => setZoom(1)}
-        >
-          <Minus size={16} />
-        </button>
-      </div>
+    <div className="living-map living-map--real" aria-label="Market discovery map">
+      <div ref={containerRef} className="map-leaflet-container" />
+
+      {!hasCoords && (
+        <div className="map-empty-overlay">
+          <Compass size={32} />
+          <p>No mapped markets in this area yet.</p>
+          <p className="small muted">
+            Markets require approved coordinates before appearing on the map.
+          </p>
+        </div>
+      )}
+
       {current && (
-        <div className="living-map-selection" aria-live="polite">
+        <motion.div
+          className="living-map-selection"
+          aria-live="polite"
+          key={current.id}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduce ? 0 : 0.25 }}
+        >
           <span>
             <strong>{current.name}</strong>
-            <small>{current.hours} · sample market</small>
+            <small>
+              {current.area}
+              {current.hours ? ` · ${current.hours}` : ''}
+            </small>
           </span>
           <Link
             to={`/markets/${current.id}`}
@@ -141,10 +239,13 @@ export function LivingMap({
           >
             <ArrowUpRight size={20} />
           </Link>
-        </div>
+        </motion.div>
       )}
+
       <small className="living-map-disclaimer">
-        Illustrative map · not real pickup coordinates
+        {hasCoords
+          ? 'Map tiles © OpenStreetMap contributors'
+          : 'Awaiting real market coordinates'}
       </small>
     </div>
   );

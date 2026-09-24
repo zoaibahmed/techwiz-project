@@ -6,6 +6,8 @@ import "./living-market.css";
 import "./arrival.css";
 import "./experience.css";
 import "./location-modal.css";
+import "./farmer-workbench.css";
+import "./public-experience.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -8,6 +8,19 @@ export default defineConfig({
   root: clientRoot,
   envDir: clientRoot,
   plugins: [react()],
-  server: { strictPort: true, fs: { strict: true, allow: [clientRoot] } },
+  server: {
+    strictPort: true,
+    fs: { strict: true, allow: [clientRoot] },
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   preview: { strictPort: true },
+  optimizeDeps: {
+    include: ['leaflet'],
+  },
 });

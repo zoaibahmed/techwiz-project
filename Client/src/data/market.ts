@@ -21,6 +21,9 @@ export interface Market {
   city?: string;
   currency?: string;
   timeZone?: string;
+  coordinates?: { latitude: number; longitude: number };
+  operatingDays?: number[];
+  attendingFarmerCount?: number;
 }
 export interface Farmer {
   id: string;
@@ -159,6 +162,9 @@ export function seed(): DemoState {
         day: demoDate,
         hours: "08:00–13:00",
         active: true,
+        coordinates: { latitude: 31.4834, longitude: 74.3225 },
+        operatingDays: [6],
+        attendingFarmerCount: 2,
       },
       {
         id: "demo-m2",
@@ -173,6 +179,9 @@ export function seed(): DemoState {
         day: demoDate,
         hours: "09:00–14:00",
         active: true,
+        coordinates: { latitude: 31.5204, longitude: 74.3487 },
+        operatingDays: [6],
+        attendingFarmerCount: 1,
       },
       {
         id: "demo-m3",
@@ -187,6 +196,9 @@ export function seed(): DemoState {
         day: "2026-10-04",
         hours: "08:00–12:00",
         active: true,
+        coordinates: { latitude: 31.4697, longitude: 74.3761 },
+        operatingDays: [0],
+        attendingFarmerCount: 1,
       },
     ],
     farmers: [

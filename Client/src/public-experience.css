@@ -1,0 +1,735 @@
+/* ANTIGRAVITY | MARKETLINK PUBLIC EXPERIENCE STYLING
+   STRICT ADHERENCE: NO GRADIENTS.
+   Solid color palette:
+   --pe-forest: #183b2b (deep forest green)
+   --pe-deep: #0f291d (rich dark green)
+   --pe-paper: #faf8f2 (warm ivory)
+   --pe-cream: #f4f0e6 (soft parchment)
+   --pe-sage: #e8ede3 (delicate sage)
+   --pe-sage-dark: #65806e (muted sage)
+   --pe-ink: #242b23 (editorial dark charcoal)
+   --pe-muted: #5a665c (soft muted text)
+   --pe-harvest: #c98646 (warm harvest amber)
+   --pe-harvest-light: #fef5ea (soft amber cream)
+   --pe-border: #d6dcd1 (fine structural line)
+   --pe-border-subtle: #e8ede3 (subtle separator)
+*/
+
+.public-experience {
+  --pe-forest: #183b2b;
+  --pe-deep: #0f291d;
+  --pe-paper: #faf8f2;
+  --pe-cream: #f4f0e6;
+  --pe-sage: #e8ede3;
+  --pe-sage-dark: #65806e;
+  --pe-ink: #242b23;
+  --pe-muted: #5a665c;
+  --pe-harvest: #c98646;
+  --pe-harvest-light: #fef5ea;
+  --pe-border: #d6dcd1;
+  --pe-border-subtle: #e8ede3;
+  --pe-radius: 6px;
+  color: var(--pe-ink);
+}
+
+/* SECTION HEADINGS */
+.pe-section-header {
+  margin-bottom: 36px;
+}
+
+.pe-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--pe-harvest);
+  margin-bottom: 10px;
+}
+
+.pe-eyebrow.forest {
+  color: var(--pe-forest);
+}
+
+.pe-section-title {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: clamp(32px, 3.5vw, 44px);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--pe-forest);
+  margin: 0 0 14px;
+}
+
+.pe-section-lead {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--pe-muted);
+  max-width: 680px;
+  margin: 0;
+}
+
+/* 1. DISCOVER A LOCATION SECTION */
+.pe-location-bar {
+  background: var(--pe-cream);
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 24px 32px;
+  margin: 40px auto;
+  max-width: 1400px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.pe-location-info h3 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 24px;
+  margin: 0 0 6px;
+  color: var(--pe-forest);
+}
+
+.pe-location-info p {
+  font-size: 14px;
+  color: var(--pe-muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pe-pilot-badge {
+  display: inline-block;
+  background: var(--pe-harvest-light);
+  color: var(--pe-harvest);
+  border: 1px solid #f3d4b0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pe-location-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 2. FIND A MARKET DAY SECTION */
+.pe-day-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px 0 20px;
+  margin-bottom: 32px;
+}
+
+.pe-day-pill {
+  padding: 12px 20px;
+  border: 1px solid var(--pe-border);
+  background: var(--pe-paper);
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--pe-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.pe-day-pill:hover {
+  border-color: var(--pe-sage-dark);
+  background: var(--pe-cream);
+}
+
+.pe-day-pill.active {
+  background: var(--pe-forest);
+  color: var(--pe-paper);
+  border-color: var(--pe-forest);
+}
+
+.pe-day-pill.active .pe-day-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--pe-paper);
+}
+
+.pe-day-count {
+  background: var(--pe-sage);
+  color: var(--pe-forest);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* 3. EXPLORE MARKETS SECTION */
+.pe-markets-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 64px;
+}
+
+.pe-market-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pe-market-card {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.pe-market-card:hover {
+  border-color: var(--pe-forest);
+  transform: translateY(-2px);
+}
+
+.pe-market-card.selected {
+  border-color: var(--pe-forest);
+  border-left: 5px solid var(--pe-forest);
+  background: #fdfcf9;
+}
+
+.pe-market-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.pe-market-card h3 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 24px;
+  margin: 0;
+  color: var(--pe-forest);
+}
+
+.pe-market-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13.5px;
+  color: var(--pe-muted);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.pe-market-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pe-market-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--pe-border-subtle);
+  font-size: 13px;
+}
+
+.pe-map-container {
+  position: sticky;
+  top: 90px;
+  height: 520px;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  overflow: hidden;
+  background: var(--pe-cream);
+}
+
+/* 4. MEET PARTICIPATING GROWERS SECTION */
+.pe-growers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-bottom: 64px;
+}
+
+.pe-grower-card {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pe-grower-card:hover {
+  border-color: var(--pe-forest);
+  transform: translateY(-3px);
+}
+
+.pe-grower-img-box {
+  width: 100%;
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+  background: var(--pe-cream);
+}
+
+.pe-grower-img-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.pe-grower-card:hover .pe-grower-img-box img {
+  transform: scale(1.03);
+}
+
+.pe-grower-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--pe-paper);
+  color: var(--pe-forest);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--pe-border);
+}
+
+.pe-grower-body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: space-between;
+}
+
+.pe-grower-body h3 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 22px;
+  margin: 0 0 6px;
+  color: var(--pe-forest);
+}
+
+.pe-grower-person {
+  font-size: 13px;
+  color: var(--pe-muted);
+  margin-bottom: 12px;
+}
+
+.pe-grower-story {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--pe-ink);
+  margin-bottom: 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pe-grower-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid var(--pe-border-subtle);
+  font-size: 13px;
+  color: var(--pe-forest);
+  font-weight: 500;
+}
+
+/* 5. DISCOVER DATED PRODUCE (PRODUCE GRID) */
+.pe-categories-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+.pe-cat-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--pe-border);
+  background: var(--pe-paper);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pe-ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pe-cat-btn:hover {
+  border-color: var(--pe-sage-dark);
+}
+
+.pe-cat-btn.active {
+  background: var(--pe-forest);
+  color: var(--pe-paper);
+  border-color: var(--pe-forest);
+}
+
+.pe-produce-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 64px;
+}
+
+.pe-produce-card {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.pe-produce-card:hover {
+  border-color: var(--pe-forest);
+  transform: translateY(-2px);
+}
+
+.pe-produce-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  background: var(--pe-cream);
+}
+
+.pe-produce-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.pe-produce-card:hover .pe-produce-thumb img {
+  transform: scale(1.03);
+}
+
+.pe-stock-pill {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(24, 59, 43, 0.9);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.pe-stock-pill.low {
+  background: rgba(201, 134, 70, 0.95);
+}
+
+.pe-stock-pill.out {
+  background: rgba(168, 36, 36, 0.9);
+}
+
+.pe-produce-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: space-between;
+}
+
+.pe-produce-farmer {
+  font-size: 12px;
+  color: var(--pe-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.pe-produce-title {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 18px;
+  margin: 0 0 8px;
+  color: var(--pe-forest);
+}
+
+.pe-produce-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.pe-produce-price-val {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--pe-forest);
+}
+
+.pe-produce-unit {
+  font-size: 12px;
+  color: var(--pe-muted);
+}
+
+.pe-produce-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pe-add-btn {
+  flex-grow: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--pe-forest);
+  color: var(--pe-paper);
+  border: 1px solid var(--pe-forest);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pe-add-btn:hover:not(:disabled) {
+  background: var(--pe-deep);
+}
+
+.pe-add-btn:disabled {
+  background: var(--pe-border);
+  border-color: var(--pe-border);
+  color: var(--pe-muted);
+  cursor: not-allowed;
+}
+
+/* 6. BUILD A MARKET BASKET & COLLECTION JOURNEY */
+.pe-journey-banner {
+  background: var(--pe-forest);
+  color: var(--pe-paper);
+  border-radius: var(--pe-radius);
+  padding: 48px;
+  margin-bottom: 64px;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.pe-journey-banner h2 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 38px;
+  margin: 0 0 16px;
+  color: var(--pe-paper);
+}
+
+.pe-journey-banner p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #c5d3c1;
+  margin: 0 0 24px;
+}
+
+.pe-journey-features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pe-journey-feat-item {
+  display: flex;
+  align-items: start;
+  gap: 14px;
+  background: #122e22;
+  border: 1px solid #234735;
+  padding: 16px 20px;
+  border-radius: 4px;
+}
+
+.pe-journey-feat-item strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 2px;
+  color: var(--pe-paper);
+}
+
+.pe-journey-feat-item span {
+  font-size: 13px;
+  color: #a8baa3;
+}
+
+/* 7. FOUR EDITORIAL STEPS WALKTHROUGH */
+.pe-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin-bottom: 64px;
+}
+
+.pe-step-card {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.pe-step-num {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 36px;
+  color: var(--pe-harvest);
+  line-height: 1;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.pe-step-card h3 {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 21px;
+  margin: 0 0 10px;
+  color: var(--pe-forest);
+}
+
+.pe-step-card p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--pe-muted);
+  margin: 0;
+}
+
+/* 8. SEASONAL HARVEST GUIDE & FAQ ACCORDION */
+.pe-faq-section {
+  background: var(--pe-cream);
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 48px;
+  margin-bottom: 64px;
+}
+
+.pe-faq-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-top: 32px;
+}
+
+.pe-faq-item {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 20px 24px;
+}
+
+.pe-faq-item h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--pe-forest);
+}
+
+.pe-faq-item p {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--pe-muted);
+  margin: 0;
+}
+
+/* DETAIL PAGES ENHANCEMENTS */
+.pe-detail-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 36px;
+  margin-bottom: 48px;
+  align-items: center;
+}
+
+.pe-detail-gallery {
+  border-radius: var(--pe-radius);
+  overflow: hidden;
+  border: 1px solid var(--pe-border);
+  max-height: 480px;
+}
+
+.pe-detail-gallery img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pe-detail-panel {
+  background: #ffffff;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  padding: 36px;
+}
+
+/* RESPONSIVE BREAKPOINTS */
+@media (max-width: 1100px) {
+  .pe-produce-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .pe-steps-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .pe-location-bar {
+    grid-template-columns: 1fr;
+  }
+  .pe-markets-layout {
+    grid-template-columns: 1fr;
+  }
+  .pe-map-container {
+    position: static;
+    height: 380px;
+  }
+  .pe-growers-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pe-journey-banner {
+    grid-template-columns: 1fr;
+    padding: 32px;
+  }
+  .pe-faq-grid {
+    grid-template-columns: 1fr;
+  }
+  .pe-detail-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .pe-produce-grid {
+    grid-template-columns: 1fr;
+  }
+  .pe-growers-grid {
+    grid-template-columns: 1fr;
+  }
+  .pe-steps-grid {
+    grid-template-columns: 1fr;
+  }
+}
