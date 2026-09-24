@@ -1,7 +1,7 @@
 import { ObjectId } from 'mongodb';
 import { getDB } from '../../config/db.js';
 import { env } from '../../config/env.js';
-import { createStockOfferService } from '../inventory.service.js';
+import { createOrUpdateStockOfferService } from '../inventory.service.js';
 import { updateFarmerProfileService } from '../farmer.service.js';
 import { cancelCustomerOrderService } from '../order.service.js';
 
