@@ -20,6 +20,8 @@ dist/
 build/
 coverage/
 .nyc_output/
+Server/uploads/*
+!Server/uploads/.gitkeep
 
 # OS & Editor Files
 .DS_Store
