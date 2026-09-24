@@ -28,6 +28,9 @@ export async function getCustomerPreferencesService(customerId) {
   return {
     preferredMarketId: customer.preferences?.preferredMarketId || null,
     preferredMarket,
+    preferredCountryCode: customer.preferences?.preferredCountryCode || 'PK',
+    preferredLanguage: customer.preferences?.preferredLanguage || 'en',
+    preferredCurrency: customer.preferences?.preferredCurrency || 'PKR',
     dietaryPreferences: customer.preferences?.dietaryPreferences || [],
     defaultPickupNotes: customer.preferences?.defaultPickupNotes || '',
     phone: customer.phone || '',
@@ -48,6 +51,15 @@ export async function updateCustomerPreferencesService(customerId, preferencesDa
 
   if (preferencesData.preferredMarketId !== undefined) {
     updateFields['preferences.preferredMarketId'] = preferencesData.preferredMarketId;
+  }
+  if (preferencesData.preferredCountryCode !== undefined) {
+    updateFields['preferences.preferredCountryCode'] = preferencesData.preferredCountryCode.toUpperCase();
+  }
+  if (preferencesData.preferredLanguage !== undefined) {
+    updateFields['preferences.preferredLanguage'] = preferencesData.preferredLanguage.toLowerCase();
+  }
+  if (preferencesData.preferredCurrency !== undefined) {
+    updateFields['preferences.preferredCurrency'] = preferencesData.preferredCurrency.toUpperCase();
   }
   if (preferencesData.dietaryPreferences !== undefined) {
     updateFields['preferences.dietaryPreferences'] = preferencesData.dietaryPreferences;

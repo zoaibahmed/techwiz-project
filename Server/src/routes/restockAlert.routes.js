@@ -10,8 +10,16 @@ import {
 export const restockAlertRouter = Router();
 
 restockAlertRouter.get('/restock-alerts', authenticate, requireRole('customer'), listRestockAlerts);
+restockAlertRouter.get('/customer/restock-alerts', authenticate, requireRole('customer'), listRestockAlerts);
 restockAlertRouter.post(
   '/restock-alerts',
+  authenticate,
+  requireRole('customer'),
+  csrfProtection,
+  createRestockAlert
+);
+restockAlertRouter.post(
+  '/customer/restock-alerts',
   authenticate,
   requireRole('customer'),
   csrfProtection,
@@ -24,3 +32,11 @@ restockAlertRouter.delete(
   csrfProtection,
   cancelRestockAlert
 );
+restockAlertRouter.delete(
+  '/customer/restock-alerts/:id',
+  authenticate,
+  requireRole('customer'),
+  csrfProtection,
+  cancelRestockAlert
+);
+

@@ -4,10 +4,14 @@ const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 const EXEMPT_PATHS = [
   '/api/v1/auth/login',
   '/api/auth/login',
+  '/api/v1/auth/register',
+  '/api/auth/register',
   '/api/v1/auth/register/customer',
   '/api/auth/register/customer',
   '/api/v1/auth/register/farmer',
   '/api/auth/register/farmer',
+  '/api/v1/contact',
+  '/api/contact',
 ];
 
 /**

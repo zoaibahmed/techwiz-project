@@ -269,4 +269,172 @@ export async function getFarmerReportsService(userId) {
   };
 }
 
+// --- GUIDED MULTI-STEP ONBOARDING WIZARD SERVICES ---
+
+export async function getFarmerOnboardingService(userId) {
+  const db = getDB();
+  const uId = new ObjectId(userId);
+
+  let profile = await db.collection('farmerProfiles').findOne({ userId: uId });
+
+  if (!profile) {
+    // If user account is farmer but profile not initialized, initialize skeleton
+    const user = await db.collection('users').findOne({ _id: uId });
+    const newProfile = {
+      userId: uId,
+      businessName: user ? `${user.firstName || 'Farmer'}'s Produce` : 'My Farm',
+      contactPerson: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '',
+      phone: user?.phone || '',
+      email: user?.email || '',
+      approvalStatus: 'draft',
+      countryCode: 'PK',
+      city: 'Lahore',
+      onboarding: {
+        currentStep: 1,
+        status: 'in_progress',
+        completedSteps: [],
+        stepData: {
+          step1_account: {
+            contactPerson: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '',
+            phone: user?.phone || '',
+          },
+        },
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const res = await db.collection('farmerProfiles').insertOne(newProfile);
+    profile = { _id: res.insertedId, ...newProfile };
+  }
+
+  const onboarding = profile.onboarding || {
+    currentStep: 1,
+    status: profile.approvalStatus === 'approved' ? 'approved' : 'in_progress',
+    completedSteps: [],
+    stepData: {},
+  };
+
+  return {
+    farmerProfileId: profile._id.toString(),
+    currentStep: onboarding.currentStep || 1,
+    status: onboarding.status || 'in_progress',
+    completedSteps: onboarding.completedSteps || [],
+    stepData: onboarding.stepData || {},
+    approvalStatus: profile.approvalStatus || 'draft',
+    submittedAt: onboarding.submittedAt ? onboarding.submittedAt.toISOString() : null,
+    adminNotes: profile.adminNotes || '',
+  };
+}
+
+export async function saveFarmerOnboardingStepService(userId, { step, data }) {
+  const db = getDB();
+  const uId = new ObjectId(userId);
+
+  const stepKey = `onboarding.stepData.step${step}`;
+  const now = new Date();
+
+  const updateDoc = {
+    $set: {
+      [stepKey]: data,
+      'onboarding.currentStep': Math.min(8, Math.max(step + 1, 1)),
+      updatedAt: now,
+    },
+    $addToSet: {
+      'onboarding.completedSteps': step,
+    },
+  };
+
+  // Sync key profile fields at appropriate steps
+  if (step === 1) {
+    if (data.contactPerson) updateDoc.$set.contactPerson = data.contactPerson;
+    if (data.phone) updateDoc.$set.phone = data.phone;
+  } else if (step === 2) {
+    if (data.countryCode) updateDoc.$set.countryCode = data.countryCode.toUpperCase();
+    if (data.countryName) updateDoc.$set.countryName = data.countryName;
+    if (data.region) updateDoc.$set.region = data.region;
+    if (data.city) updateDoc.$set.city = data.city;
+    if (data.address) updateDoc.$set.address = data.address;
+  } else if (step === 3) {
+    if (data.businessName) updateDoc.$set.businessName = data.businessName;
+    if (data.bio) updateDoc.$set.bio = data.bio;
+    if (data.story) updateDoc.$set.story = data.story;
+    if (data.logoUrl) updateDoc.$set.profileImageUrl = data.logoUrl;
+    if (data.bannerUrl) updateDoc.$set.bannerImageUrl = data.bannerUrl;
+    if (data.farmingPractices) updateDoc.$set.farmingPractices = data.farmingPractices;
+  } else if (step === 4) {
+    if (Array.isArray(data.requestedMarketIds)) {
+      updateDoc.$set.marketIds = data.requestedMarketIds.map((id) => new ObjectId(id));
+    }
+  } else if (step === 6) {
+    if (Array.isArray(data.operatingDays)) {
+      updateDoc.$set.operatingDays = data.operatingDays;
+    }
+  } else if (step === 7) {
+    if (data.stallNumber) updateDoc.$set.stallNumber = data.stallNumber;
+    if (data.defaultStallNotes) updateDoc.$set.stallNotes = data.defaultStallNotes;
+  }
+
+  await db.collection('farmerProfiles').updateOne({ userId: uId }, updateDoc, { upsert: true });
+
+  return getFarmerOnboardingService(userId);
+}
+
+export async function submitFarmerOnboardingService(userId) {
+  const db = getDB();
+  const uId = new ObjectId(userId);
+
+  const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
+  if (!profile) {
+    const err = new Error('Farmer profile not found. Please complete step 1 first.');
+    err.code = 'NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const stepData = profile.onboarding?.stepData || {};
+
+  // Check required steps: 1 (Account), 2 (Location), 3 (Profile), 4 (Markets)
+  const missing = [];
+  if (!stepData.step1_account?.contactPerson || !stepData.step1_account?.phone) {
+    missing.push('Step 1: Contact person and phone number are required.');
+  }
+  if (!stepData.step2_location?.countryCode || !stepData.step2_location?.city || !stepData.step2_location?.address) {
+    missing.push('Step 2: Country, city, and address are required.');
+  }
+  if (!stepData.step3_profile?.businessName || !stepData.step3_profile?.bio) {
+    missing.push('Step 3: Farm business name and description are required.');
+  }
+  if (!stepData.step4_markets?.requestedMarketIds || stepData.step4_markets.requestedMarketIds.length === 0) {
+    missing.push('Step 4: At least one market selection is required.');
+  }
+
+  if (missing.length > 0) {
+    const err = new Error(`Onboarding submission incomplete. ${missing.join(' ')}`);
+    err.code = 'ONBOARDING_INCOMPLETE';
+    err.statusCode = 400;
+    err.fields = missing;
+    throw err;
+  }
+
+  const now = new Date();
+  await db.collection('farmerProfiles').updateOne(
+    { userId: uId },
+    {
+      $set: {
+        approvalStatus: 'pending',
+        'onboarding.status': 'submitted',
+        'onboarding.submittedAt': now,
+        'onboarding.currentStep': 8,
+        updatedAt: now,
+      },
+      $addToSet: {
+        'onboarding.completedSteps': 8,
+      },
+    }
+  );
+
+  return getFarmerOnboardingService(userId);
+}
+
+
 

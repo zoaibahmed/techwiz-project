@@ -270,14 +270,30 @@ export async function updateFarmerApprovalService(farmerProfileId, newStatus, ad
   };
 }
 
-export async function listFarmersForAdminService(filterStatus) {
+export async function listFarmersForAdminService(query = {}) {
   const db = getDB();
-  const query = {};
-  if (filterStatus) {
-    query.approvalStatus = filterStatus;
+  const filter = {};
+
+  const status = typeof query === 'string' ? query : query.status;
+  if (status) {
+    filter.approvalStatus = status;
   }
 
-  const profiles = await db.collection('farmerProfiles').find(query).sort({ createdAt: -1 }).toArray();
+  if (typeof query === 'object') {
+    if (query.countryCode) {
+      filter.countryCode = query.countryCode.toUpperCase().trim();
+    }
+    if (query.search) {
+      const s = query.search.trim();
+      filter.$or = [
+        { businessName: { $regex: s, $options: 'i' } },
+        { contactPerson: { $regex: s, $options: 'i' } },
+        { email: { $regex: s, $options: 'i' } },
+      ];
+    }
+  }
+
+  const profiles = await db.collection('farmerProfiles').find(filter).sort({ createdAt: -1 }).toArray();
 
   return profiles.map((p) => ({
     id: p._id.toString(),
@@ -287,7 +303,13 @@ export async function listFarmersForAdminService(filterStatus) {
     email: p.email,
     phone: p.phone,
     address: p.address,
+    countryCode: p.countryCode || 'PK',
+    countryName: p.countryName || 'Pakistan',
+    city: p.city || 'Lahore',
     approvalStatus: p.approvalStatus,
+    onboardingStatus: p.onboarding?.status || (p.approvalStatus === 'approved' ? 'approved' : 'in_progress'),
+    currentOnboardingStep: p.onboarding?.currentStep || 1,
+    marketIds: (p.marketIds || []).map((id) => id.toString()),
     createdAt: p.createdAt?.toISOString(),
   }));
 }

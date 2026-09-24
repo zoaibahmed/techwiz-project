@@ -267,7 +267,10 @@ export async function checkoutService(customerId, data) {
       marketSnapshot: {
         name: market.name,
         address: market.address,
-        city: market.city,
+        city: market.city || '',
+        countryCode: market.countryCode || 'PK',
+        timezone: market.timezone || 'Asia/Karachi',
+        currency: market.currency || 'PKR',
       },
       marketDate: data.marketDate,
       pickupWindow: {
@@ -278,7 +281,7 @@ export async function checkoutService(customerId, data) {
       },
       items,
       totalAmountMinor,
-      currency: 'PKR',
+      currency: market.currency || 'PKR',
       status: 'placed',
       payment: {
         method: 'pay_at_pickup',

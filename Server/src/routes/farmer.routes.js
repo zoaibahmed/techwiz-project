@@ -4,6 +4,9 @@ import {
   getMyFarmerProfile,
   updateMyFarmerProfile,
   getFarmerReports,
+  getFarmerOnboarding,
+  saveFarmerOnboardingStep,
+  submitFarmerOnboarding,
 } from '../controllers/farmer.controller.js';
 import {
   listFarmerProducts,
@@ -21,14 +24,21 @@ import {
   createPickupWindow,
 } from '../controllers/inventory.controller.js';
 import { authenticateToken, requireRole, requireApprovedFarmer } from '../middleware/auth.js';
+import { csrfProtection } from '../middleware/csrf.js';
 
 const router = Router();
 
 // 1. Authenticated Farmer operations (Must be defined BEFORE /:id to avoid route collision!)
 router.get('/profile', authenticateToken, requireRole(['farmer']), getMyFarmerProfile);
-router.patch('/profile', authenticateToken, requireRole(['farmer']), updateMyFarmerProfile);
+router.patch('/profile', authenticateToken, requireRole(['farmer']), csrfProtection, updateMyFarmerProfile);
 router.get('/reports', authenticateToken, requireRole(['farmer']), getFarmerReports);
 router.get('/insights', authenticateToken, requireRole(['farmer']), getFarmerReports); // SRS alias
+
+// Guided Multi-Step Onboarding Wizard (Accessible to all registered farmers)
+router.get('/onboarding', authenticateToken, requireRole(['farmer']), getFarmerOnboarding);
+router.put('/onboarding', authenticateToken, requireRole(['farmer']), csrfProtection, saveFarmerOnboardingStep);
+router.post('/onboarding/submit', authenticateToken, requireRole(['farmer']), csrfProtection, submitFarmerOnboarding);
+
 
 
 // Product CRUD (Requires Approved Farmer)

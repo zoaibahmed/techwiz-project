@@ -123,8 +123,7 @@ export async function getMe(req, res, next) {
 
 export async function listFarmersAdmin(req, res, next) {
   try {
-    const { status } = req.query;
-    const farmers = await listFarmersForAdminService(status);
+    const farmers = await listFarmersForAdminService(req.query);
     res.status(200).json({
       data: farmers,
       meta: {

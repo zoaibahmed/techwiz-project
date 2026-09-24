@@ -1,16 +1,50 @@
 import { ObjectId } from 'mongodb';
 import { getDB } from '../config/db.js';
 
-export async function listMarketsService({ day, search, lat, lng, radiusKm, page = 1, limit = 20 }) {
+export async function listMarketsService({
+  countryCode,
+  region,
+  city,
+  day,
+  date,
+  search,
+  lat,
+  lng,
+  radiusKm,
+  page = 1,
+  limit = 20,
+}) {
   const db = getDB();
-  const query = { isActive: true };
+  const query = { isActive: { $ne: false } };
 
-  if (day !== undefined && day !== null && day !== '') {
+  // Country filtering
+  if (countryCode) {
+    query.countryCode = countryCode.toUpperCase().trim();
+  }
+
+  // Region / City filtering
+  if (region) {
+    query.region = { $regex: region.trim(), $options: 'i' };
+  }
+  if (city) {
+    query.city = { $regex: city.trim(), $options: 'i' };
+  }
+
+  // Date or operating day filtering
+  if (date) {
+    const d = new Date(date);
+    const dayOfWeek = d.getUTCDay();
+    query.operatingDays = dayOfWeek;
+  } else if (day !== undefined && day !== null && day !== '') {
     query.operatingDays = parseInt(day, 10);
   }
 
   if (search) {
-    query.name = { $regex: search, $options: 'i' };
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { city: { $regex: search, $options: 'i' } },
+      { address: { $regex: search, $options: 'i' } },
+    ];
   }
 
   if (lat && lng) {
@@ -51,15 +85,22 @@ export async function listMarketsService({ day, search, lat, lng, radiusKm, page
     return {
       id: m._id.toString(),
       name: m.name,
+      countryCode: m.countryCode || 'PK',
+      countryName: m.countryName || 'Pakistan',
+      region: m.region || 'Punjab',
+      city: m.city || 'Lahore',
+      locality: m.locality || '',
       address: m.address,
-      timezone: m.timezone,
+      timezone: m.timezone || 'Asia/Karachi',
+      currency: m.currency || 'PKR',
       coordinates: {
         latitude: coords[1],
         longitude: coords[0],
       },
-      operatingDays: m.operatingDays,
+      operatingDays: m.operatingDays || [],
       operatingHours: m.operatingHours,
-      mapProvider: m.mapProvider,
+      scheduleExceptions: m.scheduleExceptions || [],
+      mapProvider: m.mapProvider || 'google',
       attendingFarmerCount: countMap.get(m._id.toString()) || 0,
     };
   });
@@ -75,7 +116,7 @@ export async function listMarketsService({ day, search, lat, lng, radiusKm, page
 
 export async function getMarketByIdService(marketId) {
   const db = getDB();
-  const m = await db.collection('markets').findOne({ _id: new ObjectId(marketId), isActive: true });
+  const m = await db.collection('markets').findOne({ _id: new ObjectId(marketId), isActive: { $ne: false } });
   if (!m) {
     const err = new Error('Market not found.');
     err.code = 'NOT_FOUND';
@@ -89,7 +130,7 @@ export async function getMarketByIdService(marketId) {
   const farmers = await db
     .collection('farmerProfiles')
     .find({ marketIds: m._id, approvalStatus: 'approved' })
-    .project({ businessName: 1, contactPerson: 1, bio: 1, stallCoordinates: 1, operatingDays: 1 })
+    .project({ businessName: 1, contactPerson: 1, bio: 1, stallCoordinates: 1, stallNumber: 1, operatingDays: 1 })
     .toArray();
 
   const formattedFarmers = farmers.map((f) => ({
@@ -97,6 +138,7 @@ export async function getMarketByIdService(marketId) {
     businessName: f.businessName,
     contactPerson: f.contactPerson,
     bio: f.bio,
+    stallNumber: f.stallNumber || '',
     stallCoordinates: f.stallCoordinates?.coordinates
       ? { latitude: f.stallCoordinates.coordinates[1], longitude: f.stallCoordinates.coordinates[0] }
       : null,
@@ -106,15 +148,22 @@ export async function getMarketByIdService(marketId) {
   return {
     id: m._id.toString(),
     name: m.name,
+    countryCode: m.countryCode || 'PK',
+    countryName: m.countryName || 'Pakistan',
+    region: m.region || 'Punjab',
+    city: m.city || 'Lahore',
+    locality: m.locality || '',
     address: m.address,
-    timezone: m.timezone,
+    timezone: m.timezone || 'Asia/Karachi',
+    currency: m.currency || 'PKR',
     coordinates: {
       latitude: coords[1],
       longitude: coords[0],
     },
     operatingDays: m.operatingDays,
     operatingHours: m.operatingHours,
-    mapProvider: m.mapProvider,
+    scheduleExceptions: m.scheduleExceptions || [],
+    mapProvider: m.mapProvider || 'google',
     attendingFarmers: formattedFarmers,
   };
 }
@@ -124,15 +173,22 @@ export async function createMarketService(adminId, data) {
   const now = new Date();
 
   const doc = {
-    name: data.name,
-    address: data.address,
+    name: data.name.trim(),
+    countryCode: (data.countryCode || 'PK').toUpperCase().trim(),
+    countryName: (data.countryName || 'Pakistan').trim(),
+    region: (data.region || 'Punjab').trim(),
+    city: (data.city || 'Lahore').trim(),
+    locality: data.locality ? data.locality.trim() : '',
+    address: data.address.trim(),
     timezone: data.timezone || 'Asia/Karachi',
+    currency: (data.currency || 'PKR').toUpperCase().trim(),
     coordinates: {
       type: 'Point',
       coordinates: [data.coordinates.longitude, data.coordinates.latitude],
     },
     operatingDays: data.operatingDays,
     operatingHours: data.operatingHours,
+    scheduleExceptions: data.scheduleExceptions || [],
     mapProvider: data.mapProvider || 'google',
     isActive: true,
     createdBy: new ObjectId(adminId),
@@ -144,7 +200,12 @@ export async function createMarketService(adminId, data) {
 
   return {
     id: result.insertedId.toString(),
-    ...data,
+    ...doc,
+    coordinates: {
+      latitude: data.coordinates.latitude,
+      longitude: data.coordinates.longitude,
+    },
+    createdAt: doc.createdAt.toISOString(),
   };
 }
 
@@ -154,11 +215,18 @@ export async function updateMarketService(adminId, marketId, data) {
 
   const updateFields = { updatedAt: new Date() };
 
-  if (data.name) updateFields.name = data.name;
-  if (data.address) updateFields.address = data.address;
-  if (data.timezone) updateFields.timezone = data.timezone;
+  if (data.name) updateFields.name = data.name.trim();
+  if (data.countryCode) updateFields.countryCode = data.countryCode.toUpperCase().trim();
+  if (data.countryName) updateFields.countryName = data.countryName.trim();
+  if (data.region) updateFields.region = data.region.trim();
+  if (data.city) updateFields.city = data.city.trim();
+  if (data.locality !== undefined) updateFields.locality = data.locality.trim();
+  if (data.address) updateFields.address = data.address.trim();
+  if (data.timezone) updateFields.timezone = data.timezone.trim();
+  if (data.currency) updateFields.currency = data.currency.toUpperCase().trim();
   if (data.operatingDays) updateFields.operatingDays = data.operatingDays;
   if (data.operatingHours) updateFields.operatingHours = data.operatingHours;
+  if (data.scheduleExceptions !== undefined) updateFields.scheduleExceptions = data.scheduleExceptions;
   if (data.mapProvider) updateFields.mapProvider = data.mapProvider;
 
   if (data.coordinates) {
@@ -178,6 +246,7 @@ export async function updateMarketService(adminId, marketId, data) {
 
   return getMarketByIdService(marketId);
 }
+
 
 export async function deleteMarketService(adminId, marketId) {
   const db = getDB();
