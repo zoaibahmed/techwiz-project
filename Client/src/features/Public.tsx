@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { LivingMap } from "../components/LivingMap";
+import { lazy, useEffect, useState } from "react";
 import {
   Link,
   useParams,
@@ -13,7 +14,6 @@ import {
   Clock,
   Search,
   ShoppingBasket,
-  Leaf,
   CalendarDays,
 } from "lucide-react";
 import {
@@ -23,226 +23,16 @@ import {
   ProductTile,
   Empty,
   Field,
-  SchematicMap,
   Favourite,
   Quantity,
   Notice,
   Form,
   value,
-  MarketDate,
 } from "../components/ui";
 import { date, time, money, images, demoDate } from "../data/market";
 import type { Role } from "../data/market";
 
-export function Home() {
-  const s = useMarket();
-  return (
-    <>
-      <section className="hero container">
-        <div className="hero-copy">
-          <p className="eyebrow">
-            <span className="tiny-leaf">✳</span> The Living Market
-          </p>
-          <h1>
-            Know your market
-            <br />
-            before you go.
-          </h1>
-          <p className="lead">
-            Good food starts with a connection. Meet the growers, discover the
-            harvest, and make a little room for market day.
-          </p>
-          <div className="actions">
-            <Link to="/markets" className="button">
-              Find your market <ArrowUpRight size={19} />
-            </Link>
-            <Link to="/customer/market-day" className="text-link">
-              Plan my market day <ArrowRight size={17} />
-            </Link>
-          </div>
-          <p className="hero-note">
-            <ShoppingBasket size={17} /> Reserve ahead. Collect locally. Pay at
-            pickup.
-          </p>
-        </div>
-        <div className="hero-art">
-          <img
-            src={images.basket}
-            alt="A basket of freshly harvested garden produce"
-            width={600}
-            height={680}
-            fetchPriority="high"
-          />
-          <div className="hero-caption">
-            <span className="caption-mark">✳</span>
-            <div>
-              <strong>
-                A slower Saturday.
-                <br />A fresher week.
-              </strong>
-              <span>From the garden to your market bag.</span>
-            </div>
-          </div>
-          <span className="photo-credit">
-            Editorial photograph · sample market experience
-          </span>
-        </div>
-      </section>
-      <div className="market-strip">
-        <span>
-          <Leaf size={18} /> Grown with care
-        </span>
-        <span>
-          <MapPin size={18} /> Collected close to home
-        </span>
-        <span>
-          <CalendarDays size={18} /> Planned around your day
-        </span>
-      </div>
-      {s.announcements
-        .filter((a) => a.published)
-        .slice(-1)
-        .map((a) => (
-          <div className="container" key={a.id}>
-            <Notice>
-              <strong>{a.title}</strong> · {a.body}
-            </Notice>
-          </div>
-        ))}
-      <section className="container section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Make a day of it</p>
-            <h2>Your next market morning.</h2>
-          </div>
-          <Link className="text-link" to="/markets">
-            Explore all markets <ArrowUpRight size={18} />
-          </Link>
-        </div>
-        <div className="market-home">
-          <img
-            src={images.market}
-            alt="Seasonal produce displayed at a market stall"
-            loading="lazy"
-            width={620}
-            height={390}
-          />
-          <div>
-            {s.markets.map((m) => (
-              <Link className="market-line" key={m.id} to={`/markets/${m.id}`}>
-                <MarketDate day={m.day} />
-                <div>
-                  <h3>{m.name}</h3>
-                  <p>
-                    {m.area} · {m.hours}
-                  </p>
-                </div>
-                <ArrowUpRight size={21} />
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-      <section className="container section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">A taste of the season</p>
-            <h2>On the stalls this week.</h2>
-          </div>
-          <Link className="text-link" to="/products">
-            Browse the harvest <ArrowUpRight size={18} />
-          </Link>
-        </div>
-        <div className="product-grid">
-          {s.products
-            .filter(
-              (p) =>
-                p.visible &&
-                s.farmers.find((f) => f.id === p.farmerId)?.state ===
-                  "Approved",
-            )
-            .slice(0, 4)
-            .map((p) => (
-              <ProductTile key={p.id} product={p} />
-            ))}
-        </div>
-      </section>
-      <section className="how-section">
-        <div className="container">
-          <h2>
-            A little planning.
-            <br />A much better market day.
-          </h2>
-          <div className="steps">
-            {[
-              [
-                "01",
-                "Find your market",
-                "Choose a day and discover the growers who will be there.",
-              ],
-              [
-                "02",
-                "Make it yours",
-                "Reserve from the available harvest and select your pickup window.",
-              ],
-              [
-                "03",
-                "Meet at the stall",
-                "Bring your bag, collect your order, and pay your farmer in person.",
-              ],
-            ].map(([n, h, p]) => (
-              <div key={n}>
-                <span>{n}</span>
-                <h3>{h}</h3>
-                <p>{p}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-      <section className="container section story">
-        <img
-          src={images.carrots}
-          alt="Fresh carrots, photographed as an editorial produce study"
-          loading="lazy"
-          width={600}
-          height={550}
-        />
-        <div>
-          <p className="eyebrow">Behind every harvest</p>
-          <h2>
-            More than produce.
-            <br />
-            People to come back to.
-          </h2>
-          <p className="lead">
-            Get to know a stall, save a favourite, and see what they are
-            bringing next. A familiar face can make your whole week feel
-            different.
-          </p>
-          <Link to="/farmers" className="button secondary">
-            Meet the growers <ArrowUpRight size={18} />
-          </Link>
-          <p className="small muted">
-            Grower stories in this development preview are fictional.
-          </p>
-        </div>
-      </section>
-      <section className="container invitation">
-        <div>
-          <p className="eyebrow">For the people who grow</p>
-          <h2>
-            Your harvest deserves
-            <br />a well-planned market day.
-          </h2>
-        </div>
-        <Link to="/register/farmer" className="button inverse">
-          Bring your stall <ArrowUpRight size={18} />
-        </Link>
-      </section>
-    </>
-  );
-}
+export const Home = lazy(() => import('./LivingHome').then(module => ({ default: module.LivingHome })));
 
 export function Markets() {
   const s = useMarket();
@@ -257,6 +47,9 @@ export function Markets() {
       `${m.name} ${m.area}`.toLowerCase().includes(query.toLowerCase()) &&
       (!day || m.day === day),
   );
+  const selectedMarket = filtered.some((m) => m.id === selected)
+    ? selected
+    : (filtered[0]?.id ?? "");
   const update = (key: string, v: string) => {
     const next = new URLSearchParams(params);
     if (v) next.set(key, v);
@@ -264,7 +57,7 @@ export function Markets() {
     set(next);
   };
   return (
-    <div className="container section">
+    <div className="container section living-discovery-page">
       <Heading
         eyebrow="Somewhere good to be"
         title="Find your next market day."
@@ -311,7 +104,7 @@ export function Markets() {
           <div className="market-results">
             {filtered.map((m) => (
               <article
-                className={`market-result ${selected === m.id ? "selected" : ""}`}
+                className={`market-result ${selectedMarket === m.id ? "selected" : ""}`}
                 key={m.id}
               >
                 <div className="spread">
@@ -344,8 +137,8 @@ export function Markets() {
               </article>
             ))}
           </div>
-          <SchematicMap
-            selected={selected}
+          <LivingMap
+            selected={selectedMarket}
             onSelect={select}
             markets={filtered}
           />

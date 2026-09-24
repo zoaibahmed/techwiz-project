@@ -7,7 +7,6 @@ import {
   Clock,
   ShoppingBasket,
   Check,
-  Heart,
 } from "lucide-react";
 import {
   useMarket,
@@ -24,7 +23,7 @@ import {
   ProductTile,
   Favourite,
 } from "../components/ui";
-import { money, total, time, date, activeOrder, images } from "../data/market";
+import { money, total, time, date, activeOrder } from "../data/market";
 import type { Order } from "../data/market";
 import { NotFound } from "./Public";
 
@@ -59,93 +58,7 @@ export function OrderRows({
   );
 }
 
-export function CustomerHome() {
-  const s = useMarket();
-  const upcoming = s.orders.filter(activeOrder);
-  return (
-    <div className="container section">
-      <Heading
-        eyebrow="Your Market Day"
-        title="A good day, already taking shape."
-        intro="A few favourite stalls. A bag full of possibilities. Everything in its place."
-      />
-      <div className="customer-overview">
-        <section>
-          <div className="section-heading">
-            <h2>Your next pickups.</h2>
-            <Link className="text-link" to="/customer/market-day">
-              Open planner <ArrowUpRight size={17} />
-            </Link>
-          </div>
-          {upcoming.length ? (
-            <div className="timeline">
-              {upcoming.map((o) => {
-                const slot = s.slots.find((x) => x.id === o.slotId)!;
-                return (
-                  <div className="timeline-stop" key={o.id}>
-                    <div className="timeline-time">
-                      {time(slot.start)}
-                      <span>{date(slot.start)}</span>
-                    </div>
-                    <div className="timeline-content">
-                      <Status>{o.stage}</Status>
-                      <h3>
-                        {s.farmers.find((f) => f.id === o.farmerId)?.name}
-                      </h3>
-                      <p>
-                        {s.markets.find((m) => m.id === o.marketId)?.name} ·{" "}
-                        {o.lines.length} kinds of produce
-                      </p>
-                      <Link
-                        className="text-link"
-                        to={`/customer/orders/${o.id}`}
-                      >
-                        Open pickup passport <ArrowRight size={17} />
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <Empty title="A market morning is waiting." />
-          )}
-        </section>
-        <aside className="day-note">
-          <img src={images.basket} alt="Editorial harvest basket" />
-          <div>
-            <p className="eyebrow">Your little reminder</p>
-            <h2>
-              Bring a bag.
-              <br />
-              Leave room for good things.
-            </h2>
-            <p>Your reservations are paid for in person at each stall.</p>
-            <Link to="/products" className="text-link">
-              A little more for the basket <ArrowUpRight size={17} />
-            </Link>
-          </div>
-        </aside>
-      </div>
-      <section className="section">
-        <div className="section-heading">
-          <h2>Fresh from familiar stalls.</h2>
-          <Link to="/customer/favourites" className="text-link">
-            Your favourites <Heart size={17} />
-          </Link>
-        </div>
-        <div className="product-grid">
-          {s.products
-            .filter((p) => p.visible && p.available && p.stock > p.reserved)
-            .slice(0, 4)
-            .map((p) => (
-              <ProductTile key={p.id} product={p} />
-            ))}
-        </div>
-      </section>
-    </div>
-  );
-}
+export { LivingCustomer as CustomerHome } from "./LivingCustomer";
 
 export function Planner() {
   const s = useMarket();

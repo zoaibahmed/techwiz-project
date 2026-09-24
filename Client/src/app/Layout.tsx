@@ -8,11 +8,19 @@ import {
   Sprout,
   Bell,
   Sparkles,
+  LayoutDashboard,
+  CalendarDays,
+  ClipboardList,
+  Heart,
+  UserRound,
+  MapPin,
+  LogOut,
 } from "lucide-react";
 import { useMarket, useAction, Notice } from "../components/ui";
 import { gateway } from "../data/gateway";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
+import { CompanionContext } from "./companion-context";
 
 export const nav: Record<Role, [string, string][]> = {
   customer: [
@@ -76,7 +84,7 @@ export function Layout() {
     }
   }, [pathname]);
   return (
-    <>
+    <CompanionContext.Provider value={() => setAssistant(true)}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -116,7 +124,9 @@ export function Layout() {
           </button>
         </div>
       )}
-      <header className="header">
+      <header
+        className={`header ${role === "customer" ? "customer-header" : ""}`}
+      >
         <Link to="/" className="brand">
           <Sprout size={27} />
           MarketLink<span className="brand-dot">●</span>
@@ -165,7 +175,69 @@ export function Layout() {
             ))}
         </nav>
       )}
-      <div className={workspace ? "workspace" : ""}>
+      <div
+        className={
+          workspace ? "workspace" : role === "customer" ? "customer-shell" : ""
+        }
+      >
+        {role === "customer" && (
+          <aside className="customer-rail">
+            <p className="rail-caption">Your market space</p>
+            <nav aria-label="Customer workspace">
+              {nav.customer.map(([path, label], i) => {
+                const Icon = [
+                  LayoutDashboard,
+                  CalendarDays,
+                  ClipboardList,
+                  Heart,
+                  Bell,
+                  UserRound,
+                ][i];
+                return (
+                  <NavLink end to={path} key={path}>
+                    <Icon size={18} />
+                    {label}
+                  </NavLink>
+                );
+              })}
+            </nav>
+            <div className="rail-explore">
+              <p className="rail-caption">Out in the market</p>
+              <Link to="/markets">
+                <MapPin size={18} /> Discover markets
+              </Link>
+              <Link to="/products">
+                <ShoppingBasket size={18} /> Browse produce
+              </Link>
+              <Link to="/farmers">
+                <Sprout size={18} /> Meet the growers
+              </Link>
+            </div>
+            <div className="rail-reminder">
+              <Sprout size={28} />
+              <h3>
+                Good things
+                <br />
+                grow together.
+              </h3>
+              <p>
+                A bag, a little time,
+                <br />a favourite market.
+              </p>
+              <Link to="/help">
+                Your market guide <ArrowUpRight size={14} />
+              </Link>
+            </div>
+            <button
+              className="rail-signout"
+              onClick={() =>
+                act({ type: "role", role: null }, "Demo account signed out.")
+              }
+            >
+              <LogOut size={16} /> Sign out
+            </button>
+          </aside>
+        )}
         {workspace && (
           <aside className="sidebar">
             <p className="sidebar-label">
@@ -198,7 +270,13 @@ export function Layout() {
         )}
         <main
           id="main"
-          className={workspace ? "workspace-main" : "public-main"}
+          className={
+            workspace
+              ? "workspace-main"
+              : role === "customer"
+                ? "customer-main"
+                : "public-main"
+          }
         >
           {role && (
             <div className="workspace-top">
@@ -228,7 +306,10 @@ export function Layout() {
             </div>
           )}
           {role === "customer" && (
-            <nav className="customer-nav" aria-label="Customer workspace">
+            <nav
+              className="customer-nav"
+              aria-label="Compact customer workspace"
+            >
               {nav.customer.map(([path, label]) => (
                 <NavLink end to={path} key={path}>
                   {label}
@@ -239,7 +320,7 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
-      {!workspace && (
+      {!workspace && role !== "customer" && (
         <footer className="footer">
           <div>
             <Link className="brand" to="/">
@@ -274,7 +355,7 @@ export function Layout() {
         </footer>
       )}
       {assistant && <Copilot onClose={() => setAssistant(false)} />}
-    </>
+    </CompanionContext.Provider>
   );
 }
 export function Guard({ role }: { role: Role }) {

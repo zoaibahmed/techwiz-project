@@ -70,6 +70,12 @@ async function go(page: Page, path: string) {
     history.pushState({}, "", path);
     dispatchEvent(new PopStateEvent("popstate"));
   }, path);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   await expect(page.locator("h1")).toBeVisible();
 }
 async function role(page: Page, name: string) {
@@ -274,11 +280,9 @@ test("farmer product editor and stock protection work through the browser", asyn
     page.getByRole("heading", { name: "Sample garden greens" }),
   ).toBeVisible();
   await go(page, "/farmer/stock");
-  const row = page
-    .locator(".stock-row")
-    .filter({
-      has: page.getByRole("heading", { name: "Vine tomatoes", exact: true }),
-    });
+  const row = page.locator(".stock-row").filter({
+    has: page.getByRole("heading", { name: "Vine tomatoes", exact: true }),
+  });
   await row.getByLabel("Published", { exact: true }).fill("1");
   await row.getByRole("button", { name: "Save stock", exact: true }).click();
   await page
@@ -346,10 +350,8 @@ test("farmer Copilot previews stock before explicit confirmation", async ({
     .click();
   await go(page, "/farmer/stock");
   await expect(
-    page
-      .locator(".stock-row")
-      .filter({
-        has: page.getByRole("heading", { name: "Vine tomatoes", exact: true }),
-      }),
+    page.locator(".stock-row").filter({
+      has: page.getByRole("heading", { name: "Vine tomatoes", exact: true }),
+    }),
   ).toContainText("Unavailable");
 });
