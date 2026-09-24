@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, AlertTriangle } from "lucide-react";
+import { X, Sparkles, ArrowUp, BookOpen, CheckCircle } from "lucide-react";
 import { useMarket } from "../components/ui";
 import { chatCopilotApi, confirmCopilotActionApi } from "../data/api";
 import { gateway } from "../data/gateway";
@@ -121,7 +121,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         ...old,
         {
           question: q,
-          text: `AI Copilot notification: ${err?.message || "Connected service momentarily unavailable. Manual controls remain fully operational."}`,
+          text: `Service unavailable: Could not reach the MarketLink server. Please check your connection or try again. (${err?.message || "Connection failed"})`,
           sources: [],
         },
       ]);
@@ -172,7 +172,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       <header>
         <div>
           <span className="eyebrow">
-            MarketLink AI Copilot · Grounded in MongoDB
+            MarketLink AI Copilot
           </span>
           <h2 id="copilot-title">{title}</h2>
         </div>
@@ -186,7 +186,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       </header>
 
       <div className="copilot-context">
-        <span>Active role: {role}</span>
+        <span>Workspace: {role === "farmer" ? "Farm Workbench" : role === "admin" ? "Operations Centre" : "Shopper"}</span>
         <span>Route: {loc.pathname}</span>
       </div>
 
@@ -228,12 +228,6 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                 <p className="question">{r.question}</p>
                 <p style={{ whiteSpace: "pre-line" }}>{r.text}</p>
 
-                {r.engine && (
-                  <div style={{ fontSize: "0.75rem", color: "#6A7B6D", marginTop: "4px" }}>
-                    Engine: {r.engine}
-                  </div>
-                )}
-
                 <div className="source-list">
                   {r.sources.map((source) => (
                     <Link to={source.href} key={source.href} onClick={onClose}>
@@ -259,69 +253,103 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     {r.proposedAction.confirmed ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#203328" }}>
-                        <CheckCircle size={18} />
-                        <strong>Action Executed & Persisted in MongoDB Atlas</strong>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#203328" }}>
+                          <CheckCircle size={18} />
+                          <strong>Saved to Catalogue</strong>
+                        </div>
+                        <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#203328", whiteSpace: "pre-line" }}>
+                          {r.proposedAction.summary || "Done! Your products have been saved to your catalogue."}
+                        </p>
+                        {role === "farmer" && (
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <Link
+                              to="/farmer/products"
+                              className="button compact"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.35rem",
+                                textDecoration: "none",
+                              }}
+                              onClick={onClose}
+                            >
+                              <BookOpen size={14} />
+                              Open Produce Catalogue
+                            </Link>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#946927" }}>
-                        <AlertTriangle size={18} />
-                        <strong>Two-Phase Consequential Action Verification</strong>
-                      </div>
-                    )}
-                    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", whiteSpace: "pre-line" }}>
-                      {r.proposedAction.summary}
-                    </p>
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#946927" }}>
+                          <Sparkles size={16} />
+                          <strong>
+                            {r.proposedAction.actionType === "create_products"
+                              ? "Proposed Catalogue Additions"
+                              : "Proposed Action Preview"}
+                          </strong>
+                        </div>
 
-                    {/* Itemized product breakdown if multiple items are proposed */}
-                    {r.proposedAction.details?.products && Array.isArray(r.proposedAction.details.products) && (
-                      <div style={{ margin: "0.75rem 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                        {r.proposedAction.details.products.map((p: any, pidx: number) => (
-                          <div
-                            key={pidx}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              background: "#ffffff",
-                              border: "1px solid rgba(32, 51, 40, 0.15)",
-                              borderRadius: "6px",
-                              padding: "0.5rem 0.75rem",
-                              fontSize: "0.8125rem",
-                            }}
-                          >
-                            <div>
-                              <strong style={{ color: "#203328" }}>{p.name}</strong>
-                              <span style={{ marginLeft: "6px", color: "#6A7B6D", fontSize: "0.75rem" }}>
-                                ({p.category || "Produce"})
-                              </span>
-                            </div>
-                            <strong style={{ color: "#946927" }}>
-                              Rs. {p.pricePKR} / {p.unit}
-                            </strong>
+                        {/* Itemized product breakdown with description and details */}
+                        {r.proposedAction.details?.products && Array.isArray(r.proposedAction.details.products) ? (
+                          <div style={{ margin: "0.75rem 0", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                            {r.proposedAction.details.products.map((p: any, pidx: number) => (
+                              <div
+                                key={pidx}
+                                style={{
+                                  background: "#ffffff",
+                                  border: "1px solid rgba(32, 51, 40, 0.15)",
+                                  borderRadius: "6px",
+                                  padding: "0.6rem 0.75rem",
+                                  fontSize: "0.8125rem",
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                                  <div>
+                                    <strong style={{ color: "#203328", fontSize: "0.875rem" }}>{p.name}</strong>
+                                    <span style={{ marginLeft: "8px", color: "#6A7B6D", fontSize: "0.75rem" }}>
+                                      ({p.category || "Produce"})
+                                    </span>
+                                  </div>
+                                  <strong style={{ color: "#946927" }}>
+                                    Rs. {p.pricePKR} / {p.unit}
+                                  </strong>
+                                </div>
+                                {p.description && (
+                                  <p style={{ margin: 0, color: "#4A5A4D", fontSize: "0.78rem", fontStyle: "italic", lineHeight: 1.4 }}>
+                                    {p.description}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        ) : (
+                          <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", whiteSpace: "pre-line" }}>
+                            {r.proposedAction.summary}
+                          </p>
+                        )}
 
-                    {!r.proposedAction.confirmed && (
-                      <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
-                        <button
-                          type="button"
-                          className="button"
-                          style={{
-                            background: "#203328",
-                            color: "#F4EFE6",
-                            padding: "0.45rem 1rem",
-                            fontSize: "0.875rem",
-                            cursor: "pointer",
-                          }}
-                          disabled={busy}
-                          onClick={() => confirmAction(i, r.proposedAction!.draftId)}
-                        >
-                          Confirm & Apply to MongoDB
-                        </button>
-                      </div>
+                        <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
+                          <button
+                            type="button"
+                            className="button"
+                            style={{
+                              background: "#203328",
+                              color: "#F4EFE6",
+                              padding: "0.45rem 1rem",
+                              fontSize: "0.875rem",
+                              cursor: "pointer",
+                            }}
+                            disabled={busy}
+                            onClick={() => confirmAction(i, r.proposedAction!.draftId)}
+                          >
+                            {r.proposedAction.actionType === "create_products"
+                              ? "Save to Catalogue"
+                              : "Confirm Proposed Changes"}
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -330,7 +358,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
 
             {busy && (
               <p role="status" style={{ fontStyle: "italic", color: "#6A7B6D" }}>
-                Connecting to MarketLink backend & querying Atlas records…
+                Reviewing your request and checking records…
               </p>
             )}
           </>
