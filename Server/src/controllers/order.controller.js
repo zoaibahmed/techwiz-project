@@ -17,7 +17,12 @@ import {
 
 export async function checkout(req, res, next) {
   try {
-    const validatedData = checkoutSchema.parse(req.body);
+    const headerKey = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
+    const rawData = {
+      ...req.body,
+      ...(headerKey && !req.body.idempotencyKey ? { idempotencyKey: headerKey } : {}),
+    };
+    const validatedData = checkoutSchema.parse(rawData);
     const result = await checkoutService(req.user.id, validatedData);
 
     const statusCode = result.isIdempotentReplay ? 200 : 201;

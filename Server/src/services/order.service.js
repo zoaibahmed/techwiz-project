@@ -288,8 +288,12 @@ export async function checkoutService(customerId, data) {
         status: 'pending_pickup',
         paidAmountMinor: 0,
       },
-      checkoutKey: data.idempotencyKey || null,
-      idempotencyKey: data.idempotencyKey ? `${data.idempotencyKey}:${farmerUserIdStr}` : null,
+      ...(data.idempotencyKey
+        ? {
+            checkoutKey: data.idempotencyKey,
+            idempotencyKey: `${data.idempotencyKey}:${farmerUserIdStr}`,
+          }
+        : {}),
       customerNotes: data.customerNotes || '',
       statusHistory: [
         {

@@ -450,6 +450,16 @@ export async function getCustomerDetailsAdminService(customerId) {
       favouritesCount,
       activeAlertsCount,
     },
+    ordersSummary: {
+      totalOrders: counts.total,
+      placed: counts.placed,
+      accepted: counts.accepted,
+      ready_for_pickup: counts.ready_for_pickup,
+      completed: counts.completed,
+      declined: counts.declined,
+      cancelled: counts.cancelled,
+      totalSpentMinor,
+    },
     recentOrders: orders.slice(0, 5).map((o) => ({
       id: o._id.toString(),
       orderNumber: o.orderNumber,
