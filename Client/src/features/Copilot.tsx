@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, AlertTriangle } from "lucide-react";
 import { useMarket } from "../components/ui";
-import { chatCopilotApi, confirmCopilotActionApi, loginApi } from "../data/api";
+import { chatCopilotApi, confirmCopilotActionApi } from "../data/api";
+import { gateway } from "../data/gateway";
 
 type Reply = {
   question: string;
   text: string;
   sources: { title: string; href: string }[];
   contextSummary?: any;
+  engine?: string;
   proposedAction?: {
     draftId: string;
     actionType: string;
     summary: string;
+    details?: any;
     requiresConfirmation?: boolean;
     confirmed?: boolean;
   } | null;
@@ -24,6 +27,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [question, setQuestion] = useState("");
   const [replies, setReplies] = useState<Reply[]>([]);
+  const [history, setHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [off, setOff] = useState(false);
 
@@ -45,42 +49,21 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   const prompts =
     role === "farmer"
       ? [
-          "Update stall designation to Stall B-12",
-          "What needs my attention?",
-          "Check inventory allocations",
+          "Create four products: Heirloom Tomatoes (250/kg), Organic Spinach (120/bunch), Fresh Mint (50/bunch), Strawberries (400/box)",
+          "How is my business performing this week?",
+          "Compare my tomato prices and suggest how I can improve sales",
         ]
       : role === "admin"
         ? [
-            "Explain this period",
+            "Which farmers are waiting for approval?",
             "Platform health overview",
-            "Farmer approval status",
+            "Draft a Saturday morning reminder announcement",
           ]
         : [
-            "What tomatoes are available?",
-            "What can I cook for dinner?",
-            "What markets are open?",
+            "What tomatoes are available this Saturday?",
+            "What can I cook with today's fresh produce?",
+            "Help me plan my market morning visit",
           ];
-
-  async function ensureRoleSession() {
-    const email =
-      role === "farmer"
-        ? "farmer.greenfield@marketlink.com"
-        : role === "admin"
-          ? "admin@marketlink.com"
-          : "customer.sarah@marketlink.com";
-    const password =
-      role === "farmer"
-        ? "Farmer123!"
-        : role === "admin"
-          ? "Admin123!"
-          : "Customer123!";
-
-    try {
-      await loginApi(email, password);
-    } catch {
-      // Continue if already authenticated
-    }
-  }
 
   async function send(q: string) {
     if (!q.trim() || busy || off) return;
@@ -88,9 +71,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
     setBusy(true);
 
     try {
-      await ensureRoleSession();
-
       const res: any = await chatCopilotApi(q, {
+        history,
         pathname: loc.pathname,
         role,
       });
@@ -101,6 +83,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         "I was unable to complete the request. Please try again.";
       const action = replyData?.proposedAction || null;
       const contextSummary = replyData?.contextSummary;
+      const engine = replyData?.engine;
 
       const sources: { title: string; href: string }[] = [];
       if (role === "customer") {
@@ -109,6 +92,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       } else if (role === "farmer") {
         sources.push({ title: "Order Workbench", href: "/farmer/orders" });
         sources.push({ title: "Stall Inventory", href: "/farmer/stock" });
+        sources.push({ title: "Produce Catalogue", href: "/farmer/products" });
       } else if (role === "admin") {
         sources.push({ title: "Command Centre", href: "/admin" });
         sources.push({ title: "Platform Reports", href: "/admin/reports" });
@@ -121,8 +105,16 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           text,
           sources,
           contextSummary,
+          engine,
           proposedAction: action,
         },
+      ]);
+
+      // Append turn to conversation memory
+      setHistory((prev) => [
+        ...prev,
+        { role: "user", content: q },
+        { role: "assistant", content: text },
       ]);
     } catch (err: any) {
       setReplies((old) => [
@@ -141,7 +133,6 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   async function confirmAction(replyIndex: number, draftId: string) {
     try {
       setBusy(true);
-      await ensureRoleSession();
       const res: any = await confirmCopilotActionApi(draftId);
       const data = res?.data || res;
 
@@ -161,6 +152,9 @@ export function Copilot({ onClose }: { onClose: () => void }) {
             : r,
         ),
       );
+
+      // Immediately synchronize newly created products/data from backend to active workspace
+      await gateway.syncFromBackend();
     } catch (err: any) {
       alert(`Could not confirm action: ${err?.message || "Unknown error"}`);
     } finally {
@@ -177,45 +171,45 @@ export function Copilot({ onClose }: { onClose: () => void }) {
     >
       <header>
         <div>
-          <p className="eyebrow">
-            <Sparkles size={15} />
+          <span className="eyebrow">
             MarketLink AI Copilot · Grounded in MongoDB
-          </p>
+          </span>
           <h2 id="copilot-title">{title}</h2>
         </div>
         <button
-          className="icon-button"
-          aria-label="Close Copilot"
+          className="button quiet compact"
           onClick={onClose}
+          aria-label="Close Copilot"
         >
-          <X />
+          <X size={18} />
         </button>
       </header>
 
       <div className="copilot-context">
-        <span>Grounded database session:</span> {loc.pathname} · {role} role active
+        <span>Active role: {role}</span>
+        <span>Route: {loc.pathname}</span>
       </div>
 
       <div className="copilot-body">
-        <label className="checkbox" style={{ marginBottom: "1rem" }}>
+        <label className="toggle">
           <input
             type="checkbox"
             checked={off}
-            onChange={(e) => {
-              setOff(e.target.checked);
-              setBusy(false);
-            }}
+            onChange={(e) => setOff(e.target.checked)}
           />
-          Simulate Copilot offline
+          <span>Simulate Copilot offline</span>
         </label>
 
         {off ? (
-          <div className="empty">
-            <h3>Continue at your own pace.</h3>
-            <p>
-              Copilot is paused. All ordinary filters, forms, inventory sliders and
-              order controls operate directly against the database.
-            </p>
+          <div className="notice" role="status">
+            <Sparkles size={18} />
+            <div>
+              <strong>Copilot paused</strong>
+              <p>
+                Copilot is paused. All ordinary filters, forms, inventory sliders and
+                checkout controls remain available.
+              </p>
+            </div>
           </div>
         ) : (
           <>
@@ -232,24 +226,11 @@ export function Copilot({ onClose }: { onClose: () => void }) {
             {replies.map((r, i) => (
               <article className="conversation" key={i}>
                 <p className="question">{r.question}</p>
-                <p>{r.text}</p>
+                <p style={{ whiteSpace: "pre-line" }}>{r.text}</p>
 
-                {r.contextSummary && (
-                  <div
-                    style={{
-                      background: "rgba(32, 51, 40, 0.05)",
-                      border: "1px solid rgba(32, 51, 40, 0.12)",
-                      borderRadius: "6px",
-                      padding: "0.5rem 0.75rem",
-                      fontSize: "0.8125rem",
-                      margin: "0.5rem 0",
-                      color: "#203328",
-                    }}
-                  >
-                    <strong>Atlas Context: </strong>
-                    {Object.entries(r.contextSummary)
-                      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.length : typeof v === 'object' ? JSON.stringify(v) : v}`)
-                      .join(" · ")}
+                {r.engine && (
+                  <div style={{ fontSize: "0.75rem", color: "#6A7B6D", marginTop: "4px" }}>
+                    Engine: {r.engine}
                   </div>
                 )}
 
@@ -288,9 +269,40 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                         <strong>Two-Phase Consequential Action Verification</strong>
                       </div>
                     )}
-                    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
+                    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", whiteSpace: "pre-line" }}>
                       {r.proposedAction.summary}
                     </p>
+
+                    {/* Itemized product breakdown if multiple items are proposed */}
+                    {r.proposedAction.details?.products && Array.isArray(r.proposedAction.details.products) && (
+                      <div style={{ margin: "0.75rem 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        {r.proposedAction.details.products.map((p: any, pidx: number) => (
+                          <div
+                            key={pidx}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              background: "#ffffff",
+                              border: "1px solid rgba(32, 51, 40, 0.15)",
+                              borderRadius: "6px",
+                              padding: "0.5rem 0.75rem",
+                              fontSize: "0.8125rem",
+                            }}
+                          >
+                            <div>
+                              <strong style={{ color: "#203328" }}>{p.name}</strong>
+                              <span style={{ marginLeft: "6px", color: "#6A7B6D", fontSize: "0.75rem" }}>
+                                ({p.category || "Produce"})
+                              </span>
+                            </div>
+                            <strong style={{ color: "#946927" }}>
+                              Rs. {p.pricePKR} / {p.unit}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {!r.proposedAction.confirmed && (
                       <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
@@ -337,19 +349,18 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         </label>
         <textarea
           id="copilot-question"
+          rows={2}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          maxLength={500}
-          rows={2}
-          placeholder={`Ask ${title} about this view…`}
-          disabled={off}
+          placeholder={`Ask ${title} about products, stock, pricing or operations…`}
+          disabled={busy || off}
         />
         <button
-          className="icon-button"
-          aria-label="Send question"
-          disabled={busy || off || !question.trim()}
+          className="button"
+          type="submit"
+          disabled={!question.trim() || busy || off}
         >
-          <ArrowUp />
+          Send
         </button>
       </form>
     </dialog>

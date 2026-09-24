@@ -426,6 +426,10 @@ export async function updateFarmerProfileApi(data: any): Promise<any> {
   });
 }
 
+export async function fetchFarmerProductsApi(): Promise<any[]> {
+  return request<any[]>('/farmer/products');
+}
+
 export async function fetchFarmerOrdersApi(params: { status?: string; marketDate?: string } = {}): Promise<any[]> {
   const q = new URLSearchParams();
   if (params.status) q.set('status', params.status);

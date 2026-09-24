@@ -87,6 +87,7 @@ export function Layout() {
       .then((user) => {
         if (isMounted && user?.role) {
           gateway.dispatch({ type: "role", role: user.role });
+          gateway.syncFromBackend(user.role);
         }
       })
       .catch(() => {

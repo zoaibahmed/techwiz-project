@@ -23,6 +23,8 @@ import {
   moderateAdminReviewApi,
   fetchCustomerOrdersApi,
   fetchFarmerOrdersApi,
+  fetchFarmerProductsApi,
+  fetchMeApi,
 } from "./api";
 
 export type Command =
@@ -510,6 +512,10 @@ const stageMapToDemo: Record<string, DemoStage> = {
 };
 
 async function ensureSession(role: Role) {
+  try {
+    const me = await fetchMeApi();
+    if (me?.role === role) return;
+  } catch {}
   const credentials: Record<string, { email: string; password: string }> = {
     customer: { email: "customer.sarah@marketlink.com", password: "Customer123!" },
     farmer: { email: "farmer.greenfield@marketlink.com", password: "Farmer123!" },
@@ -703,32 +709,76 @@ export const gateway = {
         }
       } else if (activeRole === "farmer") {
         await ensureSession("farmer");
-        const orders = await fetchFarmerOrdersApi();
-        if (Array.isArray(orders) && orders.length > 0) {
-          for (const o of orders) {
-            const mappedId = o.orderNumber || o.id || o._id;
-            const existing = state.orders.find((e) => e.id === mappedId);
-            if (existing) {
-              existing.stage = stageMapToDemo[o.status] || existing.stage;
-            } else {
-              state.orders.unshift({
+
+        // Sync farmer catalogue products from Atlas
+        try {
+          const prods = await fetchFarmerProductsApi();
+          if (Array.isArray(prods) && prods.length > 0) {
+            for (const p of prods) {
+              const mappedId = p.id || p._id;
+              const existingIdx = state.products.findIndex(
+                (e) => e.id === mappedId || e.name.toLowerCase() === (p.name || "").toLowerCase()
+              );
+              const prodObj: Product = {
                 id: mappedId,
-                farmerId: "demo-f1",
-                marketId: "demo-m1",
-                slotId: "demo-s1",
-                stage: stageMapToDemo[o.status] || "Placed",
-                lines: (o.items || []).map((it: any) => ({
-                  productId: it.productId || "demo-p1",
-                  name: it.name || "Bedian Heirloom Tomatoes",
-                  unit: it.unit || "kg",
-                  price: it.unitPriceMinor || 35000,
-                  quantity: it.quantity || 1,
-                })),
-                events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
-              });
+                farmerId: state.farmerId,
+                name: p.name,
+                category:
+                  typeof p.category === "object"
+                    ? p.category?.name
+                    : p.category || "Fresh Vegetables",
+                unit: p.unit || "kg",
+                price: p.basePriceMinor || p.priceMinor || 15000,
+                stock: p.availableQuantity ?? 50,
+                reserved: p.reservedQuantity ?? 0,
+                description: p.description || "",
+                image: p.imageUrl || "/images/tomatoes.jpg",
+                visible: !p.isArchived,
+                available: p.status !== "inactive",
+              };
+              if (existingIdx >= 0) {
+                state.products[existingIdx] = prodObj;
+              } else {
+                state.products.push(prodObj);
+              }
             }
+            listeners.forEach((l) => l());
           }
-          listeners.forEach((l) => l());
+        } catch (err) {
+          console.warn("[Farmer products sync notice]", err);
+        }
+
+        // Sync farmer orders
+        try {
+          const orders = await fetchFarmerOrdersApi();
+          if (Array.isArray(orders) && orders.length > 0) {
+            for (const o of orders) {
+              const mappedId = o.orderNumber || o.id || o._id;
+              const existing = state.orders.find((e) => e.id === mappedId);
+              if (existing) {
+                existing.stage = stageMapToDemo[o.status] || existing.stage;
+              } else {
+                state.orders.unshift({
+                  id: mappedId,
+                  farmerId: state.farmerId,
+                  marketId: "demo-m1",
+                  slotId: "demo-s1",
+                  stage: stageMapToDemo[o.status] || "Placed",
+                  lines: (o.items || []).map((it: any) => ({
+                    productId: it.productId || "demo-p1",
+                    name: it.name || "Bedian Heirloom Tomatoes",
+                    unit: it.unit || "kg",
+                    price: it.unitPriceMinor || 35000,
+                    quantity: it.quantity || 1,
+                  })),
+                  events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
+                });
+              }
+            }
+            listeners.forEach((l) => l());
+          }
+        } catch (err) {
+          console.warn("[Farmer orders sync notice]", err);
         }
       }
     } catch (e) {
