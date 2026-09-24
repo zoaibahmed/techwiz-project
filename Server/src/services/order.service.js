@@ -347,7 +347,13 @@ export async function listCustomerOrdersService(customerId, filters = {}) {
   const db = getDB();
   const query = { customerId: new ObjectId(customerId) };
 
-  if (filters.status) query.status = filters.status;
+  if (filters.status) {
+    if (['accepted', 'confirmed'].includes(filters.status)) {
+      query.status = { $in: ['accepted', 'confirmed'] };
+    } else {
+      query.status = filters.status;
+    }
+  }
   if (filters.marketDate) query.marketDate = filters.marketDate;
   if (filters.marketId) query.marketId = new ObjectId(filters.marketId);
 
@@ -626,7 +632,13 @@ export async function listFarmerOrdersService(farmerUserId, filters = {}) {
     $or: [{ farmerId: { $in: possibleFarmerIds } }, { farmerProfileId: { $in: possibleFarmerIds } }],
   };
 
-  if (filters.status) query.status = filters.status;
+  if (filters.status) {
+    if (['accepted', 'confirmed'].includes(filters.status)) {
+      query.status = { $in: ['accepted', 'confirmed'] };
+    } else {
+      query.status = filters.status;
+    }
+  }
   if (filters.marketDate) query.marketDate = filters.marketDate;
   if (filters.marketId) query.marketId = new ObjectId(filters.marketId);
 
@@ -686,29 +698,31 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
     throw err;
   }
 
+  const canonicalNextStatus = nextStatus === 'confirmed' ? 'accepted' : nextStatus;
+  const currentStatus = order.status === 'confirmed' ? 'accepted' : order.status;
+
   // Validate state machine transitions
   const allowedTransitions = {
-    placed: ['accepted', 'confirmed', 'declined'],
+    placed: ['accepted', 'declined'],
     accepted: ['ready_for_pickup'],
-    confirmed: ['ready_for_pickup'],
     ready_for_pickup: ['completed'],
   };
 
-  const validNextStates = allowedTransitions[order.status] || [];
-  if (!validNextStates.includes(nextStatus)) {
-    const err = new Error(`Invalid status transition from "${order.status}" to "${nextStatus}".`);
+  const validNextStates = allowedTransitions[currentStatus] || [];
+  if (!validNextStates.includes(canonicalNextStatus)) {
+    const err = new Error(`Invalid status transition from "${currentStatus}" to "${canonicalNextStatus}".`);
     err.code = 'INVALID_STATUS_TRANSITION';
     err.statusCode = 400;
     throw err;
   }
 
   const updateFields = {
-    status: nextStatus,
+    status: canonicalNextStatus,
     updatedAt: new Date(),
   };
 
   // Decline: Release stock and decrement pickup window count
-  if (nextStatus === 'declined') {
+  if (canonicalNextStatus === 'declined') {
     if (!reason) {
       const err = new Error('A reason is required when declining an order.');
       err.code = 'REASON_REQUIRED';
@@ -793,11 +807,11 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
     );
   }
 
-  // Accepted/Confirmed notification
-  if (['accepted', 'confirmed'].includes(nextStatus)) {
+  // Accepted notification
+  if (canonicalNextStatus === 'accepted') {
     await createNotification(
       order.customerId.toString(),
-      nextStatus === 'accepted' ? 'order_accepted' : 'order_confirmed',
+      'order_accepted',
       'Order Accepted by Farmer',
       `Farmer accepted your order ${order.orderNumber} for pickup on ${order.marketDate}.`,
       { orderId: orderId, orderNumber: order.orderNumber }
@@ -810,10 +824,10 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
       $set: updateFields,
       $push: {
         statusHistory: {
-          status: nextStatus,
+          status: canonicalNextStatus,
           changedBy: fId,
           role: 'farmer',
-          note: reason || `Order status updated to ${nextStatus} by farmer.`,
+          note: reason || `Order status updated to ${canonicalNextStatus} by farmer.`,
           timestamp: new Date(),
         },
       },
@@ -874,13 +888,13 @@ function formatOrderDoc(doc) {
     items,
     totalAmountMinor: doc.totalAmountMinor || 0,
     currency: doc.currency || 'PKR',
-    status: doc.status,
+    status: doc.status === 'confirmed' ? 'accepted' : doc.status,
     payment,
     customerNotes: doc.customerNotes || doc.notes || '',
     cancellationReason: doc.cancellationReason || null,
     declineReason: doc.declineReason || null,
     statusHistory: (doc.statusHistory || []).map((sh) => ({
-      status: sh.status,
+      status: sh.status === 'confirmed' ? 'accepted' : sh.status,
       role: sh.role || 'system',
       note: sh.note || sh.reason || '',
       timestamp: (sh.timestamp || sh.changedAt) instanceof Date

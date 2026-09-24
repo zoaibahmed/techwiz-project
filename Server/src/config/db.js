@@ -24,33 +24,39 @@ export async function connectDB() {
     throw new Error('Database connection failed: MONGODB_URI is undefined or empty.');
   }
 
-  try {
-    client = new MongoClient(env.MONGODB_URI, clientOptions);
-    await client.connect();
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      client = new MongoClient(env.MONGODB_URI, clientOptions);
+      await client.connect();
 
-    // Verify connectivity via non-destructive ping
-    const adminDb = client.db('admin');
-    await adminDb.command({ ping: 1 });
+      // Verify connectivity via non-destructive ping
+      const adminDb = client.db('admin');
+      await adminDb.command({ ping: 1 });
 
-    db = client.db(env.MONGODB_DB_NAME);
-    return { client, db };
-  } catch (error) {
-    // Sanitize any potential connection details from error message
-    const sanitizedMsg = error.message
-      ? error.message.replace(/mongodb(\+srv)?:\/\/[^@]+@/gi, 'mongodb+srv://[credentials-hidden]@')
-      : 'Unknown MongoDB connection error';
-    
-    // Close client if partially opened
-    if (client) {
-      try {
-        await client.close();
-      } catch (_) {}
-      client = null;
-      db = null;
+      db = client.db(env.MONGODB_DB_NAME);
+      return { client, db };
+    } catch (error) {
+      lastError = error;
+      if (client) {
+        try {
+          await client.close();
+        } catch (_) {}
+        client = null;
+        db = null;
+      }
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+      }
     }
-    
-    throw new Error(`MongoDB Atlas Connection Error: ${sanitizedMsg}`);
   }
+
+  // Sanitize any potential connection details from error message
+  const sanitizedMsg = lastError?.message
+    ? lastError.message.replace(/mongodb(\+srv)?:\/\/[^@]+@/gi, 'mongodb+srv://[credentials-hidden]@')
+    : 'Unknown MongoDB connection error';
+
+  throw new Error(`MongoDB Atlas Connection Error: ${sanitizedMsg}`);
 }
 
 /**

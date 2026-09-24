@@ -9,6 +9,8 @@ import {
   createFarmerProductService,
   updateFarmerProductService,
   archiveFarmerProductService,
+  listProductsAdminService,
+  moderateProductAdminService,
 } from '../services/product.service.js';
 
 export async function listProductsPublic(req, res, next) {
@@ -111,6 +113,37 @@ export async function archiveFarmerProduct(req, res, next) {
     const { id } = req.params;
     const result = await archiveFarmerProductService(req.farmerProfile.id, id);
 
+    res.status(200).json({
+      data: result,
+      meta: {
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listProductsAdmin(req, res, next) {
+  try {
+    const products = await listProductsAdminService(req.query);
+    res.status(200).json({
+      data: products,
+      meta: {
+        total: products.length,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function moderateProductAdmin(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { status, moderationReason } = req.body;
+    const result = await moderateProductAdminService(req.user.id, id, { status, moderationReason });
     res.status(200).json({
       data: result,
       meta: {

@@ -13,6 +13,7 @@ import {
   listFarmersForAdminService,
   listCustomersAdminService,
   updateCustomerStatusAdminService,
+  getCustomerDetailsAdminService,
 } from '../services/auth.service.js';
 import { getAuthCookieOptions, getCsrfCookieOptions, generateCsrfToken } from '../utils/token.js';
 
@@ -175,6 +176,20 @@ export async function updateCustomerStatusAdmin(req, res, next) {
     const result = await updateCustomerStatusAdminService(id, isActive, req.user.id, reason);
     res.status(200).json({
       data: result,
+      meta: {
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCustomerDetailsAdmin(req, res, next) {
+  try {
+    const customer = await getCustomerDetailsAdminService(req.params.id);
+    res.status(200).json({
+      data: customer,
       meta: {
         timestamp: new Date().toISOString(),
       },

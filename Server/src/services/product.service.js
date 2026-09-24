@@ -246,6 +246,21 @@ export async function archiveFarmerProductService(farmerProfileId, productId) {
   const fId = new ObjectId(farmerProfileId);
   const pId = new ObjectId(productId);
 
+  // Invariant: Cannot archive product if active reserved orders contain this product
+  const activeOrdersCount = await db.collection('orders').countDocuments({
+    'items.productId': pId,
+    status: { $in: ['placed', 'accepted', 'confirmed', 'ready_for_pickup'] },
+  });
+
+  if (activeOrdersCount > 0) {
+    const err = new Error(
+      `Cannot archive product with ${activeOrdersCount} active reserved order(s). Fulfill, cancel, or decline active orders before archiving.`
+    );
+    err.code = 'ACTIVE_RESERVATIONS_EXIST';
+    err.statusCode = 409;
+    throw err;
+  }
+
   const result = await db
     .collection('products')
     .updateOne({ _id: pId, farmerId: fId }, { $set: { isArchived: true, updatedAt: new Date() } });
@@ -258,4 +273,110 @@ export async function archiveFarmerProductService(farmerProfileId, productId) {
   }
 
   return { id: productId, archived: true };
+}
+
+export async function listProductsAdminService(query = {}) {
+  const db = getDB();
+  const filter = {};
+
+  if (query.status) {
+    if (query.status === 'archived') {
+      filter.isArchived = true;
+    } else {
+      filter.status = query.status;
+      filter.isArchived = { $ne: true };
+    }
+  }
+
+  if (query.search) {
+    filter.name = { $regex: query.search.trim(), $options: 'i' };
+  }
+
+  const products = await db
+    .collection('products')
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  const farmerIds = products.map((p) => p.farmerId);
+  const farmers = await db
+    .collection('farmerProfiles')
+    .find({ _id: { $in: farmerIds } })
+    .toArray();
+  const farmerMap = new Map(farmers.map((f) => [f._id.toString(), f.businessName]));
+
+  const categoryIds = products.map((p) => p.categoryId);
+  const categories = await db
+    .collection('categories')
+    .find({ _id: { $in: categoryIds } })
+    .toArray();
+  const categoryMap = new Map(categories.map((c) => [c._id.toString(), c.name]));
+
+  return products.map((p) => ({
+    id: p._id.toString(),
+    name: p.name,
+    description: p.description,
+    farmerId: p.farmerId.toString(),
+    farmerBusinessName: farmerMap.get(p.farmerId.toString()) || 'Farm',
+    categoryId: p.categoryId.toString(),
+    categoryName: categoryMap.get(p.categoryId.toString()) || 'Category',
+    unit: p.unit,
+    basePriceMinor: p.basePriceMinor,
+    currency: p.currency || 'PKR',
+    imageUrl: p.imageUrl || '',
+    status: p.isArchived ? 'archived' : (p.status || 'active'),
+    rating: p.rating || 5.0,
+    reviewCount: p.reviewCount || 0,
+    moderationReason: p.moderationReason || '',
+    createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+    updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : p.updatedAt,
+  }));
+}
+
+export async function moderateProductAdminService(adminId, productId, { status, moderationReason = '' }) {
+  const db = getDB();
+  const pId = new ObjectId(productId);
+
+  const product = await db.collection('products').findOne({ _id: pId });
+  if (!product) {
+    const err = new Error('Product not found.');
+    err.code = 'NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const isArchived = status === 'archived';
+  const updateFields = {
+    status,
+    isArchived,
+    moderationReason,
+    updatedAt: new Date(),
+  };
+
+  await db.collection('products').updateOne({ _id: pId }, { $set: updateFields });
+
+  // Audit log
+  await db.collection('auditLogs').insertOne({
+    actorId: new ObjectId(adminId),
+    actorRole: 'admin',
+    action: 'PRODUCT_STATUS_MODERATION',
+    targetCollection: 'products',
+    targetId: pId,
+    details: {
+      productName: product.name,
+      previousStatus: product.status,
+      newStatus: status,
+      moderationReason,
+    },
+    createdAt: new Date(),
+  });
+
+  return {
+    id: productId,
+    name: product.name,
+    status,
+    isArchived,
+    moderationReason,
+    updatedAt: updateFields.updatedAt.toISOString(),
+  };
 }

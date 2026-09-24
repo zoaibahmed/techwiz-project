@@ -157,11 +157,44 @@ export async function confirmCopilotActionService(user, draftId) {
 
   let executionResult = null;
 
+  // Revalidate expiry
+  if (draft.expiresAt && new Date() > new Date(draft.expiresAt)) {
+    const err = new Error('Proposed action draft has expired. Please initiate a new copilot request.');
+    err.code = 'ACTION_DRAFT_EXPIRED';
+    err.statusCode = 410;
+    throw err;
+  }
+
   if (draft.actionType === 'update_stall_pin' && user.role === 'farmer') {
+    // Server-side revalidation: farmer profile must exist
+    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
+    if (!profile) {
+      const err = new Error('Farmer profile not found for this account.');
+      err.code = 'NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
     executionResult = await updateFarmerProfileService(user.id, {
       stallNumber: draft.payload.stallNumber,
     });
   } else if (draft.actionType === 'cancel_order' && user.role === 'customer') {
+    // Server-side revalidation: order must exist, belong to user, and be cancellable
+    const order = await db.collection('orders').findOne({
+      _id: new ObjectId(draft.payload.orderId),
+      customerId: uId,
+    });
+    if (!order) {
+      const err = new Error('Order not found or no longer accessible.');
+      err.code = 'ORDER_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+    if (!['placed', 'accepted'].includes(order.status)) {
+      const err = new Error(`Order cannot be cancelled in its current status (${order.status}).`);
+      err.code = 'CANNOT_CANCEL_STATUS';
+      err.statusCode = 400;
+      throw err;
+    }
     executionResult = await cancelCustomerOrderService(
       user.id,
       draft.payload.orderId,
@@ -173,6 +206,18 @@ export async function confirmCopilotActionService(user, draftId) {
     err.statusCode = 400;
     throw err;
   }
+
+  // Audit Logging
+  await db.collection('auditLogs').insertOne({
+    userId: uId,
+    userRole: user.role,
+    action: 'COPILOT_ACTION_EXECUTED',
+    actionType: draft.actionType,
+    draftId: dId,
+    payload: draft.payload,
+    summary: draft.summary,
+    executedAt: new Date(),
+  });
 
   // Delete draft after successful execution
   await db.collection('aiActionDrafts').deleteOne({ _id: dId });

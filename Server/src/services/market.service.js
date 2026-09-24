@@ -183,6 +183,21 @@ export async function deleteMarketService(adminId, marketId) {
   const db = getDB();
   const mId = new ObjectId(marketId);
 
+  // Invariant: Cannot remove market if active reserved orders exist
+  const activeOrdersCount = await db.collection('orders').countDocuments({
+    marketId: mId,
+    status: { $in: ['placed', 'accepted', 'confirmed', 'ready_for_pickup'] },
+  });
+
+  if (activeOrdersCount > 0) {
+    const err = new Error(
+      `Cannot delete market with ${activeOrdersCount} active reserved order(s). Fulfill, cancel, or decline active orders before removing market.`
+    );
+    err.code = 'ACTIVE_RESERVATIONS_EXIST';
+    err.statusCode = 409;
+    throw err;
+  }
+
   // Soft delete by setting isActive to false to preserve historical order snapshots
   const result = await db.collection('markets').updateOne(
     { _id: mId },

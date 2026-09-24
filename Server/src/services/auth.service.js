@@ -370,3 +370,76 @@ export async function updateCustomerStatusAdminService(customerId, isActive, adm
   };
 }
 
+export async function getCustomerDetailsAdminService(customerId) {
+  const db = getDB();
+  const cId = new ObjectId(customerId);
+
+  const customer = await db.collection('users').findOne({ _id: cId, role: 'customer' });
+  if (!customer) {
+    const error = new Error('Customer not found.');
+    error.code = 'NOT_FOUND';
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Get orders summary
+  const orders = await db
+    .collection('orders')
+    .find({ customerId: cId })
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  const counts = {
+    total: orders.length,
+    placed: 0,
+    accepted: 0,
+    ready_for_pickup: 0,
+    completed: 0,
+    declined: 0,
+    cancelled: 0,
+  };
+
+  let totalSpentMinor = 0;
+  for (const o of orders) {
+    const st = o.status === 'confirmed' ? 'accepted' : o.status;
+    if (counts[st] !== undefined) counts[st]++;
+    if (st === 'completed') {
+      totalSpentMinor += (o.payment?.paidAmountMinor || o.totalAmountMinor || 0);
+    }
+  }
+
+  const favouritesCount = await db.collection('favourites').countDocuments({ customerId: cId });
+  const activeAlertsCount = await db.collection('restockAlerts').countDocuments({ customerId: cId, status: 'active' });
+
+  return {
+    id: customer._id.toString(),
+    name: customer.name,
+    firstName: customer.firstName || '',
+    lastName: customer.lastName || '',
+    email: customer.email,
+    phone: customer.phone || '',
+    role: customer.role,
+    isActive: customer.isActive !== false,
+    status: customer.isActive === false ? 'suspended' : 'active',
+    preferences: customer.preferences || {},
+    metrics: {
+      orderCounts: counts,
+      totalSpentMinor,
+      favouritesCount,
+      activeAlertsCount,
+    },
+    recentOrders: orders.slice(0, 5).map((o) => ({
+      id: o._id.toString(),
+      orderNumber: o.orderNumber,
+      marketDate: o.marketDate,
+      marketName: o.marketSnapshot?.name || 'Farmers Market',
+      farmerBusinessName: o.farmerSnapshot?.businessName || 'Farm',
+      totalAmountMinor: o.totalAmountMinor,
+      status: o.status === 'confirmed' ? 'accepted' : o.status,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : o.createdAt,
+    })),
+    createdAt: customer.createdAt instanceof Date ? customer.createdAt.toISOString() : customer.createdAt,
+    updatedAt: customer.updatedAt instanceof Date ? customer.updatedAt.toISOString() : customer.updatedAt,
+  };
+}
+

@@ -82,6 +82,21 @@ export async function deleteCategoryService(adminId, categoryId) {
   const db = getDB();
   const cId = new ObjectId(categoryId);
 
+  // Invariant: Cannot remove category if active products exist in it
+  const productsCount = await db.collection('products').countDocuments({
+    categoryId: cId,
+    isArchived: { $ne: true },
+  });
+
+  if (productsCount > 0) {
+    const err = new Error(
+      `Cannot delete category containing ${productsCount} active product(s). Reassign or archive products before removing category.`
+    );
+    err.code = 'CATEGORY_IN_USE';
+    err.statusCode = 409;
+    throw err;
+  }
+
   // Soft delete
   const result = await db.collection('categories').updateOne({ _id: cId }, { $set: { isActive: false } });
   if (result.matchedCount === 0) {

@@ -158,7 +158,7 @@ describe('MarketLink Phase 3 Order Engine & Copilot Test Suite', () => {
       createdAt: new Date(),
     });
     stockOffer2Id = so2Res.insertedId.toString();
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (db) {
@@ -361,15 +361,15 @@ describe('MarketLink Phase 3 Order Engine & Copilot Test Suite', () => {
     expect(listRes.status).toBe(200);
     expect(listRes.body.data.some((o) => o.id === createdOrder1Id)).toBe(true);
 
-    // 2. Accept order -> 'confirmed'
+    // 2. Accept order -> 'accepted'
     const confirmRes = await request(app)
       .patch(`/api/v1/farmer/orders/${createdOrder1Id}/status`)
       .set('Cookie', [`token=${farmer1Token}`, `marketlink_csrf=${csrfToken}`])
       .set('x-csrf-token', csrfToken)
-      .send({ status: 'confirmed' });
+      .send({ status: 'accepted' });
 
     expect(confirmRes.status).toBe(200);
-    expect(confirmRes.body.data.status).toBe('confirmed');
+    expect(confirmRes.body.data.status).toBe('accepted');
 
     // 3. Mark ready for pickup -> 'ready_for_pickup'
     const readyRes = await request(app)

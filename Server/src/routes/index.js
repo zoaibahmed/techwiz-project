@@ -14,6 +14,9 @@ import { customerRouter } from './customer.routes.js';
 import { favouriteRouter } from './favourite.routes.js';
 import { restockAlertRouter } from './restockAlert.routes.js';
 import { reviewRouter } from './review.routes.js';
+import { announcementRouter } from './announcement.routes.js';
+import { inquiryRouter } from './inquiry.routes.js';
+import { uploadRouter } from './upload.routes.js';
 
 const apiRouter = Router();
 
@@ -38,6 +41,9 @@ v1Router.use('/', customerRouter);
 v1Router.use('/', favouriteRouter);
 v1Router.use('/', restockAlertRouter);
 v1Router.use('/', reviewRouter);
+v1Router.use('/', announcementRouter);
+v1Router.use('/', inquiryRouter);
+v1Router.use('/', uploadRouter);
 
 // Mount versioned API at /api/v1
 apiRouter.use('/v1', v1Router);
@@ -58,7 +64,11 @@ apiRouter.use('/', customerRouter);
 apiRouter.use('/', favouriteRouter);
 apiRouter.use('/', restockAlertRouter);
 apiRouter.use('/', reviewRouter);
+apiRouter.use('/', announcementRouter);
+apiRouter.use('/', inquiryRouter);
+apiRouter.use('/', uploadRouter);
 
 export default apiRouter;
+
 
 

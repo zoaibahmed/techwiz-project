@@ -28,6 +28,9 @@ export const modifyOrderItemsSchema = z.object({
 });
 
 export const farmerStatusTransitionSchema = z.object({
-  status: z.enum(['accepted', 'confirmed', 'declined', 'ready_for_pickup', 'completed']),
+  status: z.preprocess(
+    (val) => (val === 'confirmed' ? 'accepted' : val),
+    z.enum(['accepted', 'declined', 'ready_for_pickup', 'completed'])
+  ),
   reason: z.string().max(250).optional(),
 });
