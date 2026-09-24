@@ -3,6 +3,7 @@ import {
   getPublicFarmerProfile,
   getMyFarmerProfile,
   updateMyFarmerProfile,
+  getFarmerReports,
 } from '../controllers/farmer.controller.js';
 import {
   listFarmerProducts,
@@ -26,6 +27,9 @@ const router = Router();
 // 1. Authenticated Farmer operations (Must be defined BEFORE /:id to avoid route collision!)
 router.get('/profile', authenticateToken, requireRole(['farmer']), getMyFarmerProfile);
 router.patch('/profile', authenticateToken, requireRole(['farmer']), updateMyFarmerProfile);
+router.get('/reports', authenticateToken, requireRole(['farmer']), getFarmerReports);
+router.get('/insights', authenticateToken, requireRole(['farmer']), getFarmerReports); // SRS alias
+
 
 // Product CRUD (Requires Approved Farmer)
 router.get('/products', authenticateToken, requireApprovedFarmer, listFarmerProducts);

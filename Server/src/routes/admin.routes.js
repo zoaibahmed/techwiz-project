@@ -2,6 +2,8 @@ import { Router } from 'express';
 import {
   listFarmersAdmin,
   updateFarmerStatusAdmin,
+  listCustomersAdmin,
+  updateCustomerStatusAdmin,
 } from '../controllers/auth.controller.js';
 import {
   createMarketAdmin,
@@ -24,12 +26,16 @@ router.use(authenticateToken, requireRole(['admin']));
 router.get('/farmers', listFarmersAdmin);
 router.patch('/farmers/:id/status', updateFarmerStatusAdmin);
 
-// 2. Market Management
+// 2. Customer management
+router.get('/customers', listCustomersAdmin);
+router.patch('/customers/:id/status', updateCustomerStatusAdmin);
+
+// 3. Market Management
 router.post('/markets', createMarketAdmin);
 router.patch('/markets/:id', updateMarketAdmin);
 router.delete('/markets/:id', deleteMarketAdmin);
 
-// 3. Category Management
+// 4. Category Management
 router.post('/categories', createCategoryAdmin);
 router.patch('/categories/:id', updateCategoryAdmin);
 router.delete('/categories/:id', deleteCategoryAdmin);

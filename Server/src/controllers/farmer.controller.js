@@ -51,3 +51,17 @@ export async function updateMyFarmerProfile(req, res, next) {
     next(err);
   }
 }
+
+export async function getFarmerReports(req, res, next) {
+  try {
+    const { getFarmerReportsService } = await import('../services/farmer.service.js');
+    const reports = await getFarmerReportsService(req.user.id);
+    res.status(200).json({
+      data: reports,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+

@@ -12,6 +12,7 @@ import {
   listFarmerOrdersService,
   getFarmerOrderByIdService,
   updateFarmerOrderStatusService,
+  reorderCustomerOrderService,
 } from '../services/order.service.js';
 
 export async function checkout(req, res, next) {
@@ -133,3 +134,65 @@ export async function updateFarmerOrderStatus(req, res, next) {
     next(error);
   }
 }
+
+export async function acceptFarmerOrder(req, res, next) {
+  try {
+    const order = await updateFarmerOrderStatusService(req.user.id, req.params.id, 'accepted');
+    res.status(200).json({
+      data: order,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function declineFarmerOrder(req, res, next) {
+  try {
+    const reason = req.body?.reason || '';
+    const order = await updateFarmerOrderStatusService(req.user.id, req.params.id, 'declined', reason);
+    res.status(200).json({
+      data: order,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function readyFarmerOrder(req, res, next) {
+  try {
+    const order = await updateFarmerOrderStatusService(req.user.id, req.params.id, 'ready_for_pickup');
+    res.status(200).json({
+      data: order,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function completeFarmerOrder(req, res, next) {
+  try {
+    const order = await updateFarmerOrderStatusService(req.user.id, req.params.id, 'completed');
+    res.status(200).json({
+      data: order,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function reorderCustomerOrder(req, res, next) {
+  try {
+    const result = await reorderCustomerOrderService(req.user.id, req.params.id, req.body || {});
+    res.status(200).json({
+      data: result,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

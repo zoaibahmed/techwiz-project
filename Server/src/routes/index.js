@@ -10,6 +10,10 @@ import pickupWindowRoutes from './pickupWindow.routes.js';
 import { orderRouter } from './order.routes.js';
 import { notificationRouter } from './notification.routes.js';
 import { aiRouter } from './ai.routes.js';
+import { customerRouter } from './customer.routes.js';
+import { favouriteRouter } from './favourite.routes.js';
+import { restockAlertRouter } from './restockAlert.routes.js';
+import { reviewRouter } from './review.routes.js';
 
 const apiRouter = Router();
 
@@ -30,6 +34,10 @@ v1Router.use('/farmers', farmerRoutes);
 v1Router.use('/farmer', farmerRoutes); // Alias for farmer operations (/farmer/products, /farmer/profile, etc.)
 v1Router.use('/', notificationRouter);
 v1Router.use('/', aiRouter);
+v1Router.use('/', customerRouter);
+v1Router.use('/', favouriteRouter);
+v1Router.use('/', restockAlertRouter);
+v1Router.use('/', reviewRouter);
 
 // Mount versioned API at /api/v1
 apiRouter.use('/v1', v1Router);
@@ -46,6 +54,11 @@ apiRouter.use('/farmers', farmerRoutes);
 apiRouter.use('/farmer', farmerRoutes);
 apiRouter.use('/', notificationRouter);
 apiRouter.use('/', aiRouter);
+apiRouter.use('/', customerRouter);
+apiRouter.use('/', favouriteRouter);
+apiRouter.use('/', restockAlertRouter);
+apiRouter.use('/', reviewRouter);
 
 export default apiRouter;
+
 

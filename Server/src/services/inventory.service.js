@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getDB } from '../config/db.js';
+import { triggerRestockAlertsForOfferService } from './restockAlert.service.js';
 
 // --- WEEKLY RECURRING STOCK TEMPLATES ---
 export async function getWeeklyTemplateService(farmerProfileId, marketId, dayOfWeek) {
@@ -133,17 +134,18 @@ export async function createOrUpdateStockOfferService(farmerProfileId, data) {
     date: data.date,
   });
 
+  const totalQty = data.totalQuantity !== undefined ? data.totalQuantity : (data.allocatedQuantity !== undefined ? data.allocatedQuantity : 0);
   const reserved = existingOffer ? existingOffer.reservedQuantity : 0;
-  if (data.totalQuantity < reserved) {
+  if (totalQty < reserved) {
     const err = new Error(
-      `Cannot set total quantity to ${data.totalQuantity}. There are already ${reserved} units reserved by customers.`
+      `Cannot set total quantity to ${totalQty}. There are already ${reserved} units reserved by customers.`
     );
     err.code = 'INVALID_INVENTORY_ADJUSTMENT';
     err.statusCode = 409;
     throw err;
   }
 
-  const available = data.totalQuantity - reserved;
+  const available = totalQty - reserved;
   const status = available === 0 ? 'sold_out' : 'available';
 
   const doc = {
@@ -154,7 +156,7 @@ export async function createOrUpdateStockOfferService(farmerProfileId, data) {
     priceMinor: data.priceMinor,
     currency: data.currency || 'PKR',
     unit: data.unit,
-    totalQuantity: data.totalQuantity,
+    totalQuantity: totalQty,
     reservedQuantity: reserved,
     availableQuantity: available,
     status,
@@ -171,6 +173,12 @@ export async function createOrUpdateStockOfferService(farmerProfileId, data) {
     { $set: doc },
     { upsert: true }
   );
+
+  if (available > 0) {
+    await triggerRestockAlertsForOfferService(data.productId, data.marketId, available, data.date).catch((e) =>
+      console.error('[Restock Alert Trigger Error]:', e.message)
+    );
+  }
 
   return {
     farmerId: farmerProfileId,

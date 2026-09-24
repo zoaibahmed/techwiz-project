@@ -148,3 +148,125 @@ export async function updateMyFarmerProfileService(userId, data) {
 
 export const updateFarmerProfileService = updateMyFarmerProfileService;
 
+export async function getFarmerReportsService(userId) {
+  const db = getDB();
+  const fId = new ObjectId(userId);
+  const profile = await db.collection('farmerProfiles').findOne({ userId: fId });
+  const possibleIds = [fId];
+  if (profile) possibleIds.push(profile._id);
+
+  // 1. Order aggregation by status
+  const orders = await db
+    .collection('orders')
+    .find({ $or: [{ farmerId: { $in: possibleIds } }, { farmerProfileId: { $in: possibleIds } }] })
+    .toArray();
+
+  const counts = {
+    total: orders.length,
+    placed: 0,
+    accepted: 0,
+    ready_for_pickup: 0,
+    completed: 0,
+    declined: 0,
+    cancelled: 0,
+  };
+
+  let bookedOrderValueMinor = 0;
+  let actualCollectedPaymentMinor = 0;
+
+  const productSalesMap = new Map();
+
+  for (const o of orders) {
+    const status = o.status === 'confirmed' ? 'accepted' : o.status;
+    if (counts[status] !== undefined) {
+      counts[status]++;
+    }
+
+    const orderTotal = o.totalAmountMinor || (o.total ? o.total.amountMinor : 0) || 0;
+
+    // Booked value: Active pre-orders reserved
+    if (['placed', 'accepted', 'ready_for_pickup'].includes(status)) {
+      bookedOrderValueMinor += orderTotal;
+    }
+
+    // Actual collected payment: Physical payment recorded at pickup
+    if (status === 'completed' && (o.payment?.status === 'paid_at_pickup' || o.paymentStatus === 'paid')) {
+      actualCollectedPaymentMinor += (o.payment?.paidAmountMinor || orderTotal);
+    }
+
+    // Aggregate product sales from completed and active pre-orders
+    if (['placed', 'accepted', 'ready_for_pickup', 'completed'].includes(status)) {
+      for (const item of (o.items || [])) {
+        const pIdStr = item.productId ? item.productId.toString() : '';
+        const prev = productSalesMap.get(pIdStr) || {
+          productId: pIdStr,
+          productName: item.name,
+          unit: item.unit,
+          quantitySold: 0,
+          revenueMinor: 0,
+        };
+        prev.quantitySold += item.quantity || 0;
+        prev.revenueMinor += (item.totalPriceMinor || ((item.unitPriceMinor || 0) * (item.quantity || 0)));
+        productSalesMap.set(pIdStr, prev);
+      }
+    }
+  }
+
+  const bestSellingProducts = Array.from(productSalesMap.values())
+    .sort((a, b) => b.quantitySold - a.quantitySold)
+    .slice(0, 10);
+
+  // 2. Upcoming pickup schedule (grouped by date)
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingOrders = orders.filter(
+    (o) => ['placed', 'accepted', 'confirmed', 'ready_for_pickup'].includes(o.status) && o.marketDate >= today
+  );
+  const scheduleMap = new Map();
+  for (const uo of upcomingOrders) {
+    const date = uo.marketDate;
+    const prev = scheduleMap.get(date) || {
+      date,
+      orderCount: 0,
+      totalBookedMinor: 0,
+      marketName: uo.marketSnapshot?.name || 'Farmers Market',
+    };
+    prev.orderCount++;
+    prev.totalBookedMinor += uo.totalAmountMinor || 0;
+    scheduleMap.set(date, prev);
+  }
+
+  const upcomingPickupSchedule = Array.from(scheduleMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  // 3. Weekly stock summary count
+  const stockOffers = await db
+    .collection('stockOffers')
+    .find({
+      farmerId: { $in: possibleIds },
+      date: { $gte: today },
+    })
+    .sort({ date: 1 })
+    .toArray();
+
+  return {
+    farmerId: userId,
+    businessName: profile?.businessName || 'Farm',
+    metrics: {
+      orderCounts: counts,
+      bookedOrderValue: {
+        amountMinor: bookedOrderValueMinor,
+        currency: 'PKR',
+        description: 'Value of currently reserved pre-orders pending pickup',
+      },
+      actualCollectedPayment: {
+        amountMinor: actualCollectedPaymentMinor,
+        currency: 'PKR',
+        description: 'Physical payment confirmed by farmer at market stall pickup',
+      },
+    },
+    bestSellingProducts,
+    upcomingPickupSchedule,
+    activeStockOffersCount: stockOffers.length,
+  };
+}
+
+

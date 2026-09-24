@@ -236,6 +236,14 @@ export async function updateFarmerApprovalService(farmerProfileId, newStatus, ad
     }
   );
 
+  // Sync user active state: suspended farmers cannot log in
+  if (profile.userId) {
+    await db.collection('users').updateOne(
+      { _id: profile.userId },
+      { $set: { isActive: newStatus !== 'suspended', updatedAt: now } }
+    );
+  }
+
   // Write audit log
   await db.collection('auditLogs').insertOne({
     actorId: new ObjectId(adminId),
@@ -283,3 +291,82 @@ export async function listFarmersForAdminService(filterStatus) {
     createdAt: p.createdAt?.toISOString(),
   }));
 }
+
+export async function listCustomersAdminService(query = {}) {
+  const db = getDB();
+  const filter = { role: 'customer' };
+
+  if (query.status === 'active') filter.isActive = true;
+  if (query.status === 'suspended' || query.status === 'deactivated') filter.isActive = false;
+
+  if (query.search) {
+    const s = query.search.trim();
+    filter.$or = [
+      { name: { $regex: s, $options: 'i' } },
+      { email: { $regex: s, $options: 'i' } },
+      { phone: { $regex: s, $options: 'i' } },
+    ];
+  }
+
+  const users = await db
+    .collection('users')
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  return users.map((u) => ({
+    id: u._id.toString(),
+    name: u.name,
+    email: u.email,
+    phone: u.phone || '',
+    role: u.role,
+    isActive: u.isActive !== false,
+    status: u.isActive === false ? 'suspended' : 'active',
+    createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
+  }));
+}
+
+export async function updateCustomerStatusAdminService(customerId, isActive, adminId, reason = '') {
+  const db = getDB();
+  const cId = new ObjectId(customerId);
+
+  const customer = await db.collection('users').findOne({ _id: cId, role: 'customer' });
+  if (!customer) {
+    const error = new Error('Customer not found.');
+    error.code = 'NOT_FOUND';
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const now = new Date();
+  await db.collection('users').updateOne(
+    { _id: cId },
+    { $set: { isActive, updatedAt: now } }
+  );
+
+  // Write audit log
+  await db.collection('auditLogs').insertOne({
+    actorId: new ObjectId(adminId),
+    actorRole: 'admin',
+    action: 'CUSTOMER_STATUS_UPDATE',
+    targetCollection: 'users',
+    targetId: cId,
+    details: {
+      customerEmail: customer.email,
+      previousActive: customer.isActive,
+      newActive: isActive,
+      reason,
+    },
+    createdAt: now,
+  });
+
+  return {
+    id: customerId,
+    name: customer.name,
+    email: customer.email,
+    isActive,
+    status: isActive ? 'active' : 'suspended',
+    updatedAt: now.toISOString(),
+  };
+}
+

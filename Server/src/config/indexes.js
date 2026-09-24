@@ -70,6 +70,16 @@ export async function setupDatabaseIndexes(db) {
     // 12. AI Action Drafts (TTL Index)
     await db.collection('aiActionDrafts').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+    // 13. Restock Alerts
+    await db.collection('restockAlerts').createIndex(
+      { customerId: 1, productId: 1, marketId: 1 },
+      { unique: true }
+    );
+    await db.collection('restockAlerts').createIndex({ productId: 1, marketId: 1, status: 1 });
+
+    // 14. Announcements
+    await db.collection('announcements').createIndex({ isActive: 1, createdAt: -1 });
+
     console.log('[Database] Indexes verified and established.');
     return true;
   } catch (err) {

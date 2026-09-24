@@ -539,7 +539,7 @@ export async function cancelCustomerOrderService(customerId, orderId, reason = '
     throw err;
   }
 
-  if (!['placed', 'confirmed'].includes(order.status)) {
+  if (!['placed', 'accepted', 'confirmed'].includes(order.status)) {
     const err = new Error(`Cannot cancel order in "${order.status}" status.`);
     err.code = 'CANNOT_CANCEL_STATUS';
     err.statusCode = 400;
@@ -688,7 +688,8 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
 
   // Validate state machine transitions
   const allowedTransitions = {
-    placed: ['confirmed', 'declined'],
+    placed: ['accepted', 'confirmed', 'declined'],
+    accepted: ['ready_for_pickup'],
     confirmed: ['ready_for_pickup'],
     ready_for_pickup: ['completed'],
   };
@@ -792,13 +793,13 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
     );
   }
 
-  // Confirmed notification
-  if (nextStatus === 'confirmed') {
+  // Accepted/Confirmed notification
+  if (['accepted', 'confirmed'].includes(nextStatus)) {
     await createNotification(
       order.customerId.toString(),
-      'order_confirmed',
+      nextStatus === 'accepted' ? 'order_accepted' : 'order_confirmed',
       'Order Accepted by Farmer',
-      `Farmer confirmed your order ${order.orderNumber} for pickup on ${order.marketDate}.`,
+      `Farmer accepted your order ${order.orderNumber} for pickup on ${order.marketDate}.`,
       { orderId: orderId, orderNumber: order.orderNumber }
     );
   }
@@ -888,6 +889,71 @@ function formatOrderDoc(doc) {
     })),
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
+  };
+}
+
+/**
+ * Customer Reorder: Checks CURRENT stock offers for past order items and prepares verified lines
+ */
+export async function reorderCustomerOrderService(customerId, orderId, { targetMarketDate, pickupWindowId } = {}) {
+  const db = getDB();
+  const oId = new ObjectId(orderId);
+  const cId = new ObjectId(customerId);
+
+  const originalOrder = await db.collection('orders').findOne({ _id: oId, customerId: cId });
+  if (!originalOrder) {
+    const err = new Error('Original order not found.');
+    err.code = 'NOT_FOUND';
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const marketId = originalOrder.marketId;
+  const date = targetMarketDate || originalOrder.marketDate;
+  const pwId = pickupWindowId || originalOrder.pickupWindow?.id;
+
+  const mId = marketId instanceof ObjectId ? marketId : new ObjectId(marketId);
+  const availabilityReport = [];
+  const readyForCheckoutItems = [];
+
+  for (const item of originalOrder.items) {
+    const pId = item.productId instanceof ObjectId ? item.productId : new ObjectId(item.productId);
+    const offer = await db.collection('stockOffers').findOne({
+      marketId: mId,
+      productId: pId,
+      date: date,
+      status: 'available',
+    });
+
+    const isAvailable = offer && offer.availableQuantity >= item.quantity;
+    availabilityReport.push({
+      productId: item.productId.toString(),
+      name: item.name,
+      requestedQuantity: item.quantity,
+      unit: item.unit,
+      availableQuantity: offer ? offer.availableQuantity : 0,
+      priceMinor: offer ? offer.priceMinor : item.unitPriceMinor,
+      inStock: isAvailable,
+    });
+
+    if (isAvailable) {
+      readyForCheckoutItems.push({
+        productId: item.productId.toString(),
+        quantity: item.quantity,
+      });
+    }
+  }
+
+  const allAvailable = availabilityReport.every((r) => r.inStock);
+
+  return {
+    originalOrderId: orderId,
+    marketId: marketId.toString(),
+    targetMarketDate: date,
+    pickupWindowId: pwId,
+    allAvailable,
+    items: availabilityReport,
+    readyForCheckoutItems,
   };
 }
 

@@ -11,6 +11,8 @@ import {
   getCurrentUserService,
   updateFarmerApprovalService,
   listFarmersForAdminService,
+  listCustomersAdminService,
+  updateCustomerStatusAdminService,
 } from '../services/auth.service.js';
 import { getAuthCookieOptions, getCsrfCookieOptions, generateCsrfToken } from '../utils/token.js';
 
@@ -150,3 +152,35 @@ export async function updateFarmerStatusAdmin(req, res, next) {
     next(error);
   }
 }
+
+export async function listCustomersAdmin(req, res, next) {
+  try {
+    const customers = await listCustomersAdminService(req.query);
+    res.status(200).json({
+      data: customers,
+      meta: {
+        total: customers.length,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateCustomerStatusAdmin(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { isActive, reason } = req.body;
+    const result = await updateCustomerStatusAdminService(id, isActive, req.user.id, reason);
+    res.status(200).json({
+      data: result,
+      meta: {
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
