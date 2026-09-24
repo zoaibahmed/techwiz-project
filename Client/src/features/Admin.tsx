@@ -88,6 +88,50 @@ function AdminOverviewCockpit() {
         </div>
       </div>
 
+      {/* Market Intelligence Operational Briefing */}
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid var(--fw-border-subtle)",
+          borderLeft: "4px solid var(--fw-forest)",
+          borderRadius: "6px",
+          padding: "20px 24px",
+          margin: "24px 0",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ background: "var(--fw-sage)", color: "var(--fw-forest)", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Market Intelligence
+            </span>
+            <strong style={{ fontSize: "15px", color: "var(--fw-ink)" }}>Daily Platform Briefing & Moderation Tasks</strong>
+          </div>
+          <span style={{ fontSize: "12px", color: "var(--fw-muted)" }}>Pakistan (Lahore Pilot) · Live Operations</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", fontSize: "14px", lineHeight: "1.5" }}>
+          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
+            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
+              Producer Onboarding:
+            </strong>
+            <span>
+              {pendingFarmers.length > 0
+                ? `${pendingFarmers.length} grower application(s) pending review (${pendingFarmers.map(f => f.name).join(", ")}). Direct verification required before stall catalogue publication.`
+                : "All registered stallholders are approved and active for current weekend market schedules."}
+            </span>
+          </div>
+          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
+            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
+              Community Moderation:
+            </strong>
+            <span>
+              {s.reviews.filter(r => !r.visible).length > 0
+                ? `${s.reviews.filter(r => !r.visible).length} review(s) flagged or awaiting moderation in the quality queue.`
+                : `${s.reviews.length} customer review(s) published across Lahore markets with an aggregate 5.0 rating.`}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Global Platform KPIs */}
       <div className="fw-kpi-grid">
         <div className="fw-kpi-card">

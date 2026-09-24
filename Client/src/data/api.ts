@@ -114,46 +114,51 @@ export interface UserSession {
 }
 
 export async function loginApi(email: string, password: string): Promise<UserSession> {
-  return request<UserSession>('/auth/login', {
+  const res = await request<any>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
+  return (res?.user || res) as UserSession;
 }
 
 export async function registerCustomerApi(data: {
   name: string;
   email: string;
   password: string;
-  phone?: string;
+  phone: string;
+  address: string;
 }): Promise<UserSession> {
-  return request<UserSession>('/auth/register/customer', {
+  const res = await request<any>('/auth/register/customer', {
     method: 'POST',
     body: JSON.stringify(data),
   });
+  return (res?.user || res) as UserSession;
 }
 
 export async function registerFarmerApi(data: {
   name: string;
   email: string;
   password: string;
-  phone?: string;
+  phone: string;
+  address: string;
   businessName: string;
   contactPerson: string;
-  marketId: string;
   bio?: string;
 }): Promise<UserSession> {
-  return request<UserSession>('/auth/register/farmer', {
+  const res = await request<any>('/auth/register/farmer', {
     method: 'POST',
     body: JSON.stringify(data),
   });
+  return (res?.user || res) as UserSession;
 }
 
 export async function fetchMeApi(): Promise<UserSession> {
-  return request<UserSession>('/auth/me');
+  const res = await request<any>('/auth/me');
+  return (res?.user || res) as UserSession;
 }
 
-export async function logoutApi(): Promise<{ message: string }> {
-  return request<{ message: string }>('/auth/logout', { method: 'POST' });
+export async function logoutApi(): Promise<{ loggedOut: boolean }> {
+  return request<{ loggedOut: boolean }>('/auth/logout', { method: 'POST' });
 }
 
 // ─── Public Markets & Venues ────────────────────────────────────────────────
@@ -353,6 +358,59 @@ export async function createReviewApi(data: {
   return request<any>('/reviews', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function fetchPublicFarmerReviewsApi(farmerId: string): Promise<{ reviews: any[]; ratingSummary: any }> {
+  return request<any>(`/reviews/farmer/${farmerId}`);
+}
+
+export async function fetchPublicProductReviewsApi(productId: string): Promise<{ reviews: any[]; ratingSummary: any }> {
+  return request<any>(`/reviews/product/${productId}`);
+}
+
+export async function fetchFarmerReviewsApi(): Promise<any[]> {
+  return request<any[]>('/farmer/reviews');
+}
+
+// ─── Customer Profile & Preferences ─────────────────────────────────────────
+export async function fetchCustomerProfileApi(): Promise<any> {
+  return request<any>('/customer/profile');
+}
+
+export async function updateCustomerProfileApi(data: any): Promise<any> {
+  return request<any>('/customer/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchCustomerPreferencesApi(): Promise<any> {
+  return request<any>('/customer/preferences');
+}
+
+export async function updateCustomerPreferencesApi(data: any): Promise<any> {
+  return request<any>('/customer/preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Farmer Onboarding ───────────────────────────────────────────────────────
+export async function getFarmerOnboardingApi(): Promise<any> {
+  return request<any>('/farmer/onboarding');
+}
+
+export async function saveFarmerOnboardingStepApi(step: number, data: Record<string, any>): Promise<any> {
+  return request<any>('/farmer/onboarding', {
+    method: 'PUT',
+    body: JSON.stringify({ step, data }),
+  });
+}
+
+export async function submitFarmerOnboardingApi(): Promise<any> {
+  return request<any>('/farmer/onboarding/submit', {
+    method: 'POST',
   });
 }
 

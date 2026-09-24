@@ -21,6 +21,7 @@ import { useMarket, useAction, Notice } from "../components/ui";
 import { useVisitor } from "../data/visitor-context";
 import { countryName } from "../data/visitor";
 import { gateway } from "../data/gateway";
+import { fetchMeApi, logoutApi } from "../data/api";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
 import { CompanionContext } from "./companion-context";
@@ -79,6 +80,30 @@ export function Layout() {
           ? "customer"
           : null;
   const workspace = role === "farmer" || role === "admin";
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchMeApi()
+      .then((user) => {
+        if (isMounted && user?.role) {
+          gateway.dispatch({ type: "role", role: user.role });
+        }
+      })
+      .catch(() => {
+        // Session not active, stay unauthenticated
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await logoutApi();
+    } catch {}
+    act({ type: "role", role: null }, "Signed out successfully.");
+  };
+
   useEffect(() => {
     setMenu(false);
     setAssistant(false);
@@ -296,9 +321,7 @@ export function Layout() {
             </div>
             <button
               className="rail-signout"
-              onClick={() =>
-                act({ type: "role", role: null }, "Demo account signed out.")
-              }
+              onClick={handleSignOut}
             >
               <LogOut size={16} /> Sign out
             </button>
@@ -325,9 +348,7 @@ export function Layout() {
               </p>
               <button
                 className="text-button"
-                onClick={() =>
-                  act({ type: "role", role: null }, "Demo account signed out.")
-                }
+                onClick={handleSignOut}
               >
                 Sign out
               </button>

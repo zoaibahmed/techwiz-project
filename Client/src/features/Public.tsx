@@ -36,6 +36,11 @@ import {
 } from "../components/ui";
 import { date, money, images, demoDate } from "../data/market";
 import type { Role } from "../data/market";
+import {
+  loginApi,
+  registerCustomerApi,
+  registerFarmerApi,
+} from "../data/api";
 
 export const Home = lazy(() => import('./LivingHome').then(module => ({ default: module.LivingHome })));
 
@@ -873,6 +878,82 @@ export function ProductDetail() {
             ))}
         </div>
       </section>
+
+      {/* Community Produce Reviews Section */}
+      <section className="section">
+        <div className="pe-section-header">
+          <span className="pe-eyebrow"><Star size={14} /> Verified Buyer Feedback</span>
+          <h2 className="pe-section-title">Community tasting notes & reviews.</h2>
+        </div>
+
+        {s.reviews.filter((r) => r.visible && r.target === p.id).length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {s.reviews
+              .filter((r) => r.visible && r.target === p.id)
+              .map((r) => (
+                <blockquote
+                  className="review"
+                  key={r.id}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid var(--pe-border)",
+                    borderRadius: "6px",
+                    padding: "20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      marginBottom: "8px",
+                      color: "var(--pe-harvest)",
+                    }}
+                  >
+                    {[...Array(r.rating || 5)].map((_, idx) => (
+                      <Star key={idx} size={14} fill="currentColor" />
+                    ))}
+                    <strong
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--pe-ink)",
+                        marginLeft: "4px",
+                      }}
+                    >
+                      Verified Purchase · Completed Order {r.orderId}
+                    </strong>
+                  </div>
+                  <p
+                    style={{
+                      fontSize: "15px",
+                      lineHeight: "1.55",
+                      margin: "0 0 10px",
+                    }}
+                  >
+                    “{r.text}”
+                  </p>
+                  {r.reply && (
+                    <div
+                      style={{
+                        borderLeft: "3px solid var(--pe-forest)",
+                        paddingLeft: "12px",
+                        marginTop: "10px",
+                        color: "var(--pe-forest)",
+                        fontSize: "13.5px",
+                      }}
+                    >
+                      <strong>Farmer Reply:</strong> {r.reply}
+                    </div>
+                  )}
+                </blockquote>
+              ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--pe-muted)", fontStyle: "italic" }}>
+            No customer reviews have been recorded for this item yet. Verified customers can leave feedback after completing pickup.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
@@ -883,7 +964,9 @@ export function Auth() {
   const navigate = useNavigate();
   const act = useAction();
   const [show, setShow] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
   const register = pathname.startsWith("/register");
   const choose = pathname === "/register";
   const role: Role = pathname.includes("farmer")
@@ -893,18 +976,90 @@ export function Auth() {
       : "customer";
   const [loginRole, setRole] = useState<Role>(role);
   const [error, setError] = useState("");
-  const enter = (r: Role) => {
-    if (
-      act({ type: "role", role: r }, `Entered the ${r} development workspace.`)
-    ) {
+
+  const enter = async (r: Role, creds?: { email: string; pass: string }) => {
+    setError("");
+    setLoading(true);
+    try {
+      const email = creds?.email || (r === "admin" ? "admin@marketlink.pk" : r === "farmer" ? "tariq@goodearthgrowers.pk" : "hira.khan@example.com");
+      const pass = creds?.pass || (r === "admin" ? "AdminPass123!" : r === "farmer" ? "FarmerPass123!" : "CustomerPass123!");
+      const session = await loginApi(email, pass);
+      act({ type: "role", role: session.role || r }, `Authenticated as ${session.name || session.email}.`);
       const next = params.get("next");
       navigate(
-        next && next.startsWith(`/${r}`) && !next.startsWith("//")
+        next && next.startsWith(`/${session.role || r}`) && !next.startsWith("//")
           ? next
-          : `/${r}`,
+          : `/${session.role || r}`,
       );
+    } catch (err: any) {
+      setError(err?.message || "Sign in failed. Please verify your credentials.");
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleFormSubmit = async (d: FormData) => {
+    setError("");
+    setLoading(true);
+    const email = (emailInput || value(d, "email")).trim();
+    const password = passwordInput || value(d, "password");
+
+    if (register) {
+      const confirmPass = value(d, "confirm");
+      if (password !== confirmPass) {
+        setError("The passwords must match.");
+        setLoading(false);
+        return;
+      }
+      try {
+        if (role === "farmer") {
+          await registerFarmerApi({
+            name: value(d, "name"),
+            contactPerson: value(d, "person") || value(d, "name"),
+            email,
+            password,
+            phone: value(d, "phone"),
+            address: value(d, "address"),
+            businessName: value(d, "name"),
+            bio: "Organic field grower registered on MarketLink.",
+          });
+          act({ type: "role", role: "farmer" }, "Farmer account created. Welcome to MarketLink!");
+          navigate("/farmer");
+        } else {
+          await registerCustomerApi({
+            name: value(d, "name"),
+            email,
+            password,
+            phone: value(d, "phone"),
+            address: value(d, "address"),
+          });
+          act({ type: "role", role: "customer" }, "Customer account created. Welcome to MarketLink!");
+          navigate("/customer");
+        }
+      } catch (err: any) {
+        setError(err?.message || "Registration failed. Please check the provided information.");
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      try {
+        const session = await loginApi(email, password);
+        const resolvedRole = session.role || (role === "admin" ? "admin" : loginRole);
+        act({ type: "role", role: resolvedRole }, `Signed in as ${session.name || resolvedRole}.`);
+        const next = params.get("next");
+        navigate(
+          next && next.startsWith(`/${resolvedRole}`) && !next.startsWith("//")
+            ? next
+            : `/${resolvedRole}`,
+        );
+      } catch (err: any) {
+        setError(err?.message || "Invalid email or password. Please verify your credentials.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
     <div className="auth">
       <div className="auth-photo">
@@ -944,34 +1099,52 @@ export function Auth() {
               <ArrowUpRight />
             </Link>
           </div>
-        ) : success ? (
-          <Notice>
-            {role === "farmer"
-              ? "Your sample registration preview is complete. A real stall needs administrator approval before publishing."
-              : "Your sample registration form is valid. No personal details or password have been stored."}
-            <p>
-              <button className="button" onClick={() => enter(role)}>
-                Explore the existing {role} demo
-              </button>
-            </p>
-          </Notice>
         ) : (
           <>
-            <Notice>
-              Development preview. Use fictional details only. No authentication
-              server or email service is connected.
-            </Notice>
-            <Form
-              onSubmit={(d) => {
-                setError("");
-                if (register && value(d, "password") !== value(d, "confirm")) {
-                  setError("The passwords must match.");
-                  return;
-                }
-                if (register) setSuccess(true);
-                else enter(loginRole);
-              }}
-            >
+            {!register && (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
+                <span style={{ fontSize: "12px", color: "var(--pe-muted)", alignSelf: "center" }}>Quick Fill:</span>
+                <button
+                  type="button"
+                  className="pe-cat-btn"
+                  style={{ fontSize: "11px", padding: "4px 8px" }}
+                  onClick={() => {
+                    setEmailInput("hira.khan@example.com");
+                    setPasswordInput("CustomerPass123!");
+                    setRole("customer");
+                  }}
+                >
+                  Customer Demo
+                </button>
+                <button
+                  type="button"
+                  className="pe-cat-btn"
+                  style={{ fontSize: "11px", padding: "4px 8px" }}
+                  onClick={() => {
+                    setEmailInput("tariq@goodearthgrowers.pk");
+                    setPasswordInput("FarmerPass123!");
+                    setRole("farmer");
+                  }}
+                >
+                  Farmer Demo
+                </button>
+                {role === "admin" && (
+                  <button
+                    type="button"
+                    className="pe-cat-btn"
+                    style={{ fontSize: "11px", padding: "4px 8px" }}
+                    onClick={() => {
+                      setEmailInput("admin@marketlink.pk");
+                      setPasswordInput("AdminPass123!");
+                      setRole("admin");
+                    }}
+                  >
+                    Admin Demo
+                  </button>
+                )}
+              </div>
+            )}
+            <Form onSubmit={handleFormSubmit}>
               {register && (
                 <>
                   <Field
@@ -1006,11 +1179,13 @@ export function Auth() {
                   required
                   autoComplete="off"
                   placeholder="sample@example.test"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
                 />
               </Field>
               <Field
                 label="Password"
-                hint="Demo form rule: at least 8 characters. Never use a real password here."
+                hint="Password rule: at least 8 characters. Securely hashed on MongoDB Atlas."
               >
                 <div className="password-field">
                   <input
@@ -1019,6 +1194,8 @@ export function Auth() {
                     required
                     minLength={8}
                     autoComplete="off"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
                   />
                   <button
                     type="button"
@@ -1042,13 +1219,13 @@ export function Auth() {
                 </Field>
               )}
               {!register && role !== "admin" && (
-                <Field label="Development account">
+                <Field label="Target Role">
                   <select
                     value={loginRole}
                     onChange={(e) => setRole(e.target.value as Role)}
                   >
-                    <option value="customer">Customer demo</option>
-                    <option value="farmer">Farmer demo</option>
+                    <option value="customer">Customer Account</option>
+                    <option value="farmer">Farmer Stall Account</option>
                   </select>
                 </Field>
               )}
@@ -1057,10 +1234,12 @@ export function Auth() {
                   {error}
                 </p>
               )}
-              <button className="button" type="submit">
-                {register
-                  ? "Preview registration"
-                  : "Enter development account"}
+              <button className="button" type="submit" disabled={loading}>
+                {loading
+                  ? "Verifying credentials..."
+                  : register
+                    ? "Complete Registration"
+                    : "Sign in to MarketLink"}
                 <ArrowRight size={18} />
               </button>
             </Form>
@@ -1072,9 +1251,9 @@ export function Auth() {
                   <Link to="/register">New to the market? Join us</Link>
                   <button
                     className="text-button"
-                    onClick={() => enter(loginRole)}
+                    onClick={() => enter(role === "admin" ? "admin" : loginRole)}
                   >
-                    Try {loginRole} demo without a form
+                    Direct Sign In as {role === "admin" ? "Admin" : loginRole}
                   </button>
                 </>
               )}

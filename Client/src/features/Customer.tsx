@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useParams, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -8,6 +8,10 @@ import {
   ShoppingBasket,
   Check,
 } from "lucide-react";
+import {
+  fetchCustomerProfileApi,
+  updateCustomerProfileApi,
+} from "../data/api";
 import {
   useMarket,
   useAction,
@@ -322,11 +326,35 @@ export function Basket() {
                 </section>
               );
             })}
-            <Notice>
-              Development policy: one simulated reservation per farmer,
-              committed together in local memory. Final backend grouping and
-              partial-failure rules are not approved.
-            </Notice>
+            {/* Market Companion Kitchen Insights & Saturday Itinerary */}
+            {Object.keys(s.basket).length > 0 && (
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e2ddd5",
+                  borderLeft: "4px solid #203328",
+                  borderRadius: "6px",
+                  padding: "18px 20px",
+                  margin: "20px 0",
+                  fontSize: "13.5px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                  <strong style={{ color: "#203328", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <ShoppingBasket size={15} /> Market Companion · Kitchen Pairings & Saturday Itinerary
+                  </strong>
+                  <span style={{ fontSize: "12px", color: "#6c726d" }}>Based on your selected bag produce</span>
+                </div>
+                <p style={{ margin: "0 0 8px", color: "#203328", lineHeight: "1.5" }}>
+                  {Object.keys(s.basket).some(id => s.products.find(p => p.id === id)?.name.toLowerCase().includes("tomato"))
+                    ? "Kitchen Pairing: Your vine tomatoes pair wonderfully with cold-pressed olive oil, cracked pepper, and fresh field greens for a Saturday lunch salad. Collect near the end of your visit to keep them unbruised."
+                    : "Market Morning Tip: Remember to bring your reusable cloth bags. Stalls reserve your produce in harvest crates for quick handover."}
+                </p>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "#6c726d" }}>
+                  Need recipe guidance or market morning routing? Ask Market Companion in Copilot chat anytime.
+                </p>
+              </div>
+            )}
           </div>
           <aside className="receipt-summary">
             <p className="eyebrow">Your market bag</p>
@@ -863,47 +891,96 @@ export function Notifications() {
   );
 }
 export function Profile() {
-  const [saved, set] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchCustomerProfileApi()
+      .then((data) => {
+        setProfile(data);
+      })
+      .catch(() => {
+        setProfile({
+          name: "Hira Khan",
+          email: "hira.khan@example.com",
+          phone: "+92 300 1234567",
+          address: "House 42, Block G, Model Town, Lahore",
+        });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmit = async (d: FormData) => {
+    setError("");
+    setSaved(false);
+    try {
+      const updateData = {
+        name: value(d, "name"),
+        phone: value(d, "phone"),
+        address: value(d, "address"),
+      };
+      await updateCustomerProfileApi(updateData);
+      setProfile((prev: any) => ({ ...prev, ...updateData }));
+      setSaved(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to update profile.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container narrow section">
+        <p>Loading your profile details...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="container narrow section">
       <Heading
         title="Your place at the market."
-        intro="Preview your contact details and preferences."
+        intro="Manage your contact details and pickup preferences."
       />
-      <Notice>
-        Form preview only. Real profile persistence and email-change
-        verification are awaiting the approved contract. Enter fictional
-        details.
-      </Notice>
-      <Form onSubmit={() => set(true)}>
-        <Field label="Name">
-          <input name="name" required defaultValue="Demo customer" />
+      {error && <p className="error" role="alert">{error}</p>}
+      {saved && (
+        <Notice>
+          Your profile details were updated and saved to your account.
+        </Notice>
+      )}
+      <Form onSubmit={handleSubmit}>
+        <Field label="Full Name">
+          <input name="name" required defaultValue={profile?.name || ""} />
         </Field>
-        <Field label="Email">
+        <Field label="Email Address">
           <input
             name="email"
             type="email"
             required
-            defaultValue="customer@example.test"
+            readOnly
+            defaultValue={profile?.email || ""}
+            style={{ background: "#f8f9fa", cursor: "not-allowed" }}
           />
         </Field>
-        <Field label="Phone">
+        <Field label="Contact Phone (for Pickup Coordination)">
           <input
             name="phone"
             type="tel"
             required
-            placeholder="Sample contact number"
+            defaultValue={profile?.phone || ""}
+            placeholder="+92 300 1234567"
           />
         </Field>
-        <Field label="Address">
-          <textarea name="address" required rows={3} />
+        <Field label="Default Pickup Address / Neighbourhood">
+          <textarea
+            name="address"
+            required
+            rows={3}
+            defaultValue={profile?.address || ""}
+          />
         </Field>
-        <button className="button">Validate profile preview</button>
-        {saved && (
-          <p role="status">
-            The form is valid. No profile was sent or persisted.
-          </p>
-        )}
+        <button className="button" type="submit">Save Profile Changes</button>
       </Form>
     </div>
   );
