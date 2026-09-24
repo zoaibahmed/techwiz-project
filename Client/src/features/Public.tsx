@@ -1,4 +1,5 @@
-import { InteractiveMap } from "../components/LivingMap";
+import { useVisitor } from "../data/visitor-context";
+import { MarketMap as InteractiveMap } from "../components/MarketMap";
 import { lazy, useEffect, useState } from "react";
 import {
   Link,
@@ -42,10 +43,21 @@ import {
   registerFarmerApi,
 } from "../data/api";
 
+// Scope public records without mutating the account/workspace store.
+function useDiscoveryState() {
+  const state=useMarket();
+  const {visitor}=useVisitor();
+  const markets=state.markets.filter(m=>m.countryCode===visitor.country && (!visitor.city || m.city?.toLowerCase()===visitor.city.toLowerCase()));
+  const ids=new Set(markets.map(m=>m.id));
+  const farmers=state.farmers.filter(f=>ids.has(f.marketId));
+  const farmerIds=new Set(farmers.map(f=>f.id));
+  return {...state,markets,farmers,products:state.products.filter(p=>farmerIds.has(p.farmerId)),slots:state.slots.filter(slot=>ids.has(slot.marketId))};
+}
+
 export const Home = lazy(() => import('./LivingHome').then(module => ({ default: module.LivingHome })));
 
 export function Markets() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const [params, set] = useSearchParams();
   const [selected, select] = useState(s.markets[0]?.id ?? "");
   const [map, showMap] = useState(false);
@@ -197,7 +209,7 @@ export function Markets() {
 }
 
 export function MarketDetail() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const { marketId } = useParams();
   const m = s.markets.find((m) => m.id === marketId);
   if (!m) return <NotFound />;
@@ -328,7 +340,7 @@ export function MarketDetail() {
 }
 
 export function Farmers() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const [q, set] = useState("");
   const [selectedMarket, setSelectedMarket] = useState("");
 
@@ -427,7 +439,7 @@ export function Farmers() {
 }
 
 export function FarmerDetail() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const { farmerId } = useParams();
   const f = s.farmers.find((f) => f.id === farmerId && f.state === "Approved");
   if (!f) return <NotFound />;
@@ -548,7 +560,7 @@ export function FarmerDetail() {
 }
 
 export function Products() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const [params, set] = useSearchParams();
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "";
@@ -727,7 +739,7 @@ export function Products() {
 }
 
 export function ProductDetail() {
-  const s = useMarket();
+  const s = useDiscoveryState();
   const act = useAction();
   const { productId } = useParams();
   const p = s.products.find((p) => p.id === productId && p.visible);

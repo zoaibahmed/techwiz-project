@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({page}) => {
+ await page.route('**/api/**', route => route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'Isolated frontend test'}})}));
+ await page.addInitScript(()=>localStorage.setItem('marketlink.visitor.v1',JSON.stringify({version:1,locale:'en',country:'PK',city:'Lahore',day:'2026-10-03',seen:true})));
+});
 import type { Page } from "@playwright/test";
 const routes = {
   public: [

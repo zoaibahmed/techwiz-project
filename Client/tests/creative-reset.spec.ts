@@ -1,10 +1,14 @@
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({page}) => {
+ await page.route('**/api/**', route => route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'Isolated frontend test'}})}));
+ await page.addInitScript(()=>localStorage.setItem('marketlink.visitor.v1',JSON.stringify({version:1,locale:'en',country:'PK',city:'Lahore',day:'2026-10-03',seen:true})));
+});
 
 test("homepage selection connects market, growers, produce and basket", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Step into the market" }).click();
+  await page.locator(".global-hero").getByRole("button", { name: "Find your market", exact:true }).click();
   await expect(page.locator(".explorer-heading")).toBeInViewport();
   await page.getByRole("button", { name: "Sun 4 Oct", exact: true }).click();
   await expect(page.locator(".selected-market-ribbon")).toContainText(
@@ -44,7 +48,7 @@ test("homepage selection connects market, growers, produce and basket", async ({
     "Added to your sample market bag",
   );
   await page
-    .getByRole("link", { name: "Review basket & plan collection" })
+    .getByRole("link", { name: "Review basket & plan collection" }).first()
     .click();
   await expect(page.locator("h1")).toContainText("basket");
   await expect(page.locator("main")).toContainText("Vine tomatoes");

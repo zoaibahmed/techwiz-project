@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown,
@@ -6,782 +6,701 @@ import {
   ArrowUpRight,
   CalendarDays,
   Check,
+  Clock,
+  Heart,
   MapPin,
+  Minus,
+  Plus,
+  Search,
   ShoppingBasket,
   Sprout,
-  Clock,
-  Globe,
-  ShoppingBag,
-  Users,
-  Star,
-  CheckCircle2,
-  ShieldCheck,
-  Sun,
-  HelpCircle,
-  Search,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useMarket, useAction, Favourite, Notice } from "../components/ui";
-import { useVisitor } from "../data/visitor-context";
+import { useMarket, useAction, Notice } from "../components/ui";
 import { MarketMap } from "../components/MarketMap";
+import { marketDayView } from "../data/living-selectors";
 import {
   countryName,
   formatMarketDay,
   formatMarketMoney,
+  formatMarketTime,
   hasMarketCoverage,
   getAvailableDays,
-  demoLocation,
 } from "../data/visitor";
-import { marketDayView } from "../data/living-selectors";
+import { CoverageEmpty } from "../components/CoverageBoundary";
+import { useVisitor } from "../data/visitor-context";
 
 gsap.registerPlugin(ScrollTrigger);
-
 export function LivingHome() {
   const s = useMarket();
   const act = useAction();
-  const { visitor, openModal, t, isRTL } = useVisitor();
   const reduce = useReducedMotion();
+  const { visitor, updateVisitor: save, openModal: open, t } = useVisitor();
+  const covered = hasMarketCoverage(s.markets, visitor.country, visitor.city);
   const root = useRef<HTMLDivElement>(null);
-
-  // Active country resolution (from visitor preferences or demo default)
-  const activeCountry = visitor.country || demoLocation.country;
-  const activeCountryName = countryName(activeCountry, visitor.locale);
-
-  // Check if current country has participating markets
-  const hasCoverage = useMemo(
-    () => hasMarketCoverage(s.markets, activeCountry),
-    [s.markets, activeCountry],
-  );
-
-  // Markets belonging to active country
-  const countryMarkets = useMemo(
-    () =>
-      s.markets.filter(
-        (m) => (m.countryCode ?? "PK").toUpperCase() === activeCountry.toUpperCase(),
-      ),
-    [s.markets, activeCountry],
-  );
-
-  // Available dates for active country
-  const days = useMemo(
-    () => getAvailableDays(s.markets, activeCountry, visitor.city),
-    [s.markets, activeCountry, visitor.city],
-  );
-
-  const [day, setDay] = useState(() => visitor.day || days[0] || demoLocation.days[0]);
+  const days = getAvailableDays(s.markets, visitor.country, visitor.city);
+  const day = days.includes(visitor.day) ? visitor.day : (days[0] ?? "");
   const [query, setQuery] = useState("");
-  const [marketId, setMarket] = useState(() => countryMarkets[0]?.id ?? "");
+  const [marketId, setMarket] = useState("");
+  const [farmerId, setFarmer] = useState("");
+  const [productId, setProduct] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState("");
-
-  // Sync state if country or visitor preferences change
-  useEffect(() => {
-    if (countryMarkets.length > 0) {
-      if (!countryMarkets.some((m) => m.id === marketId)) {
-        setMarket(countryMarkets[0]?.id ?? "");
-      }
-    }
-  }, [countryMarkets, marketId]);
-
-  useEffect(() => {
-    if (days.length > 0 && !days.includes(day)) {
-      setDay(days[0]);
-    }
-  }, [days, day]);
-
+  const date = (v: string) =>
+    formatMarketDay(v, visitor.locale, market?.timeZone);
+  const money = (v: number) =>
+    formatMarketMoney(v, market?.currency, visitor.locale);
+  const time = (v: string) =>
+    formatMarketTime(v, visitor.locale, market?.timeZone);
   const view = marketDayView(s, day);
-
-  const markets = useMemo(() => {
-    if (!hasCoverage) return [];
-    return countryMarkets
-      .filter((m) => m.active && m.day === day)
-      .filter((m) =>
-        `${m.name} ${m.area ?? ""} ${m.city ?? ""}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      );
-  }, [countryMarkets, hasCoverage, day, query]);
-
+  const markets = covered
+    ? view.markets
+        .filter(
+          (m) =>
+            m.countryCode === visitor.country &&
+            (!visitor.city ||
+              m.city?.toLowerCase() === visitor.city.toLowerCase()),
+        )
+        .filter((m) =>
+          `${m.name} ${m.area}`.toLowerCase().includes(query.toLowerCase()),
+        )
+    : [];
   const market = markets.find((m) => m.id === marketId) ?? markets[0];
-  const marketCurrency = market?.currency ?? "PKR";
-  const marketTimeZone = market?.timeZone ?? "Asia/Karachi";
+  const growers = view.growers.filter((f) => f.marketId === market?.id);
+  const farmer = growers.find((f) => f.id === farmerId) ?? growers[0];
+  const offers = view.products.filter((p) => p.farmerId === farmer?.id);
+  const product = offers.find((p) => p.id === productId) ?? offers[0];
+  const slots = s.slots.filter(
+    (slot) =>
+      slot.marketId === market?.id &&
+      slot.farmerId === farmer?.id &&
+      slot.start.startsWith(day) &&
+      slot.cutoff > s.now,
+  );
 
   const basketCount = Object.values(s.basket).reduce((a, b) => a + b, 0);
-
-  function scrollToDiscovery() {
-    document.getElementById("market-explorer")?.scrollIntoView({
-      behavior: reduce ? "instant" : "smooth",
-      block: "start",
-    });
-  }
-
-  function chooseDay(value: string) {
-    setDay(value);
+  const scrollTo = (id: string) =>
+    document
+      .getElementById(id)
+      ?.scrollIntoView({
+        behavior: reduce ? "instant" : "smooth",
+        block: "start",
+      });
+  const chooseMarket = (id: string) => {
+    setMarket(id);
+    setQuantity(1);
     setAdded("");
-  }
-
-  function chooseMarket(value: string) {
-    setMarket(value);
-    setAdded("");
-  }
-
-  // Choreographed GSAP entrance and ScrollTrigger animation
+  };
   useEffect(() => {
-    const media = gsap.matchMedia();
-    media.add("(prefers-reduced-motion: no-preference)", () => {
-      const ctx = gsap.context(() => {
-        const entrance = gsap.timeline({ defaults: { ease: "power3.out" } });
-        entrance
-          .from(
-            ".arrival-word",
-            { yPercent: 90, rotation: 3, stagger: 0.08, duration: 1.1 },
-            0,
-          )
-          .from(
-            ".arrival-main-photo",
-            { clipPath: "inset(18% 18% 18% 18%)", scale: 0.95, duration: 1.15 },
-            0.12,
-          )
-          .from(
-            ".arrival-portrait",
-            { y: 60, rotation: -9, duration: 0.95 },
-            0.25,
-          )
-          .from(
-            ".arrival-ticket",
-            { x: 28, rotation: 4, duration: 0.75 },
-            0.4,
-          );
-
-        gsap
-          .timeline({
-            scrollTrigger: {
-              trigger: ".arrival-scene",
-              start: "top top",
-              end: "bottom 15%",
-              scrub: 0.35,
-            },
-          })
-          .to(".arrival-stage", { y: -50, scale: 0.96, ease: "none" }, 0)
-          .to(".arrival-portrait", { y: -75, rotation: 0, ease: "none" }, 0)
-          .to(
-            ".arrival-connector path",
-            { strokeDashoffset: 0, ease: "none" },
-            0,
-          );
-      }, root);
-      return () => ctx.revert();
-    });
-    return () => media.revert();
-  }, []);
-
+    setQuantity(1);
+    setAdded("");
+    setQuery("");
+  }, [visitor.country, visitor.city, day]);
   useEffect(() => {
     if (!added) return;
     const timer = setTimeout(() => setAdded(""), 3500);
     return () => clearTimeout(timer);
   }, [added]);
-
+  useEffect(() => {
+    const media = gsap.matchMedia();
+    media.add("(prefers-reduced-motion: no-preference)", () => {
+      const ctx = gsap.context(() => {
+        gsap
+          .timeline({ defaults: { ease: "power3.out" } })
+          .from(".global-hero h1", {
+            y: 35,
+            clipPath: "inset(100% 0 0)",
+            duration: 0.8,
+          })
+          .from(".global-discovery-form", { y: 30, duration: 0.65 }, 0.18)
+          .from(
+            ".global-hero-image img",
+            { scale: 1.14, clipPath: "inset(0 0 100% 0)", duration: 1.05 },
+            0.05,
+          )
+          .from(
+            ".global-how article",
+            { x: 25, stagger: 0.11, duration: 0.5 },
+            0.5,
+          );
+        gsap.to(".arrival-stage", {
+          y: -35,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".global-hero",
+            start: "top top",
+            end: "bottom top",
+            scrub: 0.4,
+          },
+        });
+        gsap.from(".global-journey-line", {
+          scaleX: 0,
+          transformOrigin: "left",
+          scrollTrigger: {
+            trigger: ".global-how",
+            start: "top 90%",
+            end: "bottom 30%",
+            scrub: true,
+          },
+        });
+        if (covered) gsap.from(".global-grower-photo img", {
+          clipPath: "inset(0 0 100% 0)",
+          duration: 0.85,
+          scrollTrigger: { trigger: ".global-grower-photo", start: "top 85%" },
+        });
+      }, root);
+      return () => ctx.revert();
+    });
+    return () => media.revert();
+  }, [covered]);
   return (
-    <div className="market-experience" ref={root} dir={isRTL ? "rtl" : "ltr"}>
-      {/* 1. HERO ARRIVAL SCENE */}
-      <section className="arrival-scene" aria-labelledby="arrival-title">
-        <div className="arrival-meta">
-          <span>
-            <MapPin size={14} />
-            {activeCountryName} {visitor.city ? `(${visitor.city})` : ""}
-            {activeCountry === "PK" ? " · demo edition" : ""}
+    <div className="global-market" ref={root}>
+      <section className="global-hero">
+        <div className="global-hero-copy">
+          <span className="global-wordmark">
+            <Sprout size={18} />
+            {t("living")}
           </span>
-          <button
-            type="button"
-            className="change-loc-link"
-            onClick={openModal}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#385437",
-              fontSize: "11px",
-              cursor: "pointer",
-              textDecoration: "underline",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <Globe size={12} />
-            {t("change")}
-          </button>
+          <h1 tabIndex={-1}>{t("headline")}</h1>
+          <p className="global-lead">{t("lead")}</p>
+          <div className="global-discovery-form">
+            <button className="hero-location" onClick={open}>
+              <MapPin size={20} />
+              <span>
+                <small>{t("location")}</small>
+                <strong>
+                  {covered
+                    ? market?.id.startsWith("demo-") ? t("lahore") : `${visitor.city} · ${countryName(visitor.country, visitor.locale)}`
+                    : visitor.country
+                      ? countryName(visitor.country, visitor.locale)
+                      : t("anywhere")}
+                </strong>
+              </span>
+              <ArrowUpRight size={18} />
+            </button>
+            {covered && (
+              <label className="hero-day">
+                <CalendarDays size={20} />
+                <span>
+                  <small>{t("day")}</small>
+                  <select
+                    aria-label={t("day")}
+                    value={day}
+                    onChange={(e) => save({ ...visitor, day: e.target.value })}
+                  >
+                    {days.map((d) => (
+                      <option value={d} key={d}>
+                        {date(d)}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+            )}
+            <button
+              className="global-primary"
+              onClick={() => (covered ? scrollTo("market-explorer") : open())}
+            >
+              {t("discover")}
+              <ArrowRight size={18} />
+            </button>
+          </div>
+          <small className="global-no-account">
+            <Check size={14} />
+            {t("noAccount")}
+          </small>
         </div>
-
-        <div className="arrival-title">
-          <p>{t("welcome")}</p>
-          <h1 id="arrival-title" tabIndex={-1}>
-            <span className="arrival-word">The living</span>{" "}
-            <span className="arrival-word">market.</span>
-          </h1>
-        </div>
-
-        <div className="arrival-stage">
-          <figure className="arrival-main-photo">
+        <div className="global-hero-visual arrival-stage">
+          <figure className="global-hero-image">
             <img
               src="/images/market-arrival.jpg"
-              alt="Editorial street-market scene with fresh produce and neighbours gathering"
+              alt={t("editorial")}
               fetchPriority="high"
             />
             <figcaption>{t("editorial")}</figcaption>
           </figure>
-
-          <figure className="arrival-portrait">
-            <img
-              src="/images/market-person.jpg"
-              alt="Editorial portrait of a local grower"
-            />
-            <figcaption>
-              {t("people")}
-              <small>{t("portrait")}</small>
-            </figcaption>
-          </figure>
-
-          <div className="arrival-ticket">
-            <Sprout size={27} />
-            <span>{t("day")}</span>
-            <strong>{formatMarketDay(day, visitor.locale, marketTimeZone)}</strong>
-            <p>
-              {t("fresh")}
-              <br />
-              {t("people")}
-              <br />
-              {t("collect")}
-            </p>
-            <button onClick={scrollToDiscovery}>
-              {t("discover")} <ArrowDown size={17} />
+          <div className="global-photo-caption">
+            <Sprout size={28} />
+            <strong>{t("harvest")}</strong>
+            <ArrowDown size={23} />
+          </div>
+        </div>
+      </section>
+      <section className="global-how" aria-label={t("navHelp")}>
+        <div className="global-journey-line" />
+        {(
+          [
+            {
+              icon: Sprout,
+              title: "fresh",
+              body: "freshBody",
+              target: "reserve-title",
+            },
+            {
+              icon: Heart,
+              title: "people",
+              body: "peopleBody",
+              target: "grower-section",
+            },
+            {
+              icon: ShoppingBasket,
+              title: "collect",
+              body: "collectBody",
+              target: "reserve-title",
+            },
+          ] as const
+        ).map(({ icon: Icon, title, body, target }, i) => (
+          <article key={title}>
+            <span className="journey-number">0{i + 1}</span>
+            <div>
+              <h2>
+                <Icon size={19} />
+                {t(title)}
+              </h2>
+              <p>{t(body)}</p>
+            </div>
+            <button
+              aria-label={t(title)}
+              onClick={() => (covered ? scrollTo(target) : open())}
+            >
+              <ArrowDown size={18} />
             </button>
-          </div>
-        </div>
-
-        <div className="arrival-bottom">
-          <p>
-            {t("lead")}
-            <br />
-            <strong>{t("storyTitle")}</strong>
-          </p>
-          <button
-            onClick={scrollToDiscovery}
-            className="arrival-down"
-            aria-label={t("discover")}
-          >
-            <ArrowDown />
-          </button>
-          <span>
-            {t("demoNote")}
-            <br />
-            {t("editorial")}
-          </span>
-        </div>
-
-        <svg
-          className="arrival-connector"
-          viewBox="0 0 600 90"
-          aria-hidden="true"
-        >
-          <path
-            d="M20 4C20 80 420 -15 570 65l-15 -3m15 3-7 -14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="700"
-            strokeDashoffset="700"
-          />
-        </svg>
+          </article>
+        ))}
       </section>
-
-      {/* 2. DISCOVER A LOCATION & MORNING BRIEFING */}
-      <section className="pe-location-bar" aria-labelledby="loc-bar-title">
-        <div className="pe-location-info">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <span className="pe-pilot-badge">Active Market Hub</span>
-            <span style={{ fontSize: "13px", color: "var(--pe-muted)" }}>
-              <Sun size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
-              Saturday Morning: 23°C · Clear Sky · Perfect Market Walk
-            </span>
-          </div>
-          <h3 id="loc-bar-title">{activeCountryName} · {visitor.city || "Lahore"} Region</h3>
-          <p>
-            <MapPin size={15} />
-            Showing operating farmers markets in the Lahore metropolitan pilot area.
-          </p>
-        </div>
-        <div className="pe-location-controls">
-          <button
-            type="button"
-            className="button secondary"
-            onClick={openModal}
-            style={{ fontSize: "13px", padding: "10px 16px" }}
-          >
-            <Globe size={15} /> Change Country or City
-          </button>
-          <a
-            href="#market-discovery"
-            className="button"
-            style={{ fontSize: "13px", padding: "10px 18px" }}
-          >
-            Explore Markets <ArrowDown size={15} />
-          </a>
-        </div>
-      </section>
-
-      {/* 3. FIND A MARKET DAY (RHYTHM STRIP) */}
-      <section className="container" id="market-discovery" style={{ marginBottom: "20px" }}>
-        <div className="pe-section-header">
-          <span className="pe-eyebrow"><CalendarDays size={14} /> Market Day Calendar</span>
-          <h2 className="pe-section-title">Select your morning harvest day.</h2>
-          <p className="pe-section-lead">
-            Farmers harvest specifically for confirmed Saturday and Sunday arrivals. Select a date to explore attending stalls and reserve produce before Friday evening cutoffs.
-          </p>
-        </div>
-
-        <div className="pe-day-strip" aria-label="Market day selection">
-          {days.map((d) => {
-            const dayMarketsCount = countryMarkets.filter((m) => m.active && m.day === d).length;
-            const isSelected = day === d;
-            return (
-              <button
-                key={d}
-                type="button"
-                className={`pe-day-pill ${isSelected ? "active" : ""}`}
-                onClick={() => chooseDay(d)}
-                aria-pressed={isSelected}
-              >
-                <CalendarDays size={16} />
-                <span>{formatMarketDay(d, visitor.locale, marketTimeZone)}</span>
-                <span className="pe-day-count">{dayMarketsCount} markets</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 4. EXPLORE MARKETS & REAL INTERACTIVE MAP */}
-      <section className="container" style={{ marginBottom: "64px" }}>
-        <div className="pe-markets-layout">
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <strong style={{ fontSize: "15px", color: "var(--pe-forest)" }}>
-                {markets.length} Participating Venues in {activeCountryName}
-              </strong>
-              <div style={{ position: "relative", width: "240px" }}>
-                <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--pe-muted)" }} />
+      {!covered ? (
+        <CoverageEmpty />
+      ) : (
+        <>
+          <section id="market-explorer" className="global-explorer">
+            <div className="explorer-heading">
+              <div>
+                <span>
+                  <MapPin size={14} />
+                  {visitor.city} ·{" "}
+                  {countryName(visitor.country, visitor.locale)}
+                </span>
+                <h2>{t("discovery")}</h2>
+              </div>
+              <p>{t("discoveryBody")}</p>
+            </div>
+            <div className="global-explorer-toolbar">
+              <label>
+                <Search size={18} />
                 <input
-                  type="text"
-                  placeholder="Filter neighbourhood..."
+                  aria-label={t("neighbourhood")}
+                  placeholder={t("search")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "6px 10px 6px 30px",
-                    fontSize: "13px",
-                    border: "1px solid var(--pe-border)",
-                    borderRadius: "4px",
-                    background: "var(--pe-paper)",
-                  }}
                 />
+              </label>
+              <div className="global-days">
+                {days.map((d) => (
+                  <button
+                    key={d}
+                    aria-pressed={d === day}
+                    onClick={() => save({ ...visitor, day: d })}
+                  >
+                    {day === d && (
+                      <motion.span
+                        layoutId="global-day"
+                        transition={{ duration: reduce ? 0 : 0.25 }}
+                      />
+                    )}
+                    <CalendarDays size={16} />
+                    <span>{date(d)}</span>
+                  </button>
+                ))}
               </div>
+              <Link to={`/markets?${new URLSearchParams({ day, q: query })}`}>
+                {t("directory")}
+                <ArrowUpRight size={16} />
+              </Link>
             </div>
-
-            <div className="pe-market-cards-list">
-              {markets.map((m) => {
-                const attendingCount = s.farmers.filter((f) => f.marketId === m.id && f.state === "Approved").length;
-                const isSelected = market?.id === m.id;
-                return (
-                  <article
+            {visitor.locale === "ur" && (
+              <p className="fixture-source-note">{t("fixtureLanguage")}</p>
+            )}
+            <div className="global-discovery-workspace">
+              <div className="global-market-list">
+                <div className="global-list-count">
+                  <strong>
+                    {markets.length} {t("markets")}
+                  </strong>
+                  <span>{t("sampleMarket")}</span>
+                </div>
+                {markets.map((m, i) => (
+                  <button
                     key={m.id}
-                    className={`pe-market-card ${isSelected ? "selected" : ""}`}
+                    className={`explorer-market-choice ${market?.id === m.id ? "selected" : ""}`}
+                    aria-pressed={market?.id === m.id}
                     onClick={() => chooseMarket(m.id)}
                   >
-                    <div className="pe-market-card-top">
-                      <div>
-                        <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--pe-harvest)", fontWeight: "600" }}>
-                          {m.area} · Lahore
-                        </span>
-                        <h3 style={{ margin: "4px 0" }}>{m.name}</h3>
-                      </div>
-                      <Favourite id={m.id} />
-                    </div>
-
-                    <div className="pe-market-meta-row">
-                      <span className="pe-market-meta-item">
-                        <MapPin size={14} color="var(--pe-forest)" />
-                        {m.address}
-                      </span>
-                      <span className="pe-market-meta-item">
-                        <Clock size={14} color="var(--pe-forest)" />
-                        {m.hours} · {marketTimeZone}
-                      </span>
-                    </div>
-
-                    <div className="pe-market-card-footer">
-                      <span>
-                        <Sprout size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
-                        <strong>{attendingCount} verified stalls</strong> attending
-                      </span>
-                      <Link
-                        to={`/markets/${m.id}`}
-                        className="text-link"
-                        style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--pe-forest)", fontWeight: "600" }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Market Details <ArrowUpRight size={15} />
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
-
-              {!markets.length && (
-                <div style={{ padding: "32px", textAlign: "center", background: "var(--pe-cream)", borderRadius: "6px" }}>
-                  <p style={{ margin: "0 0 12px", color: "var(--pe-muted)" }}>No market venues match your current filter.</p>
-                  <button className="button secondary compact" onClick={() => setQuery("")}>
-                    Reset Search
+                    <span className="global-market-number">0{i + 1}</span>
+                    <span>
+                      <strong lang="en" dir="ltr">
+                        {m.name}
+                      </strong>
+                      <small lang="en">{m.area}</small>
+                      <small>
+                        <Clock size={12} />
+                        <bdi>{m.hours}</bdi>
+                      </small>
+                    </span>
+                    <ArrowUpRight size={18} />
                   </button>
+                ))}
+                {!markets.length && (
+                  <div className="global-list-empty">
+                    <p>{t("noMarket")}</p>
+                    <button onClick={() => setQuery("")}>{t("clear")}</button>
+                  </div>
+                )}
+                <small className="global-list-foot">{t("demoNote")}</small>
+              </div>
+              <MarketMap
+                markets={markets}
+                selected={market?.id ?? ""}
+                onSelect={chooseMarket}
+              />
+            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                className="selected-market-ribbon"
+                key={`${day}-${market?.id}`}
+                initial={{ x: reduce ? 0 : 24 }}
+                animate={{ x: 0 }}
+                exit={{ x: reduce ? 0 : -24, opacity: reduce ? 1 : 0 }}
+                transition={{ duration: reduce ? 0 : 0.2 }}
+              >
+                <div>
+                  <span>{t("selected")}</span>
+                  <strong lang="en">{market?.name ?? t("noMarket")}</strong>
                 </div>
+                <div>
+                  <span>{t("when")}</span>
+                  <strong>{date(day)}</strong>
+                </div>
+                <div>
+                  <span>{t("navGrowers")}</span>
+                  <strong>
+                    {growers.length} {t("growers")}
+                  </strong>
+                </div>
+                {market && (
+                  <Link to={`/markets/${market.id}`}>
+                    {t("marketDetails")}
+                    <ArrowUpRight size={17} />
+                  </Link>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </section>
+          <section className="global-growers" id="grower-section">
+            <figure className="global-grower-photo">
+              <img
+                src="/images/market-person.jpg"
+                alt={t("portrait")}
+                loading="lazy"
+              />
+              <figcaption>{t("portrait")}</figcaption>
+            </figure>
+            <div className="global-grower-copy">
+              <span>
+                <Sprout size={16} />
+                {t("people")}
+              </span>
+              <h2>{t("stallTitle")}</h2>
+              <p>{t("stallBody")}</p>
+              <div className="grower-switcher">
+                {growers.map((f) => (
+                  <button
+                    key={f.id}
+                    aria-pressed={farmer?.id === f.id}
+                    onClick={() => {
+                      setFarmer(f.id);
+                      setQuantity(1);
+                      setAdded("");
+                    }}
+                  >
+                    <strong lang="en">{f.name}</strong>
+                    <ArrowRight size={18} />
+                  </button>
+                ))}
+              </div>
+              {farmer ? (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={farmer.id}
+                    className="global-grower-story"
+                    initial={{ y: reduce ? 0 : 14, opacity: reduce ? 1 : 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ opacity: reduce ? 1 : 0 }}
+                    transition={{ duration: reduce ? 0 : 0.2 }}
+                  >
+                    <p lang="en" dir="ltr">
+                      {farmer.story}
+                    </p>
+                    <Link to={`/farmers/${farmer.id}`}>
+                      {t("profile")}
+                      <ArrowUpRight size={16} />
+                    </Link>
+                  </motion.div>
+                </AnimatePresence>
+              ) : (
+                <p className="no-stall">{t("noGrower")}</p>
               )}
             </div>
-          </div>
-
-          {/* Interactive Leaflet Discovery Map */}
-          <div className="pe-map-container">
-            <MarketMap
-              markets={markets}
-              selected={market?.id ?? ""}
-              onSelect={chooseMarket}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* 5. MEET PARTICIPATING GROWERS */}
-      <section className="container" style={{ marginBottom: "64px" }}>
-        <div className="pe-section-header">
-          <span className="pe-eyebrow"><Users size={14} /> The People On The Stalls</span>
-          <h2 className="pe-section-title">Meet our verified local producers.</h2>
-          <p className="pe-section-lead">
-            Every farmer on MarketLink is an independent grower or artisanal producer. Read their farm stories, check attending market dates, and pre-order their fresh harvest.
-          </p>
-        </div>
-
-        <div className="pe-growers-grid">
-          {s.farmers
-            .filter((f) => f.state === "Approved")
-            .slice(0, 3)
-            .map((f, i) => {
-              const assignedMarket = s.markets.find((m) => m.id === f.marketId);
-              const prodsCount = s.products.filter((p) => p.farmerId === f.id && p.visible).length;
-              return (
-                <Link key={f.id} to={`/farmers/${f.id}`} className="pe-grower-card">
-                  <div className="pe-grower-img-box">
-                    <img
-                      src={i === 0 ? "/images/grower.jpg" : i === 1 ? "/images/market-person.jpg" : "/images/market-arrival.jpg"}
-                      alt={f.name}
+          </section>
+          <section
+            className="global-reservation"
+            aria-labelledby="reserve-title"
+          >
+            <div className="global-section-title">
+              <div>
+                <span lang="en">{farmer?.name}</span>
+                <h2 id="reserve-title">{t("reserve")}</h2>
+              </div>
+              <p>{t("reserveBody")}</p>
+            </div>
+            {product ? (
+              <div className="global-bench">
+                <div className="bench-offer-list" aria-label={t("available")}>
+                  {offers.map((p) => (
+                    <button
+                      key={p.id}
+                      aria-pressed={product.id === p.id}
+                      onClick={() => {
+                        setProduct(p.id);
+                        setQuantity(1);
+                        setAdded("");
+                      }}
+                    >
+                      <img src={p.image} alt="" />
+                      <span>
+                        <strong lang="en">{p.name}</strong>
+                        <small>
+                          {money(p.price)} / <bdi lang="en">{p.unit}</bdi>
+                        </small>
+                      </span>
+                      <ArrowRight size={15} />
+                    </button>
+                  ))}
+                </div>
+                <div className="global-product-image">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.img
+                      key={product.id}
+                      src={product.image}
+                      alt={product.name}
+                      initial={{
+                        clipPath: reduce ? "inset(0%)" : "inset(0 100% 0 0)",
+                      }}
+                      animate={{ clipPath: "inset(0%)" }}
+                      exit={{ opacity: reduce ? 1 : 0 }}
+                      transition={{ duration: reduce ? 0 : 0.32 }}
                     />
-                    <span className="pe-grower-badge">
-                      <ShieldCheck size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: "3px" }} />
-                      Verified Producer
+                  </AnimatePresence>
+                  <button
+                    className="global-favourite"
+                    aria-label={t(
+                      s.favourites.includes(product.id)
+                        ? "unfavourite"
+                        : "favourite",
+                    )}
+                    aria-pressed={s.favourites.includes(product.id)}
+                    onClick={() =>
+                      act({ type: "favourite", id: product.id }, "")
+                    }
+                  >
+                    <Heart
+                      size={18}
+                      fill={
+                        s.favourites.includes(product.id)
+                          ? "currentColor"
+                          : "none"
+                      }
+                    />
+                  </button>
+                  <span>
+                    {product.stock - product.reserved} {t("left")}
+                  </span>
+                </div>
+                <div className="bench-details global-product-details">
+                  <span lang="en">{product.category}</span>
+                  <h3 lang="en">{product.name}</h3>
+                  <p lang="en" dir="ltr">
+                    {product.description}
+                  </p>
+                  <div className="global-price">
+                    <strong>{money(product.price)}</strong>
+                    <span>
+                      {t("unit")}: <bdi lang="en">{product.unit}</bdi>
                     </span>
                   </div>
-                  <div className="pe-grower-body">
+                  <div className="bench-pickup">
+                    <Clock size={18} />
                     <div>
-                      <h3>{f.name}</h3>
-                      <div className="pe-grower-person">Managed by {f.person}</div>
-                      <p className="pe-grower-story">{f.story}</p>
-                    </div>
-
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px", color: "var(--pe-harvest)" }}>
-                        {[...Array(5)].map((_, idx) => (
-                          <Star key={idx} size={14} fill="currentColor" />
-                        ))}
-                        <span style={{ fontSize: "12px", color: "var(--pe-muted)", marginLeft: "4px" }}>
-                          (5.0 · Verified Pickup Reviews)
-                        </span>
-                      </div>
-
-                      <div className="pe-grower-footer">
-                        <span>
-                          <MapPin size={13} style={{ display: "inline", verticalAlign: "middle" }} />
-                          {assignedMarket?.name ?? "The Orchard Market"}
-                        </span>
-                        <span>{prodsCount} Produce Lines →</span>
-                      </div>
+                      <strong>
+                        {t("pickup")} {date(day)}
+                      </strong>
+                      <span>
+                        {slots
+                          .map(
+                            (slot) => `${time(slot.start)}–${time(slot.end)}`,
+                          )
+                          .join(" / ")}
+                      </span>
+                      <small>{t("pickupNote")}</small>
                     </div>
                   </div>
-                </Link>
-              );
-            })}
-        </div>
-
-        <div style={{ textAlign: "center", marginTop: "-32px", marginBottom: "64px" }}>
-          <Link to="/farmers" className="button secondary" style={{ padding: "12px 24px" }}>
-            View All Participating Producers <ArrowUpRight size={16} />
-          </Link>
-        </div>
-      </section>
-
-      {/* 6. DISCOVER DATED PRODUCE */}
-      <section className="container" style={{ marginBottom: "64px" }}>
-        <div className="pe-section-header">
-          <span className="pe-eyebrow"><Sprout size={14} /> Seasonal Harvest Catalogue</span>
-          <h2 className="pe-section-title">Fresh from the fields for {formatMarketDay(day, visitor.locale, marketTimeZone)}.</h2>
-          <p className="pe-section-lead">
-            Produce availability is locked to specific market dates. Reserve your quantities now for guaranteed collection at the stall.
-          </p>
-        </div>
-
-        <div className="pe-produce-grid">
-          {(view.products.length > 0 ? view.products : s.products)
-            .filter((p) => p.visible)
-            .slice(0, 8)
-            .map((p) => {
-              const grower = s.farmers.find((f) => f.id === p.farmerId);
-              const availableUnits = Math.max(0, p.stock - p.reserved);
-              const isAvailable = p.available && availableUnits > 0;
-              return (
-                <article key={p.id} className="pe-produce-card">
-                  <div className="pe-produce-thumb">
-                    <img src={p.image} alt={p.name} />
-                    <span className={`pe-stock-pill ${!isAvailable ? "out" : availableUnits < 5 ? "low" : ""}`}>
-                      {!isAvailable ? "Sold Out" : `${availableUnits} ${p.unit} left`}
-                    </span>
-                    <Favourite id={p.id} />
-                  </div>
-                  <div className="pe-produce-info">
-                    <div>
-                      <span className="pe-produce-farmer">{grower?.name ?? "Local Producer"} · {p.category}</span>
-                      <h4 className="pe-produce-title">
-                        <Link to={`/products/${p.id}`} style={{ color: "inherit", textDecoration: "none" }}>
-                          {p.name}
-                        </Link>
-                      </h4>
-                      <div className="pe-produce-price-row">
-                        <span className="pe-produce-price-val">
-                          {formatMarketMoney(p.price, marketCurrency, visitor.locale)}
-                        </span>
-                        <span className="pe-produce-unit">/ {p.unit}</span>
-                      </div>
-                    </div>
-
-                    <div className="pe-produce-actions">
+                  <div className="global-buy-row">
+                    <div className="global-quantity">
                       <button
-                        type="button"
-                        className="pe-add-btn"
-                        disabled={!isAvailable}
-                        onClick={() => {
-                          if (
-                            act(
-                              {
-                                type: "basket",
-                                id: p.id,
-                                quantity: (s.basket[p.id] ?? 0) + 1,
-                              },
-                              `Added 1 ${p.unit} of ${p.name} to your market bag.`
-                            )
-                          ) {
-                            setAdded(p.id);
-                          }
-                        }}
+                        aria-label={t("decrease")}
+                        disabled={quantity <= 1}
+                        onClick={() => setQuantity((q) => q - 1)}
                       >
-                        <ShoppingBag size={14} />
-                        <span>{added === p.id ? "Reserved" : "Pre-order"}</span>
+                        <Minus size={15} />
                       </button>
-                      <Link to={`/products/${p.id}`} className="button quiet compact" title="View produce details">
-                        <ArrowUpRight size={15} />
-                      </Link>
+                      <output aria-label={t("quantity")}>{quantity}</output>
+                      <button
+                        aria-label={t("increase")}
+                        disabled={
+                          quantity >=
+                          product.stock -
+                            product.reserved -
+                            (s.basket[product.id] ?? 0)
+                        }
+                        onClick={() => setQuantity((q) => q + 1)}
+                      >
+                        <Plus size={15} />
+                      </button>
                     </div>
+                    <motion.button
+                      className="bench-add global-primary"
+                      whileTap={reduce ? {} : { scale: 0.96 }}
+                      disabled={
+                        quantity + (s.basket[product.id] ?? 0) >
+                        product.stock - product.reserved
+                      }
+                      onClick={() => {
+                        if (
+                          act(
+                            {
+                              type: "basket",
+                              id: product.id,
+                              quantity: (s.basket[product.id] ?? 0) + quantity,
+                            },
+                            "",
+                          )
+                        ) {
+                          setAdded(product.id);
+                          setQuantity(1);
+                        }
+                      }}
+                    >
+                      {added === product.id ? (
+                        <Check size={18} />
+                      ) : (
+                        <Plus size={18} />
+                      )}{" "}
+                      {t(added === product.id ? "added" : "add")}
+                    </motion.button>
                   </div>
-                </article>
-              );
-            })}
-        </div>
-
-        <div style={{ textAlign: "center", marginTop: "-32px", marginBottom: "64px" }}>
-          <Link to="/products" className="button" style={{ padding: "12px 28px" }}>
-            Explore Full Harvest Catalogue <ArrowRight size={16} />
-          </Link>
-        </div>
-      </section>
-
-      {/* 7. BUILD A MARKET BASKET & COLLECTION JOURNEY */}
-      <section className="container">
-        <div className="pe-journey-banner">
-          <div>
-            <span className="pe-eyebrow" style={{ color: "#dce3ce" }}>The MarketLink Model</span>
-            <h2>Direct producer reservations. Zero grocery markups.</h2>
-            <p>
-              Unlike conventional grocery apps or warehouse couriers, MarketLink connects you directly with the people who grow your food.
-            </p>
-            <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
-              <Link to="/basket" className="button" style={{ background: "var(--pe-paper)", color: "var(--pe-forest)", border: "none" }}>
-                <ShoppingBasket size={17} /> View Current Bag ({basketCount})
+                  <Link to={`/products/${product.id}`}>
+                    {t("productDetails")}
+                    <ArrowUpRight size={16} />
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="bench-empty">
+                <ShoppingBasket />
+                <h3>{t("none")}</h3>
+                <p>{t("noneBody")}</p>
+                <button onClick={() => scrollTo("market-explorer")}>
+                  {t("back")}
+                  <ArrowUpRight size={16} />
+                </button>
+              </div>
+            )}
+            <p className="global-market-terms">{t("currency")}</p>
+            <div className="market-bag-dock">
+              <div>
+                <ShoppingBasket size={23} />
+                <motion.strong
+                  key={basketCount}
+                  initial={{ scale: reduce ? 1 : 1.4 }}
+                  animate={{ scale: 1 }}
+                >
+                  {basketCount}
+                </motion.strong>
+                <span>
+                  {t("bag")}
+                  <small>{t("bagNote")}</small>
+                </span>
+              </div>
+              <Link to="/basket">
+                {t("review")}
+                <ArrowRight size={18} />
               </Link>
-              <Link to="/about" className="button secondary" style={{ color: "var(--pe-paper)", borderColor: "#2f523f" }}>
-                How Pre-ordering Works
-              </Link>
             </div>
-          </div>
-
-          <div className="pe-journey-features">
-            <div className="pe-journey-feat-item">
-              <Sprout size={24} color="#a8dba8" />
-              <div>
-                <strong>Farmer-Grouped Baskets</strong>
-                <span>Items are automatically separated by producer. You know exactly whose stall you are visiting on market morning.</span>
+            <AnimatePresence>
+              {added && (
+                <motion.div
+                  className="bag-confirmation"
+                  role="status"
+                  initial={{ y: reduce ? 0 : 60, rotate: reduce ? 0 : -3 }}
+                  animate={{ y: 0, rotate: 0 }}
+                  exit={{ y: reduce ? 0 : 60, opacity: 0 }}
+                >
+                  <Check size={20} />
+                  <span>{t("addedNote")}</span>
+                  <Link to="/basket">{t("review")}</Link>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
+          {s.announcements
+            .filter((a) => a.published)
+            .slice(-1)
+            .map((a) => (
+              <div
+                className="experience-announcement"
+                lang="en"
+                dir="ltr"
+                key={a.id}
+              >
+                <Notice>
+                  <strong>{a.title}</strong> · {a.body}
+                </Notice>
               </div>
-            </div>
-
-            <div className="pe-journey-feat-item">
-              <Clock size={24} color="#a8dba8" />
-              <div>
-                <strong>Staggered Arrival Windows</strong>
-                <span>Choose a 30-minute pickup slot to collect your pre-packed bags at your own pace without long morning queues.</span>
-              </div>
-            </div>
-
-            <div className="pe-journey-feat-item">
-              <CheckCircle2 size={24} color="#a8dba8" />
-              <div>
-                <strong>Pay in Person at the Stall</strong>
-                <span>No online transaction fees or third-party gateways. Inspect your produce and pay the grower directly in cash or digital transfer.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 8. FOUR EDITORIAL STEPS WALKTHROUGH */}
-      <section className="container" style={{ marginBottom: "64px" }}>
-        <div className="pe-section-header">
-          <span className="pe-eyebrow"><Clock size={14} /> The Morning Ritual</span>
-          <h2 className="pe-section-title">How a market day unfolds.</h2>
-          <p className="pe-section-lead">
-            Four simple steps from Thursday harvest planning to your Saturday market breakfast.
-          </p>
-        </div>
-
-        <div className="pe-steps-grid">
-          <div className="pe-step-card">
-            <span className="pe-step-num">01</span>
-            <h3>Explore & Discover</h3>
-            <p>Browse weekly harvest offerings published by verified regional growers across Lahore.</p>
-          </div>
-
-          <div className="pe-step-card">
-            <span className="pe-step-num">02</span>
-            <h3>Lock Pre-orders</h3>
-            <p>Select your quantities and reserve before Friday 20:00 cutoff. Farmers pick and crate fresh for you.</p>
-          </div>
-
-          <div className="pe-step-card">
-            <span className="pe-step-num">03</span>
-            <h3>Receive Passport</h3>
-            <p>Your digital Pickup Passport organizes your bags by stall number with directions and time windows.</p>
-          </div>
-
-          <div className="pe-step-card">
-            <span className="pe-step-num">04</span>
-            <h3>Collect & Greet</h3>
-            <p>Visit the bustling market, greet the farmers, inspect your crated produce, and pay at each stall.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* 9. COMMUNITY FAQ & HARVEST GUIDANCE */}
-      <section className="container">
-        <div className="pe-faq-section">
-          <div className="pe-section-header" style={{ marginBottom: "20px" }}>
-            <span className="pe-eyebrow"><HelpCircle size={14} /> Frequently Asked Questions</span>
-            <h2 className="pe-section-title">Everything you need to know.</h2>
-            <p className="pe-section-lead">
-              Common questions about stall collections, payment methods, and producer verification.
-            </p>
-          </div>
-
-          <div className="pe-faq-grid">
-            <div className="pe-faq-item">
-              <h4>When is the order cutoff each week?</h4>
-              <p>For Saturday markets, pre-orders close strictly at 20:00 on Friday evening so farmers can harvest at dawn on market morning.</p>
-            </div>
-
-            <div className="pe-faq-item">
-              <h4>Are payments processed online?</h4>
-              <p>No. MarketLink facilitates direct reservations. You pay the grower directly at their stall via cash or QR transfer during collection.</p>
-            </div>
-
-            <div className="pe-faq-item">
-              <h4>What happens if I cannot collect my bag?</h4>
-              <p>You can cancel or modify orders in your account prior to Friday's 20:00 cutoff. Uncollected bags are released to general market shoppers at noon.</p>
-            </div>
-
-            <div className="pe-faq-item">
-              <h4>How are growers verified?</h4>
-              <p>Our market administrators physically inspect farming credentials, origin of crops, and stall locations to ensure authenticity.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Persistent Basket Dock */}
-      <div className="market-bag-dock">
+            ))}
+        </>
+      )}
+      <section className="global-closing">
         <div>
-          <ShoppingBasket size={23} />
-          <motion.strong
-            key={basketCount}
-            initial={{ scale: reduce ? 1 : 1.3 }}
-            animate={{ scale: 1 }}
+          <h2>{t("storyTitle")}</h2>
+          <p>{t("storyBody")}</p>
+          <button
+            onClick={() => (covered ? scrollTo("market-explorer") : open())}
           >
-            {basketCount}
-          </motion.strong>
-          <span>
-            {t("bag")}
-            <small>{t("bagNote")}</small>
-          </span>
+            {t("discover")}
+            <ArrowRight size={18} />
+          </button>
         </div>
-        <Link to="/basket">
-          {t("review")} <ArrowRight size={18} />
-        </Link>
-      </div>
-
-      {/* Add-to-bag Floating Confirmation Toast */}
-      <AnimatePresence>
-        {added && (
-          <motion.div
-            className="bag-confirmation"
-            role="status"
-            initial={{ y: reduce ? 0 : 60, rotate: reduce ? 0 : -3 }}
-            animate={{ y: 0, rotate: 0 }}
-            exit={{ y: reduce ? 0 : 60, opacity: 0 }}
-          >
-            <Check size={20} />
-            <span>
-              {t("addedNote")}
-              <small>{t("pickupNote")}</small>
-            </span>
-            <Link to="/basket">
-              {t("review")} <ArrowRight size={16} />
-            </Link>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Announcements */}
-      {s.announcements
-        .filter((a) => a.published)
-        .slice(-1)
-        .map((a) => (
-          <div className="experience-announcement" key={a.id}>
-            <Notice>
-              <strong>{a.title}</strong> · {a.body}
-            </Notice>
-          </div>
-        ))}
+        <div className="global-process">
+          {(["reserved", "meet", "pay"] as const).map((key, i) => (
+            <div key={key}>
+              <span>0{i + 1}</span>
+              <strong>{t(key)}</strong>
+              {i < 2 && <ArrowDown size={18} />}
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

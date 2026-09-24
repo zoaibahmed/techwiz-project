@@ -1,3 +1,4 @@
+import { IllustrativeMap } from "./IllustrativeMap";
 import type { ComponentType } from "react";
 import type { Market } from "../data/market";
 import { InteractiveMap } from "./LivingMap";
@@ -15,17 +16,30 @@ export function MarketMap({
 }: MarketMapViewProps & {
   geographicRenderer?: ComponentType<MarketMapViewProps>;
 }) {
+  const illustrative = props.markets.every((m) => m.id.startsWith("demo-"));
   return (
     <div
       className="market-map-boundary"
-      data-map-mode={Geographic ? "geographic" : "interactive"}
+      data-map-mode={
+        Geographic
+          ? "geographic"
+          : illustrative
+            ? "illustrative"
+            : "interactive"
+      }
     >
       {Geographic ? (
         <Geographic {...props} />
+      ) : illustrative ? (
+        <>
+          <div className="map-integration-note">
+            Temporary illustrative view · real map integration pending
+          </div>
+          <IllustrativeMap {...props} />
+        </>
       ) : (
         <InteractiveMap {...props} />
       )}
     </div>
   );
 }
-

@@ -46,13 +46,6 @@ const selectedPin = L.divIcon({
   popupAnchor: [0, -44],
 });
 
-// Real Lahore coordinates for demo markets (actual recognisable locations)
-const DEMO_COORDS: Record<string, [number, number]> = {
-  'demo-m1': [31.4834, 74.3225],   // Model Town, Lahore
-  'demo-m2': [31.5204, 74.3487],   // Gulberg III / Liberty, Lahore
-  'demo-m3': [31.4697, 74.3761],   // DHA Phase 5, Lahore
-};
-
 export interface MapMarket {
   id: string;
   name: string;
@@ -64,13 +57,10 @@ export interface MapMarket {
 }
 
 function getCoords(m: Market): [number, number] | null {
-  // Prefer live coordinates from API-enriched market objects
-  const any = m as any;
-  if (any.coordinates?.latitude && any.coordinates?.longitude) {
-    return [any.coordinates.latitude, any.coordinates.longitude];
-  }
-  // Fall back to demo coordinates
-  return DEMO_COORDS[m.id] || null;
+  if(m.id.startsWith('demo-')) return null;
+  const point=m.coordinates;
+  if(point && Number.isFinite(point.latitude) && Number.isFinite(point.longitude) && Math.abs(point.latitude)<=90 && Math.abs(point.longitude)<=180) return [point.latitude,point.longitude];
+  return null;
 }
 
 export function InteractiveMap({

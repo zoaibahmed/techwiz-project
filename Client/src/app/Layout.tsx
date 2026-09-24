@@ -1,3 +1,4 @@
+import { CoverageBoundary } from "../components/CoverageBoundary";
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, Navigate } from "react-router-dom";
 import {
@@ -405,7 +406,7 @@ export function Layout() {
               ))}
             </nav>
           )}
-          <Outlet />
+          <CoverageBoundary><Outlet /></CoverageBoundary>
         </main>
       </div>
       {!workspace && role !== "customer" && (

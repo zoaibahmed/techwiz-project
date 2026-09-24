@@ -6,7 +6,7 @@ export const en = {
   welcome: 'Every good market day starts somewhere.', welcomeBody: 'Find the people growing your food. See what is available. Reserve a little of the harvest.',
   intro: 'Make MarketLink yours', close: 'Close location settings', skip: 'Browse without choosing', apply: 'Explore this location',
   coverage: 'Worldwide country selection. Market availability depends on participating growers.',
-  languageNote: 'English throughout. Urdu preview translates this entrance and homepage; account pages remain in English.',
+  languageNote: 'English throughout. Urdu preview translates location settings and homepage content; navigation, map controls and account pages still include English.',
   lahore: 'Lahore · demo location', selectCity: 'Choose a city', noCities: 'No participating cities in this preview', noDays: 'Market days appear when a city has participating markets.',
   demo: 'Explore the Lahore demo', demoNote: 'Fictional markets and stock. No real reservations.', saved: 'Preferences saved on this device.', storage: 'Browser storage is unavailable. Preferences last for this visit only.',
   headline: 'Good food starts with a good market day.', lead: 'Discover growers, reserve fresh produce and collect it at the market. One place to plan the whole morning.',
@@ -41,7 +41,7 @@ export type MessageKey = keyof typeof en;
 export const ur: Record<MessageKey, string> = {
   location:'مقام اور زبان',choose:'اپنی مارکیٹ کا مقام منتخب کریں',language:'زبان',country:'ملک یا علاقہ',searchCountry:'ملک کے نام یا ISO کوڈ سے تلاش کریں',city:'شہر یا خطہ',day:'مارکیٹ کا دن',anywhere:'مقام منتخب کریں',
   welcome:'ایک اچھے مارکیٹ دن کی شروعات یہیں سے۔',welcomeBody:'اپنی غذا اُگانے والوں سے ملیں۔ دستیاب پیداوار دیکھیں اور اپنے لیے محفوظ کریں۔',intro:'مارکیٹ لنک کو اپنا بنائیں',close:'مقام کی ترتیبات بند کریں',skip:'مقام چنے بغیر دیکھیں',apply:'اس مقام کی مارکیٹس دیکھیں',
-  coverage:'دنیا بھر کے ممالک منتخب کریں۔ مارکیٹ کی دستیابی شریک کاشتکاروں پر منحصر ہے۔',languageNote:'انگریزی پوری ایپ میں دستیاب ہے۔ اردو پیش منظر میں یہ ابتدائی صفحہ اور دریافت شامل ہیں؛ اکاؤنٹ کے صفحات انگریزی میں ہیں۔',
+  coverage:'دنیا بھر کے ممالک منتخب کریں۔ مارکیٹ کی دستیابی شریک کاشتکاروں پر منحصر ہے۔',languageNote:'انگریزی پوری ایپ میں دستیاب ہے۔ اردو پیش منظر میں مقام کی ترتیبات اور ابتدائی صفحے کا مواد شامل ہے؛ نیویگیشن، نقشے کے کنٹرول اور اکاؤنٹ کے صفحات میں ابھی انگریزی موجود ہے۔',
   lahore:'لاہور · نمائشی مقام',selectCity:'شہر منتخب کریں',noCities:'اس پیش منظر میں کوئی شریک شہر نہیں',noDays:'شہر میں شریک مارکیٹس ہونے پر دن دستیاب ہوں گے۔',demo:'لاہور کا نمائشی تجربہ دیکھیں',demoNote:'فرضی مارکیٹس اور اسٹاک۔ کوئی حقیقی بکنگ نہیں۔',saved:'ترجیحات اس آلے پر محفوظ ہو گئیں۔',storage:'براؤزر میں محفوظ کرنا ممکن نہیں۔ ترجیحات صرف اس دورے تک رہیں گی۔',
   headline:'اچھی غذا، اچھے مارکیٹ دن سے۔',lead:'کاشتکار تلاش کریں، تازہ پیداوار محفوظ کریں اور مارکیٹ سے وصول کریں۔ پوری صبح کی منصوبہ بندی ایک جگہ۔',living:'مارکیٹ لنک / دی لیونگ مارکیٹ',discover:'اپنی مارکیٹ تلاش کریں',noAccount:'آزادی سے دیکھیں۔ اکاؤنٹ ضروری نہیں۔',change:'مقام بدلیں',
   harvest:'تازہ فصل کے ایک قدم قریب۔',editorial:'بھارت کی ادارتی تصویر۔ مارکیٹ لنک کا شریک اسٹال نہیں۔',fresh:'کیا تازہ ہے؟',people:'کون اُگا رہا ہے؟',collect:'کب وصول کر سکتے ہیں؟',freshBody:'تاریخ کے مطابق دستیابی، مقدار اور قیمت۔',peopleBody:'ہر پیشکش کے پیچھے کاشتکار سے ملیں۔',collectBody:'وصولی کا وقت چنیں۔ ادائیگی اسٹال پر کریں۔',
