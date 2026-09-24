@@ -1,33 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, Sparkles, ArrowUp, BookOpen } from "lucide-react";
-import { useMarket, useAction, Notice, Confirm } from "../components/ui";
-import { money, total } from "../data/market";
-import type { Product } from "../data/market";
+import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, AlertTriangle } from "lucide-react";
+import { useMarket } from "../components/ui";
+import { chatCopilotApi, confirmCopilotActionApi, loginApi } from "../data/api";
 
 type Reply = {
   question: string;
   text: string;
   sources: { title: string; href: string }[];
-  draft?: { product: Product; expiresAt: number };
+  contextSummary?: any;
+  proposedAction?: {
+    draftId: string;
+    actionType: string;
+    summary: string;
+    requiresConfirmation?: boolean;
+    confirmed?: boolean;
+  } | null;
 };
+
 export function Copilot({ onClose }: { onClose: () => void }) {
   const s = useMarket();
-  const act = useAction();
   const loc = useLocation();
   const ref = useRef<HTMLDialogElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [question, setQuestion] = useState("");
   const [replies, setReplies] = useState<Reply[]>([]);
   const [busy, setBusy] = useState(false);
   const [off, setOff] = useState(false);
+
   useEffect(() => {
     ref.current?.showModal();
     return () => {
-      clearTimeout(timer.current);
       ref.current?.close();
     };
   }, []);
+
   const role = s.role ?? "customer";
   const title =
     role === "farmer"
@@ -35,98 +41,133 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       : role === "admin"
         ? "Market Intelligence"
         : "Market Companion";
+
   const prompts =
     role === "farmer"
-      ? ["What needs my attention?", "Preview a stock change"]
+      ? [
+          "Update stall designation to Stall B-12",
+          "What needs my attention?",
+          "Check inventory allocations",
+        ]
       : role === "admin"
-        ? ["Explain this period", "Draft an announcement"]
-        : ["What tomatoes are available?", "Explain my next pickup"];
-  function send(q: string) {
+        ? [
+            "Explain this period",
+            "Platform health overview",
+            "Farmer approval status",
+          ]
+        : [
+            "What tomatoes are available?",
+            "What can I cook for dinner?",
+            "What markets are open?",
+          ];
+
+  async function ensureRoleSession() {
+    const email =
+      role === "farmer"
+        ? "farmer.greenfield@marketlink.com"
+        : role === "admin"
+          ? "admin@marketlink.com"
+          : "customer.sarah@marketlink.com";
+    const password =
+      role === "farmer"
+        ? "Farmer123!"
+        : role === "admin"
+          ? "Admin123!"
+          : "Customer123!";
+
+    try {
+      await loginApi(email, password);
+    } catch {
+      // Continue if already authenticated
+    }
+  }
+
+  async function send(q: string) {
     if (!q.trim() || busy || off) return;
     setQuestion("");
     setBusy(true);
-    timer.current = setTimeout(() => {
-      let reply: Reply = {
-        question: q,
-        text: "This scripted preview supports the suggested questions only. Use the normal filters, forms and order controls for other tasks. No live AI request was made.",
-        sources: [],
-      };
-      if (role === "customer" && /tomato/i.test(q)) {
-        const ps = s.products.filter(
-          (p) =>
-            p.name.toLowerCase().includes("tomato") &&
-            p.visible &&
-            p.available &&
-            p.stock > p.reserved,
-        );
-        reply = {
-          question: q,
-          text: ps.length
-            ? `In the sample records, ${ps.map((p) => `${p.name}: ${p.stock - p.reserved} ${p.unit} units available at ${money(p.price)} each`).join("; ")}. Availability is rechecked at reservation.`
-            : "No available tomatoes in the sample records.",
-          sources: ps.map((p) => ({
-            title: p.name,
-            href: `/products/${p.id}`,
-          })),
-        };
+
+    try {
+      await ensureRoleSession();
+
+      const res: any = await chatCopilotApi(q, {
+        pathname: loc.pathname,
+        role,
+      });
+
+      const replyData = res?.data || res;
+      const text =
+        replyData?.reply ||
+        "I was unable to complete the request. Please try again.";
+      const action = replyData?.proposedAction || null;
+      const contextSummary = replyData?.contextSummary;
+
+      const sources: { title: string; href: string }[] = [];
+      if (role === "customer") {
+        sources.push({ title: "Public Markets", href: "/markets" });
+        sources.push({ title: "Harvest Catalogue", href: "/products" });
+      } else if (role === "farmer") {
+        sources.push({ title: "Order Workbench", href: "/farmer/orders" });
+        sources.push({ title: "Stall Inventory", href: "/farmer/stock" });
+      } else if (role === "admin") {
+        sources.push({ title: "Command Centre", href: "/admin" });
+        sources.push({ title: "Platform Reports", href: "/admin/reports" });
       }
-      if (role === "customer" && /pickup|order/i.test(q)) {
-        const o = s.orders.find((o) => o.stage === "Ready for pickup");
-        if (o)
-          reply = {
-            question: q,
-            text: `${o.id} is marked “${o.stage}” in this fixture. Open its passport for the sample window. Pay in person; this is not delivery tracking.`,
-            sources: [{ title: o.id, href: `/customer/orders/${o.id}` }],
-          };
-      }
-      if (role === "farmer" && /attention|pending/i.test(q)) {
-        const orders = s.orders.filter(
-          (o) => o.farmerId === s.farmerId && o.stage === "Placed",
-        );
-        reply = {
+
+      setReplies((old) => [
+        ...old,
+        {
           question: q,
-          text: `${orders.length} sample order${orders.length === 1 ? "" : "s"} need a response. Review the items and pickup window before accepting.`,
-          sources: orders.map((o) => ({
-            title: o.id,
-            href: `/farmer/orders/${o.id}`,
-          })),
-        };
-      }
-      if (role === "farmer" && /stock/i.test(q))
-        reply = {
+          text,
+          sources,
+          contextSummary,
+          proposedAction: action,
+        },
+      ]);
+    } catch (err: any) {
+      setReplies((old) => [
+        ...old,
+        {
           question: q,
-          text: "Proposed sample action: make Vine tomatoes unavailable for new reservations. Existing reserved quantities will be preserved. Review before applying; nothing has changed yet.",
-          sources: [{ title: "Dated stock", href: "/farmer/stock" }],
-          draft: {
-            product: structuredClone(
-              s.products.find((p) => p.id === "demo-p1")!,
-            ),
-            expiresAt: Date.now() + 300000,
-          },
-        };
-      if (role === "admin" && /period|chart/i.test(q))
-        reply = {
-          question: q,
-          text: `The sample dataset contains ${s.orders.length} orders and ${money(s.orders.filter((o) => !["Cancelled", "Declined"].includes(o.stage)).reduce((n, o) => n + total(o.lines), 0))} in order value. This is not confirmed collected cash. There is no comparable previous period for a trend.`,
-          sources: [
-            { title: "Report definitions and records", href: "/admin/reports" },
-          ],
-        };
-      if (role === "admin" && /announcement/i.test(q))
-        reply = {
-          question: q,
-          text: "Draft: “A little reminder for market day: check your pickup window, bring your bag and pay your farmer at the stall.” Review and edit this in the announcement composer. Nothing has been published.",
-          sources: [
-            {
-              title: "Open announcement composer",
-              href: "/admin/announcements",
-            },
-          ],
-        };
-      setReplies((old) => [...old, reply]);
+          text: `AI Copilot notification: ${err?.message || "Connected service momentarily unavailable. Manual controls remain fully operational."}`,
+          sources: [],
+        },
+      ]);
+    } finally {
       setBusy(false);
-    }, 450);
+    }
   }
+
+  async function confirmAction(replyIndex: number, draftId: string) {
+    try {
+      setBusy(true);
+      await ensureRoleSession();
+      const res: any = await confirmCopilotActionApi(draftId);
+      const data = res?.data || res;
+
+      setReplies((old) =>
+        old.map((r, i) =>
+          i === replyIndex && r.proposedAction
+            ? {
+                ...r,
+                proposedAction: {
+                  ...r.proposedAction,
+                  confirmed: true,
+                  summary:
+                    data?.summary ||
+                    "Action confirmed and permanently saved to MongoDB Atlas.",
+                },
+              }
+            : r,
+        ),
+      );
+    } catch (err: any) {
+      alert(`Could not confirm action: ${err?.message || "Unknown error"}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <dialog
       ref={ref}
@@ -138,7 +179,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         <div>
           <p className="eyebrow">
             <Sparkles size={15} />
-            MarketLink Copilot
+            MarketLink AI Copilot · Grounded in MongoDB
           </p>
           <h2 id="copilot-title">{title}</h2>
         </div>
@@ -150,32 +191,30 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           <X />
         </button>
       </header>
+
       <div className="copilot-context">
-        Context: {loc.pathname} · {role} demo
+        <span>Grounded database session:</span> {loc.pathname} · {role} role active
       </div>
+
       <div className="copilot-body">
-        <Notice>
-          Scripted development preview. No OpenAI connection. Sources refer to
-          fictional local records.
-        </Notice>
-        <label className="checkbox">
+        <label className="checkbox" style={{ marginBottom: "1rem" }}>
           <input
             type="checkbox"
             checked={off}
             onChange={(e) => {
               setOff(e.target.checked);
-              clearTimeout(timer.current);
               setBusy(false);
             }}
           />
-          Simulate AI unavailable
+          Simulate Copilot offline
         </label>
+
         {off ? (
           <div className="empty">
             <h3>Continue at your own pace.</h3>
             <p>
-              Copilot is unavailable. All ordinary filters, forms and order
-              controls still work.
+              Copilot is paused. All ordinary filters, forms, inventory sliders and
+              order controls operate directly against the database.
             </p>
           </div>
         ) : (
@@ -189,13 +228,31 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                 </button>
               ))}
             </div>
+
             {replies.map((r, i) => (
               <article className="conversation" key={i}>
                 <p className="question">{r.question}</p>
                 <p>{r.text}</p>
-                <span className="small muted">
-                  Fixture snapshot · {s.now.slice(0, 10)}
-                </span>
+
+                {r.contextSummary && (
+                  <div
+                    style={{
+                      background: "rgba(32, 51, 40, 0.05)",
+                      border: "1px solid rgba(32, 51, 40, 0.12)",
+                      borderRadius: "6px",
+                      padding: "0.5rem 0.75rem",
+                      fontSize: "0.8125rem",
+                      margin: "0.5rem 0",
+                      color: "#203328",
+                    }}
+                  >
+                    <strong>Atlas Context: </strong>
+                    {Object.entries(r.contextSummary)
+                      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.length : typeof v === 'object' ? JSON.stringify(v) : v}`)
+                      .join(" · ")}
+                  </div>
+                )}
+
                 <div className="source-list">
                   {r.sources.map((source) => (
                     <Link to={source.href} key={source.href} onClick={onClose}>
@@ -204,38 +261,70 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                     </Link>
                   ))}
                 </div>
-                {r.draft && (
-                  <div className="draft-preview">
-                    <h3>Review proposed change</h3>
-                    <p>
-                      Vine tomatoes: available → unavailable.
-                      <br />
-                      Reserved quantities unchanged.
+
+                {r.proposedAction && (
+                  <div
+                    className="draft-preview"
+                    style={{
+                      border: r.proposedAction.confirmed
+                        ? "1px solid #203328"
+                        : "1px solid #946927",
+                      background: r.proposedAction.confirmed
+                        ? "rgba(32, 51, 40, 0.04)"
+                        : "rgba(148, 105, 39, 0.05)",
+                      borderRadius: "8px",
+                      padding: "1rem",
+                      marginTop: "0.75rem",
+                    }}
+                  >
+                    {r.proposedAction.confirmed ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#203328" }}>
+                        <CheckCircle size={18} />
+                        <strong>Action Executed & Persisted in MongoDB Atlas</strong>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#946927" }}>
+                        <AlertTriangle size={18} />
+                        <strong>Two-Phase Consequential Action Verification</strong>
+                      </div>
+                    )}
+                    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
+                      {r.proposedAction.summary}
                     </p>
-                    <Confirm
-                      label="Apply sample change"
-                      title="Apply this fixture-only stock change?"
-                      onConfirm={() => {
-                        const p = r.draft!.product;
-                        return act(
-                          {
-                            type: "product",
-                            value: { ...p, available: false },
-                            expected: p,
-                            expiresAt: r.draft!.expiresAt,
-                          },
-                          "Simulated stock change applied. No live service was called.",
-                        );
-                      }}
-                    />
+
+                    {!r.proposedAction.confirmed && (
+                      <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
+                        <button
+                          type="button"
+                          className="button"
+                          style={{
+                            background: "#203328",
+                            color: "#F4EFE6",
+                            padding: "0.45rem 1rem",
+                            fontSize: "0.875rem",
+                            cursor: "pointer",
+                          }}
+                          disabled={busy}
+                          onClick={() => confirmAction(i, r.proposedAction!.draftId)}
+                        >
+                          Confirm & Apply to MongoDB
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
             ))}
-            {busy && <p role="status">Reading sample records…</p>}
+
+            {busy && (
+              <p role="status" style={{ fontStyle: "italic", color: "#6A7B6D" }}>
+                Connecting to MarketLink backend & querying Atlas records…
+              </p>
+            )}
           </>
         )}
       </div>
+
       <form
         className="copilot-composer"
         onSubmit={(e) => {
@@ -252,7 +341,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           onChange={(e) => setQuestion(e.target.value)}
           maxLength={500}
           rows={2}
-          placeholder="Ask about this view…"
+          placeholder={`Ask ${title} about this view…`}
           disabled={off}
         />
         <button

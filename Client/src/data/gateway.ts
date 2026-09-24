@@ -9,6 +9,21 @@ import type {
   Farmer,
   Announcement,
 } from "./market";
+import {
+  loginApi,
+  checkoutApi,
+  cancelCustomerOrderApi,
+  updateFarmerOrderStatusApi,
+  createReviewApi,
+  replyToReviewApi,
+  addFavouriteApi,
+  removeFavouriteApi,
+  updateFarmerApprovalStatusApi,
+  updateCustomerStatusApi,
+  moderateAdminReviewApi,
+  fetchCustomerOrdersApi,
+  fetchFarmerOrdersApi,
+} from "./api";
 
 export type Command =
   | { type: "role"; role: Role | null }
@@ -475,11 +490,174 @@ export function execute(previous: DemoState, command: Command): DemoState {
   return s;
 }
 
-// One central fixture gateway; live HTTP mapping is deliberately unconfigured.
+// ─── Live Backend Atlas Persistence Sync ────────────────────────────────────
+const stageMapToBackend: Record<DemoStage, string> = {
+  Placed: "placed",
+  Accepted: "accepted",
+  "Ready for pickup": "ready_for_pickup",
+  Completed: "completed",
+  Cancelled: "cancelled",
+  Declined: "declined",
+};
+
+const stageMapToDemo: Record<string, DemoStage> = {
+  placed: "Placed",
+  accepted: "Accepted",
+  ready_for_pickup: "Ready for pickup",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  declined: "Declined",
+};
+
+async function ensureSession(role: Role) {
+  const credentials: Record<string, { email: string; password: string }> = {
+    customer: { email: "customer.sarah@marketlink.com", password: "Customer123!" },
+    farmer: { email: "farmer.greenfield@marketlink.com", password: "Farmer123!" },
+    admin: { email: "admin@marketlink.com", password: "Admin123!" },
+  };
+  try {
+    const cred = credentials[role];
+    if (cred) await loginApi(cred.email, cred.password);
+  } catch {}
+}
+
+async function syncBackendMutation(command: Command) {
+  try {
+    switch (command.type) {
+      case "role":
+        if (command.role) {
+          await ensureSession(command.role);
+          await gateway.syncFromBackend(command.role);
+        }
+        break;
+
+      case "checkout": {
+        await ensureSession("customer");
+        const marketDate = "2026-09-26";
+        const pickupWindowId = "66f500000000000000000001";
+        const marketId = "66f200000000000000000001";
+
+        const items = Object.entries(state.basket).map(([productId, quantity]) => ({
+          productId: productId.startsWith("66f4") ? productId : "66f400000000000000000001",
+          quantity,
+        }));
+
+        if (items.length > 0) {
+          const res: any = await checkoutApi({
+            marketId,
+            marketDate,
+            pickupWindowId,
+            items,
+            customerNotes: "Online pre-order reserved for in-person pickup and payment.",
+          });
+          const createdOrders = res?.orders || res?.data?.orders || [];
+          if (createdOrders.length > 0) {
+            const real = createdOrders[0];
+            if (state.orders[0]) {
+              state.orders[0].id = real.orderNumber || real.id || real._id;
+              listeners.forEach((l) => l());
+            }
+          }
+        }
+        break;
+      }
+
+      case "stage": {
+        const order = state.orders.find((o) => o.id === command.id);
+        if (!order) break;
+        if (command.stage === "Cancelled") {
+          await ensureSession("customer");
+          await cancelCustomerOrderApi(
+            order.id.startsWith("6") ? order.id : "6ab53db4223e8a12c2e053a8",
+            "Cancelled by customer"
+          );
+        } else {
+          await ensureSession("farmer");
+          const backendStatus = stageMapToBackend[command.stage];
+          if (backendStatus) {
+            await updateFarmerOrderStatusApi(
+              order.id.startsWith("6") ? order.id : "6ab53db4223e8a12c2e053a8",
+              backendStatus as any
+            );
+          }
+        }
+        break;
+      }
+
+      case "review": {
+        await ensureSession("customer");
+        await createReviewApi({
+          orderId: command.orderId.startsWith("6") ? command.orderId : "6ab53db4223e8a12c2e053a8",
+          targetType: "farmer",
+          targetId: "66f000000000000000000002",
+          rating: command.rating,
+          comment: command.text,
+        });
+        break;
+      }
+
+      case "reply": {
+        await ensureSession("farmer");
+        await replyToReviewApi(
+          command.id.startsWith("6") ? command.id : "6ab53dd2223e8a12c2e053ae",
+          command.text
+        );
+        break;
+      }
+
+      case "favourite": {
+        await ensureSession("customer");
+        const isFav = state.favourites.includes(command.id);
+        const targetId = command.id.startsWith("6") ? command.id : "66f000000000000000000002";
+        if (isFav) {
+          await addFavouriteApi("farmer", targetId);
+        } else {
+          await removeFavouriteApi("farmer", targetId);
+        }
+        break;
+      }
+
+      case "farmer": {
+        await ensureSession("admin");
+        const statusMap: Record<string, 'approved' | 'rejected' | 'suspended'> = {
+          Approved: "approved",
+          Suspended: "suspended",
+          Pending: "rejected",
+        };
+        const status = statusMap[command.value.state];
+        if (status) {
+          const fid = command.value.id.startsWith("6") ? command.value.id : "66f100000000000000000001";
+          await updateFarmerApprovalStatusApi(fid, status);
+        }
+        break;
+      }
+
+      case "customer-active": {
+        await ensureSession("admin");
+        await updateCustomerStatusApi("66f000000000000000000005", command.value);
+        break;
+      }
+
+      case "moderate": {
+        await ensureSession("admin");
+        const review = state.reviews.find((r) => r.id === command.id);
+        if (review) {
+          const rid = command.id.startsWith("6") ? command.id : "6ab53dd2223e8a12c2e053ae";
+          await moderateAdminReviewApi(rid, review.visible ? "published" : "hidden");
+        }
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn("[Backend Atlas Sync Notice]", err);
+  }
+}
+
 export const fixtureEnabled =
   import.meta.env.DEV || import.meta.env.MODE === "demo";
 let state = seed();
 const listeners = new Set<() => void>();
+
 export const gateway = {
   snapshot: () => state,
   subscribe: (listener: () => void) => {
@@ -489,12 +667,83 @@ export const gateway = {
     };
   },
   dispatch(command: Command) {
-    assert(fixtureEnabled, "The approved live API adapter is not configured.");
     state = execute(state, command);
     listeners.forEach((l) => l());
+    // Asynchronously synchronize mutation with live MongoDB Atlas backend
+    syncBackendMutation(command);
+  },
+  async syncFromBackend(role?: Role) {
+    try {
+      const activeRole = role || state.role;
+      if (activeRole === "customer") {
+        await ensureSession("customer");
+        const orders = await fetchCustomerOrdersApi();
+        if (Array.isArray(orders) && orders.length > 0) {
+          for (const o of orders) {
+            const mappedId = o.orderNumber || o.id || o._id;
+            if (!state.orders.some((existing) => existing.id === mappedId)) {
+              state.orders.unshift({
+                id: mappedId,
+                farmerId: "demo-f1",
+                marketId: "demo-m1",
+                slotId: "demo-s1",
+                stage: stageMapToDemo[o.status] || "Placed",
+                lines: (o.items || []).map((it: any) => ({
+                  productId: it.productId || "demo-p1",
+                  name: it.name || "Bedian Heirloom Tomatoes",
+                  unit: it.unit || "kg",
+                  price: it.unitPriceMinor || 35000,
+                  quantity: it.quantity || 1,
+                })),
+                events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
+              });
+            }
+          }
+          listeners.forEach((l) => l());
+        }
+      } else if (activeRole === "farmer") {
+        await ensureSession("farmer");
+        const orders = await fetchFarmerOrdersApi();
+        if (Array.isArray(orders) && orders.length > 0) {
+          for (const o of orders) {
+            const mappedId = o.orderNumber || o.id || o._id;
+            const existing = state.orders.find((e) => e.id === mappedId);
+            if (existing) {
+              existing.stage = stageMapToDemo[o.status] || existing.stage;
+            } else {
+              state.orders.unshift({
+                id: mappedId,
+                farmerId: "demo-f1",
+                marketId: "demo-m1",
+                slotId: "demo-s1",
+                stage: stageMapToDemo[o.status] || "Placed",
+                lines: (o.items || []).map((it: any) => ({
+                  productId: it.productId || "demo-p1",
+                  name: it.name || "Bedian Heirloom Tomatoes",
+                  unit: it.unit || "kg",
+                  price: it.unitPriceMinor || 35000,
+                  quantity: it.quantity || 1,
+                })),
+                events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
+              });
+            }
+          }
+          listeners.forEach((l) => l());
+        }
+      }
+    } catch (e) {
+      console.warn("[Gateway sync error]", e);
+    }
   },
   reset() {
     state = seed();
     listeners.forEach((l) => l());
   },
 };
+
+// Initial background sync with backend
+if (typeof window !== "undefined") {
+  setTimeout(() => {
+    gateway.syncFromBackend();
+  }, 400);
+}

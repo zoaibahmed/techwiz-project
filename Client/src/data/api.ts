@@ -1,173 +1,557 @@
 /**
- * MarketLink API Client
- * Connects to the Express/MongoDB backend at /api/v1.
- * Falls back to demo fixture state when the server is unreachable.
+ * MarketLink Official API Client
+ * Connects to the Express/MongoDB Atlas backend at /api/v1.
+ * Supports cookie-based authentication, CSRF auto-injection, and typed domain operations.
  */
 
 const BASE = '/api/v1';
 
 export type ApiStatus = 'loading' | 'live' | 'demo' | 'error';
 
-// ─── Shape types that mirror the backend service responses ────────────────────
+// ─── CSRF Token Extraction ──────────────────────────────────────────────────
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)marketlink_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
+async function ensureCsrfToken(): Promise<string | null> {
+  let token = getCsrfToken();
+  if (!token && typeof window !== 'undefined') {
+    try {
+      const res = await fetch(`${BASE}/auth/csrf-token`, { credentials: 'include' });
+      const json = await res.json();
+      token = json?.data?.csrfToken || getCsrfToken();
+    } catch {}
+  }
+  return token;
+}
+
+// ─── Base HTTP Helpers ───────────────────────────────────────────────────────
+export interface ApiResponse<T = any> {
+  data: T;
+  meta?: {
+    total?: number;
+    page?: number;
+    limit?: number;
+    timestamp?: string;
+  };
+}
+
+export interface ApiError {
+  message: string;
+  code?: string;
+  statusCode?: number;
+  details?: any;
+}
+
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${BASE}${endpoint}`;
+  const headers = new Headers(options.headers || {});
+  
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+
+  // Include CSRF token for mutating methods
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    let csrf = getCsrfToken();
+    if (!csrf) {
+      csrf = await ensureCsrfToken();
+    }
+    if (csrf) {
+      headers.set('x-csrf-token', csrf);
+    }
+    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include', // Mandates HTTP-only cookie passing
+    signal: options.signal || AbortSignal.timeout(12000),
+  });
+
+  if (!response.ok) {
+    let errBody: any = null;
+    try {
+      errBody = await response.json();
+    } catch {
+      errBody = { message: await response.text().catch(() => 'Network error') };
+    }
+    const error: any = new Error(
+      errBody?.error?.message || errBody?.message || `Request failed with status ${response.status}`
+    );
+    error.statusCode = response.status;
+    error.code = errBody?.error?.code || errBody?.code;
+    error.details = errBody?.error?.details || errBody?.details;
+    throw error;
+  }
+
+  const json = await response.json();
+  return (json?.data !== undefined ? json.data : json) as T;
+}
+
+// ─── Auth & Session Management ──────────────────────────────────────────────
+export interface UserSession {
+  id: string;
+  name: string;
+  email: string;
+  role: 'customer' | 'farmer' | 'admin';
+  phone?: string;
+  farmerProfileId?: string;
+  preferences?: {
+    preferredMarketId?: string;
+    preferredMarketDay?: string;
+    preferredLanguage?: string;
+  };
+}
+
+export async function loginApi(email: string, password: string): Promise<UserSession> {
+  return request<UserSession>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function registerCustomerApi(data: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+}): Promise<UserSession> {
+  return request<UserSession>('/auth/register/customer', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function registerFarmerApi(data: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  businessName: string;
+  contactPerson: string;
+  marketId: string;
+  bio?: string;
+}): Promise<UserSession> {
+  return request<UserSession>('/auth/register/farmer', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchMeApi(): Promise<UserSession> {
+  return request<UserSession>('/auth/me');
+}
+
+export async function logoutApi(): Promise<{ message: string }> {
+  return request<{ message: string }>('/auth/logout', { method: 'POST' });
+}
+
+// ─── Public Markets & Venues ────────────────────────────────────────────────
 export interface ApiMarket {
   id: string;
   name: string;
-  countryCode: string;
-  countryName: string;
-  region: string;
-  city: string;
-  locality: string;
   address: string;
-  timezone: string;
-  currency: string;
-  coordinates: { latitude: number; longitude: number };
-  operatingDays: number[];   // 0=Sun ... 6=Sat
-  operatingHours: { open: string; close: string } | null;
-  attendingFarmerCount: number;
+  city?: string;
+  region?: string;
+  countryCode?: string;
+  timezone?: string;
+  currency?: string;
+  coordinates?: { latitude: number; longitude: number };
+  operatingDays?: number[];
+  operatingHours?: { open: string; close: string } | null;
+  attendingFarmerCount?: number;
+  isActive?: boolean;
 }
 
-export interface ApiMarketDetail extends ApiMarket {
-  attendingFarmers: {
-    id: string;
-    businessName: string;
-    contactPerson: string;
-    bio: string;
-    stallNumber: string;
-    stallCoordinates: { latitude: number; longitude: number } | null;
-    operatingDays: number[];
-  }[];
+export async function fetchMarketsApi(params: {
+  search?: string;
+  countryCode?: string;
+  city?: string;
+  day?: number;
+} = {}): Promise<ApiMarket[]> {
+  const q = new URLSearchParams();
+  if (params.search) q.set('search', params.search);
+  if (params.countryCode) q.set('countryCode', params.countryCode);
+  if (params.city) q.set('city', params.city);
+  if (params.day !== undefined) q.set('day', String(params.day));
+  const qs = q.toString();
+  return request<ApiMarket[]>(`/markets${qs ? '?' + qs : ''}`);
 }
 
-export interface ApiMarketsResponse {
-  items: ApiMarket[];
-  total: number;
-  page: number;
-  limit: number;
-  hasNext: boolean;
+export async function fetchMarketByIdApi(id: string): Promise<ApiMarket & { attendingFarmers: any[] }> {
+  return request<ApiMarket & { attendingFarmers: any[] }>(`/markets/${id}`);
 }
 
-export interface ApiPublicFarmer {
+// ─── Public Farmers & Growers ───────────────────────────────────────────────
+export interface ApiFarmerProfile {
   id: string;
+  userId: string;
   businessName: string;
   contactPerson: string;
   bio: string;
   stallNumber?: string;
-  coverImage?: string;
+  marketId: string;
+  marketName?: string;
   approvalStatus: 'pending' | 'approved' | 'rejected' | 'suspended';
-  marketIds: string[];
-  operatingDays: number[];
+  phone?: string;
+  rating?: number;
+  totalReviews?: number;
+  currentOffers?: any[];
 }
 
-export interface ApiProduct {
+export async function fetchPublicFarmersApi(query: { marketId?: string; search?: string } = {}): Promise<ApiFarmerProfile[]> {
+  const q = new URLSearchParams();
+  if (query.marketId) q.set('marketId', query.marketId);
+  if (query.search) q.set('search', query.search);
+  const qs = q.toString();
+  return request<ApiFarmerProfile[]>(`/farmers${qs ? '?' + qs : ''}`);
+}
+
+export async function fetchFarmerByIdApi(id: string): Promise<ApiFarmerProfile> {
+  return request<ApiFarmerProfile>(`/farmers/${id}`);
+}
+
+// ─── Public Products & Dated Catalogue ──────────────────────────────────────
+export interface ApiProductItem {
   id: string;
   farmerId: string;
+  farmerName?: string;
   name: string;
   category: string;
+  categoryId?: string;
   unit: string;
-  priceMinor: number;
-  stockQuantity: number;
-  reservedQuantity: number;
+  basePriceMinor: number;
   description: string;
   imageUrl?: string;
-  isListed: boolean;
-  isAvailable: boolean;
-  marketIds?: string[];
+  status: 'active' | 'inactive';
+  availableQuantity?: number;
+  reservedQuantity?: number;
+  priceMinor?: number;
 }
 
-export interface ApiProductsResponse {
-  items: ApiProduct[];
-  total: number;
-  page: number;
-  limit: number;
-  hasNext: boolean;
-}
-
-// ─── Fetch helpers ────────────────────────────────────────────────────────────
-
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`API ${res.status}: ${body.slice(0, 120)}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-// ─── Markets ──────────────────────────────────────────────────────────────────
-
-export interface MarketFilters {
-  search?: string;
-  countryCode?: string;
-  city?: string;
-  day?: number;     // 0-6
-  page?: number;
-  limit?: number;
-}
-
-export async function fetchMarkets(filters: MarketFilters = {}): Promise<ApiMarketsResponse> {
-  const q = new URLSearchParams();
-  if (filters.search)      q.set('search', filters.search);
-  if (filters.countryCode) q.set('countryCode', filters.countryCode);
-  if (filters.city)        q.set('city', filters.city);
-  if (filters.day !== undefined) q.set('day', String(filters.day));
-  if (filters.page)        q.set('page', String(filters.page));
-  if (filters.limit)       q.set('limit', String(filters.limit));
-  const qs = q.toString();
-  return get<ApiMarketsResponse>(`/markets${qs ? '?' + qs : ''}`);
-}
-
-export async function fetchMarketById(id: string): Promise<ApiMarketDetail> {
-  return get<ApiMarketDetail>(`/markets/${id}`);
-}
-
-// ─── Farmers ─────────────────────────────────────────────────────────────────
-
-export async function fetchPublicFarmer(id: string): Promise<ApiPublicFarmer> {
-  return get<ApiPublicFarmer>(`/farmers/${id}`);
-}
-
-// ─── Products ─────────────────────────────────────────────────────────────────
-
-export interface ProductFilters {
+export async function fetchProductsApi(params: {
   search?: string;
   category?: string;
   farmerId?: string;
   marketId?: string;
-  available?: boolean;
-  sort?: 'name' | 'price_asc' | 'price_desc';
-  page?: number;
-  limit?: number;
-}
-
-export async function fetchProducts(filters: ProductFilters = {}): Promise<ApiProductsResponse> {
+  marketDate?: string;
+} = {}): Promise<ApiProductItem[]> {
   const q = new URLSearchParams();
-  if (filters.search)    q.set('search', filters.search);
-  if (filters.category)  q.set('category', filters.category);
-  if (filters.farmerId)  q.set('farmerId', filters.farmerId);
-  if (filters.marketId)  q.set('marketId', filters.marketId);
-  if (filters.available) q.set('available', 'true');
-  if (filters.sort)      q.set('sort', filters.sort);
-  if (filters.page)      q.set('page', String(filters.page));
-  if (filters.limit)     q.set('limit', String(filters.limit));
+  if (params.search) q.set('search', params.search);
+  if (params.category) q.set('category', params.category);
+  if (params.farmerId) q.set('farmerId', params.farmerId);
+  if (params.marketId) q.set('marketId', params.marketId);
+  if (params.marketDate) q.set('marketDate', params.marketDate);
   const qs = q.toString();
-  return get<ApiProductsResponse>(`/products${qs ? '?' + qs : ''}`);
+  return request<ApiProductItem[]>(`/products${qs ? '?' + qs : ''}`);
 }
 
-export async function fetchProductById(id: string): Promise<ApiProduct> {
-  return get<ApiProduct>(`/products/${id}`);
+export async function fetchProductByIdApi(id: string): Promise<ApiProductItem> {
+  return request<ApiProductItem>(`/products/${id}`);
 }
 
-// ─── Server health probe (used to decide live vs demo mode) ──────────────────
+export async function fetchCategoriesApi(): Promise<{ id: string; name: string; slug: string }[]> {
+  return request<{ id: string; name: string; slug: string }[]>('/categories');
+}
 
+// ─── Customer Orders & Checkout ─────────────────────────────────────────────
+export interface CheckoutPayload {
+  marketId: string;
+  marketDate: string;
+  pickupWindowId: string;
+  items: { productId: string; quantity: number }[];
+  customerNotes?: string;
+  idempotencyKey?: string;
+}
+
+export async function checkoutApi(payload: CheckoutPayload): Promise<{
+  checkoutGroupId: string;
+  orders: any[];
+  isIdempotentReplay?: boolean;
+}> {
+  return request<{ checkoutGroupId: string; orders: any[]; isIdempotentReplay?: boolean }>(
+    '/orders/checkout',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: payload.idempotencyKey ? { 'Idempotency-Key': payload.idempotencyKey } : {},
+    }
+  );
+}
+
+export async function fetchCustomerOrdersApi(params: { status?: string } = {}): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  const qs = q.toString();
+  return request<any[]>(`/orders${qs ? '?' + qs : ''}`);
+}
+
+export async function fetchCustomerOrderByIdApi(id: string): Promise<any> {
+  return request<any>(`/orders/${id}`);
+}
+
+export async function cancelCustomerOrderApi(id: string, reason: string): Promise<any> {
+  return request<any>(`/orders/${id}/cancel`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function modifyCustomerOrderItemsApi(id: string, items: { productId: string; quantity: number }[]): Promise<any> {
+  return request<any>(`/orders/${id}/items`, {
+    method: 'PATCH',
+    body: JSON.stringify({ items }),
+  });
+}
+
+// ─── Customer Engagement (Favourites, Alerts, Reviews) ─────────────────────
+export async function fetchFavouritesApi(): Promise<{ farmers: any[]; products: any[] }> {
+  return request<{ farmers: any[]; products: any[] }>('/favourites');
+}
+
+export async function addFavouriteApi(targetType: 'farmer' | 'product', targetId: string): Promise<any> {
+  return request<any>('/favourites', {
+    method: 'POST',
+    body: JSON.stringify({ targetType, targetId }),
+  });
+}
+
+export async function removeFavouriteApi(targetType: 'farmer' | 'product', targetId: string): Promise<any> {
+  return request<any>(`/favourites/${targetType}/${targetId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchRestockAlertsApi(): Promise<any[]> {
+  return request<any[]>('/restock-alerts');
+}
+
+export async function createRestockAlertApi(data: { productId: string; marketId: string }): Promise<any> {
+  return request<any>('/restock-alerts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createReviewApi(data: {
+  orderId: string;
+  targetType: 'farmer' | 'product';
+  targetId: string;
+  rating: number;
+  comment: string;
+}): Promise<any> {
+  return request<any>('/reviews', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Farmer Operations ──────────────────────────────────────────────────────
+export async function fetchFarmerProfileApi(): Promise<any> {
+  return request<any>('/farmer/profile');
+}
+
+export async function updateFarmerProfileApi(data: any): Promise<any> {
+  return request<any>('/farmer/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchFarmerOrdersApi(params: { status?: string; marketDate?: string } = {}): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  if (params.marketDate) q.set('marketDate', params.marketDate);
+  const qs = q.toString();
+  return request<any[]>(`/farmer/orders${qs ? '?' + qs : ''}`);
+}
+
+export async function updateFarmerOrderStatusApi(
+  orderId: string,
+  status: 'accepted' | 'declined' | 'ready_for_pickup' | 'completed',
+  reason?: string
+): Promise<any> {
+  return request<any>(`/farmer/orders/${orderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, reason }),
+  });
+}
+
+export async function fetchWeeklyTemplateApi(marketId: string, dayOfWeek: number): Promise<any> {
+  return request<any>(`/farmer/stock-templates?marketId=${marketId}&dayOfWeek=${dayOfWeek}`);
+}
+
+export async function updateWeeklyTemplateApi(data: {
+  marketId: string;
+  dayOfWeek: number;
+  items: { productId: string; defaultQuantity: number; defaultPriceMinor: number; unit: string }[];
+}): Promise<any> {
+  return request<any>('/farmer/stock-templates', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchFarmerStockOffersApi(params: { date?: string; marketId?: string } = {}): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (params.date) q.set('date', params.date);
+  if (params.marketId) q.set('marketId', params.marketId);
+  const qs = q.toString();
+  return request<any[]>(`/farmer/stock-offers${qs ? '?' + qs : ''}`);
+}
+
+export async function saveFarmerStockOfferApi(data: {
+  marketId: string;
+  productId: string;
+  date: string;
+  totalQuantity: number;
+  priceMinor: number;
+  unit: string;
+  status?: string;
+}): Promise<any> {
+  return request<any>('/farmer/stock-offers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function replyToReviewApi(reviewId: string, replyText: string): Promise<any> {
+  return request<any>(`/farmer/reviews/${reviewId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ reply: replyText }),
+  });
+}
+
+export async function fetchFarmerReportsApi(): Promise<any> {
+  return request<any>('/farmer/reports');
+}
+
+// ─── Admin Operations ───────────────────────────────────────────────────────
+export async function fetchAdminFarmersApi(query: { status?: string } = {}): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (query.status) q.set('status', query.status);
+  const qs = q.toString();
+  return request<any[]>(`/admin/farmers${qs ? '?' + qs : ''}`);
+}
+
+export async function updateFarmerApprovalStatusApi(
+  farmerId: string,
+  approvalStatus: 'approved' | 'rejected' | 'suspended',
+  reason?: string
+): Promise<any> {
+  return request<any>(`/admin/farmers/${farmerId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ approvalStatus, reason }),
+  });
+}
+
+export async function fetchAdminCustomersApi(): Promise<any[]> {
+  return request<any[]>('/admin/customers');
+}
+
+export async function fetchAdminCustomerDetailsApi(id: string): Promise<any> {
+  return request<any>(`/admin/customers/${id}`);
+}
+
+export async function updateCustomerStatusApi(id: string, isActive: boolean, reason?: string): Promise<any> {
+  return request<any>(`/admin/customers/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive, reason }),
+  });
+}
+
+export async function createAdminMarketApi(marketData: any): Promise<any> {
+  return request<any>('/admin/markets', {
+    method: 'POST',
+    body: JSON.stringify(marketData),
+  });
+}
+
+export async function updateAdminMarketApi(id: string, marketData: any): Promise<any> {
+  return request<any>(`/admin/markets/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(marketData),
+  });
+}
+
+export async function createAdminCategoryApi(data: { name: string; slug: string; description?: string }): Promise<any> {
+  return request<any>('/admin/categories', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchAdminAnalyticsApi(): Promise<any> {
+  return request<any>('/admin/analytics');
+}
+
+export async function fetchAdminReviewsApi(query: { status?: string } = {}): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (query.status) q.set('status', query.status);
+  const qs = q.toString();
+  return request<any[]>(`/admin/reviews${qs ? '?' + qs : ''}`);
+}
+
+export async function moderateAdminReviewApi(id: string, status: 'published' | 'hidden'): Promise<any> {
+  return request<any>(`/admin/reviews/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+// ─── AI Copilot Service ─────────────────────────────────────────────────────
+export async function chatCopilotApi(message: string, context: any = {}): Promise<{
+  reply: string;
+  proposedAction?: {
+    draftId: string;
+    actionType: string;
+    summary: string;
+    expiresAt?: string;
+  } | null;
+  groundedRecords?: any;
+}> {
+  return request<any>('/ai/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, context }),
+  });
+}
+
+export async function confirmCopilotActionApi(draftId: string): Promise<{
+  actionType: string;
+  confirmed: boolean;
+  summary: string;
+  result: any;
+}> {
+  return request<any>(`/ai/actions/${draftId}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ draftId }),
+  });
+}
+
+// ─── Media Upload ───────────────────────────────────────────────────────────
+export async function uploadImageApi(file: File): Promise<{ url: string; filename: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+  return request<{ url: string; filename: string }>('/uploads/image', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+// ─── Prober ─────────────────────────────────────────────────────────────────
 export async function probeServer(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
+    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
     return res.ok;
   } catch {
     return false;
