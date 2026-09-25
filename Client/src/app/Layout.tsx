@@ -1,3 +1,6 @@
+import { BrandMark } from "../components/BrandMark";
+import { ScrollChoreography } from "../components/ScrollChoreography";
+import { MarketPreloader } from "../components/MarketPreloader";
 import { CoverageBoundary } from "../components/CoverageBoundary";
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, Navigate } from "react-router-dom";
@@ -112,28 +115,13 @@ export function Layout() {
     window.scrollTo(0, 0);
     const h = document.querySelector("h1");
     if (h) {
-      document.title = `${h.textContent} · MarketLink`;
+      document.title = `${h.textContent} · Gather & Grow`;
       (h as HTMLElement).focus({ preventScroll: true });
     }
   }, [pathname]);
   return (
     <CompanionContext.Provider value={() => setAssistant(true)}>
-      {(pathname === "/" || pathname === "/customer") && (
-        <motion.div
-          key={pathname}
-          className="route-arrival-feedback"
-          aria-hidden="true"
-          initial={{ scaleX: 0, opacity: 1 }}
-          animate={{ scaleX: 1, opacity: 0 }}
-          transition={{
-            scaleX: { duration: reduceMotion ? 0 : 0.45, ease: "easeOut" },
-            opacity: {
-              delay: reduceMotion ? 0 : 0.45,
-              duration: reduceMotion ? 0 : 0.15,
-            },
-          }}
-        />
-      )}
+      <MarketPreloader />
       <a className="skip-link" href="#main">
         {t('skipContent')}
       </a>
@@ -177,8 +165,8 @@ export function Layout() {
         className={`header ${role === "customer" ? "customer-header" : ""}`}
       >
         <Link to="/" className="brand">
-          <Sprout size={27} />
-          MarketLink<span className="brand-dot">●</span>
+          <BrandMark size={32} />
+          Gather & Grow<span className="brand-dot">●</span>
         </Link>
         <nav className="public-nav" aria-label="Primary">
           <NavLink to="/markets">{t('navMarkets')}</NavLink>
@@ -374,7 +362,7 @@ export function Layout() {
                   ? "Your market, your rhythm"
                   : role === "farmer"
                     ? "Good Earth Growers · sample stall"
-                    : "MarketLink operations"}
+                    : "Gather & Grow operations"}
               </span>
               <div className="actions">
                 <Link
@@ -406,15 +394,15 @@ export function Layout() {
               ))}
             </nav>
           )}
-          <CoverageBoundary><Outlet /></CoverageBoundary>
+          <ScrollChoreography><CoverageBoundary><Outlet /></CoverageBoundary></ScrollChoreography>
         </main>
       </div>
       {!workspace && role !== "customer" && (
         <footer className="footer">
           <div>
             <Link className="brand" to="/">
-              <Sprout />
-              MarketLink
+              <BrandMark />
+              Gather & Grow
             </Link>
             <h2>{t('footerTitle')}</h2>
             <p>{t('footerBody')}</p>

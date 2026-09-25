@@ -1,7 +1,10 @@
+import { MarketChapter } from "../components/MarketChapter";
+import { MarketHero } from "../components/MarketHero";
+import { HarvestIndex, MarketPackingGuide } from "../components/HarvestIndex";
+import { PickupJourney } from "../components/PublicScenes";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowDown,
   ArrowRight,
   ArrowUpRight,
   CalendarDays,
@@ -82,12 +85,10 @@ export function LivingHome() {
 
   const basketCount = Object.values(s.basket).reduce((a, b) => a + b, 0);
   const scrollTo = (id: string) =>
-    document
-      .getElementById(id)
-      ?.scrollIntoView({
-        behavior: reduce ? "instant" : "smooth",
-        block: "start",
-      });
+    document.getElementById(id)?.scrollIntoView({
+      behavior: reduce ? "instant" : "smooth",
+      block: "start",
+    });
   const chooseMarket = (id: string) => {
     setMarket(id);
     setQuantity(1);
@@ -107,64 +108,31 @@ export function LivingHome() {
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
       const ctx = gsap.context(() => {
-        gsap
-          .timeline({ defaults: { ease: "power3.out" } })
-          .from(".global-hero h1", {
-            y: 35,
-            clipPath: "inset(100% 0 0)",
-            duration: 0.8,
-          })
-          .from(".global-discovery-form", { y: 30, duration: 0.65 }, 0.18)
-          .from(
-            ".global-hero-image img",
-            { scale: 1.14, clipPath: "inset(0 0 100% 0)", duration: 1.05 },
-            0.05,
-          )
-          .from(
-            ".global-how article",
-            { x: 25, stagger: 0.11, duration: 0.5 },
-            0.5,
-          );
-        gsap.to(".arrival-stage", {
-          y: -35,
-          ease: "none",
-          scrollTrigger: {
-            trigger: ".global-hero",
-            start: "top top",
-            end: "bottom top",
-            scrub: 0.4,
-          },
+        gsap.from(".harvest-index-tabs button", {
+          clipPath: "inset(0 100% 0 0)", stagger: .12, duration: .7,
+          scrollTrigger: {trigger: ".harvest-index", start: "top 75%"},
         });
-        gsap.from(".global-journey-line", {
-          scaleX: 0,
-          transformOrigin: "left",
-          scrollTrigger: {
-            trigger: ".global-how",
-            start: "top 90%",
-            end: "bottom 30%",
-            scrub: true,
-          },
+        gsap.from(".packing-guide h2", {
+          clipPath: "inset(0 0 100% 0)", duration: .85,
+          scrollTrigger: {trigger: ".packing-guide", start: "top 75%"},
         });
-        if (covered) gsap.from(".global-grower-photo img", {
-          clipPath: "inset(0 0 100% 0)",
-          duration: 0.85,
-          scrollTrigger: { trigger: ".global-grower-photo", start: "top 85%" },
-        });
+        if (covered)
+          gsap.from(".global-grower-photo img", {
+            clipPath: "inset(0 0 100% 0)",
+            duration: 0.85,
+            scrollTrigger: {
+              trigger: ".global-grower-photo",
+              start: "top 85%",
+            },
+          });
       }, root);
       return () => ctx.revert();
     });
     return () => media.revert();
-  }, [covered]);
+  }, [covered, visitor.locale]);
   return (
     <div className="global-market" ref={root}>
-      <section className="global-hero">
-        <div className="global-hero-copy">
-          <span className="global-wordmark">
-            <Sprout size={18} />
-            {t("living")}
-          </span>
-          <h1 tabIndex={-1}>{t("headline")}</h1>
-          <p className="global-lead">{t("lead")}</p>
+      <MarketHero headline={t("headline")} lead={t("lead")}>
           <div className="global-discovery-form">
             <button className="hero-location" onClick={open}>
               <MapPin size={20} />
@@ -172,7 +140,9 @@ export function LivingHome() {
                 <small>{t("location")}</small>
                 <strong>
                   {covered
-                    ? market?.id.startsWith("demo-") ? t("lahore") : `${visitor.city} · ${countryName(visitor.country, visitor.locale)}`
+                    ? market?.id.startsWith("demo-")
+                      ? t("lahore")
+                      : `${visitor.city} · ${countryName(visitor.country, visitor.locale)}`
                     : visitor.country
                       ? countryName(visitor.country, visitor.locale)
                       : t("anywhere")}
@@ -207,74 +177,18 @@ export function LivingHome() {
               <ArrowRight size={18} />
             </button>
           </div>
-          <small className="global-no-account">
-            <Check size={14} />
-            {t("noAccount")}
-          </small>
-        </div>
-        <div className="global-hero-visual arrival-stage">
-          <figure className="global-hero-image">
-            <img
-              src="/images/market-arrival.jpg"
-              alt={t("editorial")}
-              fetchPriority="high"
-            />
-            <figcaption>{t("editorial")}</figcaption>
-          </figure>
-          <div className="global-photo-caption">
-            <Sprout size={28} />
-            <strong>{t("harvest")}</strong>
-            <ArrowDown size={23} />
-          </div>
-        </div>
-      </section>
-      <section className="global-how" aria-label={t("navHelp")}>
-        <div className="global-journey-line" />
-        {(
-          [
-            {
-              icon: Sprout,
-              title: "fresh",
-              body: "freshBody",
-              target: "reserve-title",
-            },
-            {
-              icon: Heart,
-              title: "people",
-              body: "peopleBody",
-              target: "grower-section",
-            },
-            {
-              icon: ShoppingBasket,
-              title: "collect",
-              body: "collectBody",
-              target: "reserve-title",
-            },
-          ] as const
-        ).map(({ icon: Icon, title, body, target }, i) => (
-          <article key={title}>
-            <span className="journey-number">0{i + 1}</span>
-            <div>
-              <h2>
-                <Icon size={19} />
-                {t(title)}
-              </h2>
-              <p>{t(body)}</p>
-            </div>
-            <button
-              aria-label={t(title)}
-              onClick={() => (covered ? scrollTo(target) : open())}
-            >
-              <ArrowDown size={18} />
-            </button>
-          </article>
-        ))}
-      </section>
+      </MarketHero>
       {!covered ? (
-        <CoverageEmpty />
+        <>
+          <MarketChapter kind="discover" />
+          <CoverageEmpty />
+          <MarketChapter kind="grow" />
+          <MarketChapter kind="harvest" />
+        </>
       ) : (
         <>
           <section id="market-explorer" className="global-explorer">
+            <MarketChapter kind="discover" />
             <div className="explorer-heading">
               <div>
                 <span>
@@ -398,6 +312,7 @@ export function LivingHome() {
             </AnimatePresence>
           </section>
           <section className="global-growers" id="grower-section">
+            <MarketChapter kind="grow" />
             <figure className="global-grower-photo">
               <img
                 src="/images/market-person.jpg"
@@ -457,6 +372,7 @@ export function LivingHome() {
             className="global-reservation"
             aria-labelledby="reserve-title"
           >
+            <MarketChapter kind="harvest" />
             <div className="global-section-title">
               <div>
                 <span lang="en">{farmer?.name}</span>
@@ -680,27 +596,9 @@ export function LivingHome() {
             ))}
         </>
       )}
-      <section className="global-closing">
-        <div>
-          <h2>{t("storyTitle")}</h2>
-          <p>{t("storyBody")}</p>
-          <button
-            onClick={() => (covered ? scrollTo("market-explorer") : open())}
-          >
-            {t("discover")}
-            <ArrowRight size={18} />
-          </button>
-        </div>
-        <div className="global-process">
-          {(["reserved", "meet", "pay"] as const).map((key, i) => (
-            <div key={key}>
-              <span>0{i + 1}</span>
-              <strong>{t(key)}</strong>
-              {i < 2 && <ArrowDown size={18} />}
-            </div>
-          ))}
-        </div>
-      </section>
+      {covered && <HarvestIndex products={view.products.filter(p => s.farmers.some(f => f.id === p.farmerId && markets.some(m => m.id === f.marketId)))} />}
+      <MarketPackingGuide />
+      <PickupJourney compact />
     </div>
   );
 }

@@ -16,3 +16,5 @@ createRoot(document.getElementById("root")!).render(
 );
 
 import "./global-market.css";
+
+import "./public-scenes.css";

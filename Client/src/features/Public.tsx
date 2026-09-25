@@ -1,3 +1,5 @@
+import { SceneHeader, HelpExperience } from "../components/PublicScenes";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useVisitor } from "../data/visitor-context";
 import { MarketMap as InteractiveMap } from "../components/MarketMap";
 import { lazy, useEffect, useState } from "react";
@@ -18,7 +20,6 @@ import {
   ShoppingBasket,
   CalendarDays,
   Star,
-  ShieldCheck,
   Store,
   Sprout,
   Users,
@@ -35,29 +36,38 @@ import {
   Form,
   value,
 } from "../components/ui";
-import { date, money, images, demoDate } from "../data/market";
+import { date, money, images } from "../data/market";
 import type { Role } from "../data/market";
-import {
-  loginApi,
-  registerCustomerApi,
-  registerFarmerApi,
-} from "../data/api";
+import { loginApi, registerCustomerApi, registerFarmerApi } from "../data/api";
 
 // Scope public records without mutating the account/workspace store.
 function useDiscoveryState() {
-  const state=useMarket();
-  const {visitor}=useVisitor();
-  const markets=state.markets.filter(m=>m.countryCode===visitor.country && (!visitor.city || m.city?.toLowerCase()===visitor.city.toLowerCase()));
-  const ids=new Set(markets.map(m=>m.id));
-  const farmers=state.farmers.filter(f=>ids.has(f.marketId));
-  const farmerIds=new Set(farmers.map(f=>f.id));
-  return {...state,markets,farmers,products:state.products.filter(p=>farmerIds.has(p.farmerId)),slots:state.slots.filter(slot=>ids.has(slot.marketId))};
+  const state = useMarket();
+  const { visitor } = useVisitor();
+  const markets = state.markets.filter(
+    (m) =>
+      m.countryCode === visitor.country &&
+      (!visitor.city || m.city?.toLowerCase() === visitor.city.toLowerCase()),
+  );
+  const ids = new Set(markets.map((m) => m.id));
+  const farmers = state.farmers.filter((f) => ids.has(f.marketId));
+  const farmerIds = new Set(farmers.map((f) => f.id));
+  return {
+    ...state,
+    markets,
+    farmers,
+    products: state.products.filter((p) => farmerIds.has(p.farmerId)),
+    slots: state.slots.filter((slot) => ids.has(slot.marketId)),
+  };
 }
 
-export const Home = lazy(() => import('./LivingHome').then(module => ({ default: module.LivingHome })));
+export const Home = lazy(() =>
+  import("./LivingHome").then((module) => ({ default: module.LivingHome })),
+);
 
 export function Markets() {
   const s = useDiscoveryState();
+  const reduceMotion = useReducedMotion();
   const [params, set] = useSearchParams();
   const [selected, select] = useState(s.markets[0]?.id ?? "");
   const [map, showMap] = useState(false);
@@ -67,7 +77,9 @@ export function Markets() {
   const filtered = s.markets.filter(
     (m) =>
       m.active &&
-      `${m.name} ${m.area} ${m.city ?? ""}`.toLowerCase().includes(query.toLowerCase()) &&
+      `${m.name} ${m.area} ${m.city ?? ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
       (!day || m.day === day),
   );
 
@@ -83,32 +95,14 @@ export function Markets() {
   };
 
   return (
-    <div className="container section living-discovery-page">
-      <div className="pe-location-bar" style={{ margin: "0 0 32px" }}>
-        <div className="pe-location-info">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-            <span className="pe-pilot-badge">Pakistan · Lahore Pilot</span>
-            <span style={{ fontSize: "12px", color: "var(--pe-muted)" }}>Live Verified Operating Venues</span>
-          </div>
-          <h3>Local Farmers Markets Discovery</h3>
-          <p>
-            <MapPin size={14} /> Showing scheduled community venues across Lahore for pre-order collection.
-          </p>
-        </div>
-      </div>
-
-      <Heading
-        eyebrow="Somewhere good to be"
-        title="Find your next market day."
-        intro="Explore regional farmers markets, check operating hours, view attending growers, and reserve fresh harvest."
-      />
-
-      <div className="filter-bar">
+    <div className="public-atlas living-discovery-page">
+      <SceneHeader kind="markets" target="market-directory" />
+      <div className="filter-bar" id="market-directory">
         <label className="search">
           <Search size={18} />
           <input
             aria-label="Search markets"
-            placeholder="Search venue or neighbourhood in Lahore..."
+            placeholder="Search venue or neighbourhood..."
             value={query}
             onChange={(e) => update("q", e.target.value)}
           />
@@ -121,8 +115,11 @@ export function Markets() {
             onChange={(e) => update("day", e.target.value)}
           >
             <option value="">All Market Days</option>
-            <option value={demoDate}>Saturday, 3 October</option>
-            <option value="2026-10-04">Sunday, 4 October</option>
+            {[...new Set(s.markets.map((m) => m.day))].sort().map((d) => (
+              <option key={d} value={d}>
+                {date(d)}
+              </option>
+            ))}
           </select>
         </label>
         <button className="button quiet" onClick={() => set({})}>
@@ -137,7 +134,8 @@ export function Markets() {
       </div>
 
       <p className="small muted">
-        {filtered.length} operating market venues · Click a market card or map pin to synchronise.
+        {filtered.length} operating market venues · Click a market card or map
+        pin to synchronise.
       </p>
 
       {filtered.length ? (
@@ -148,12 +146,19 @@ export function Markets() {
                 (f) => f.marketId === m.id && f.state === "Approved",
               );
               const marketProducts = s.products.filter(
-                (p) => p.visible && attendingFarmers.some((f) => f.id === p.farmerId),
+                (p) =>
+                  p.visible &&
+                  attendingFarmers.some((f) => f.id === p.farmerId),
               );
               const isSelected = selectedMarket === m.id;
 
               return (
-                <article
+                <motion.article
+                  layout={!reduceMotion}
+                  animate={{
+                    backgroundColor: isSelected ? "#e0e8c9" : "#faf9f2",
+                  }}
+                  transition={{ duration: reduceMotion ? 0 : 0.3 }}
                   className={`market-result ${isSelected ? "selected" : ""}`}
                   key={m.id}
                   onClick={() => select(m.id)}
@@ -164,20 +169,56 @@ export function Markets() {
                     <Favourite id={m.id} />
                   </div>
                   <div className="market-select">
-                    <h2>{m.name}</h2>
-                    <p style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <h2>
+                      <button
+                        className="atlas-select"
+                        onClick={() => select(m.id)}
+                        aria-pressed={isSelected}
+                      >
+                        {m.name}
+                        <ArrowRight size={20} />
+                      </button>
+                    </h2>
+                    <p
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
                       <MapPin size={15} color="var(--pe-forest)" />
                       {m.address}
                     </p>
                   </div>
-                  <p style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <p
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
                     <Clock size={15} color="var(--pe-forest)" />
-                    {m.hours} · Asia/Karachi (PKT)
+                    {m.hours} · {m.timeZone}
                   </p>
-                  <div className="spread" style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--pe-border-subtle)" }}>
+                  <div
+                    className="spread"
+                    style={{
+                      marginTop: "12px",
+                      paddingTop: "10px",
+                      borderTop: "1px solid var(--pe-border-subtle)",
+                    }}
+                  >
                     <span className="small">
-                      <Sprout size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "3px" }} />
-                      <strong>{attendingFarmers.length}</strong> attending growers · <strong>{marketProducts.length}</strong> items
+                      <Sprout
+                        size={13}
+                        style={{
+                          display: "inline",
+                          verticalAlign: "middle",
+                          marginRight: "3px",
+                        }}
+                      />
+                      <strong>{attendingFarmers.length}</strong> attending
+                      growers · <strong>{marketProducts.length}</strong> items
                     </span>
                     <Link
                       className="text-link"
@@ -188,7 +229,7 @@ export function Markets() {
                       Venue details <ArrowUpRight size={16} />
                     </Link>
                   </div>
-                </article>
+                </motion.article>
               );
             })}
           </div>
@@ -232,27 +273,78 @@ export function MarketDetail() {
           <img src={images.market} alt={m.name} />
         </div>
         <div className="pe-detail-panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "start",
+              marginBottom: "8px",
+            }}
+          >
             <span className="pe-pilot-badge">Verified Lahore Venue</span>
             <Favourite id={m.id} />
           </div>
-          <h1 style={{ fontFamily: "Newsreader", fontSize: "38px", margin: "8px 0 12px", color: "var(--pe-forest)" }}>
+          <h1
+            style={{
+              fontFamily: "Newsreader",
+              fontSize: "38px",
+              margin: "8px 0 12px",
+              color: "var(--pe-forest)",
+            }}
+          >
             {m.name}
           </h1>
-          <p style={{ fontSize: "16px", color: "var(--pe-muted)", margin: "0 0 16px" }}>
+          <p
+            style={{
+              fontSize: "16px",
+              color: "var(--pe-muted)",
+              margin: "0 0 16px",
+            }}
+          >
             {m.area} · Lahore, Pakistan
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px 0", borderTop: "1px solid var(--pe-border)", borderBottom: "1px solid var(--pe-border)", marginBottom: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              padding: "16px 0",
+              borderTop: "1px solid var(--pe-border)",
+              borderBottom: "1px solid var(--pe-border)",
+              marginBottom: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+              }}
+            >
               <CalendarDays size={16} color="var(--pe-forest)" />
               <strong>{date(m.day)}</strong>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+              }}
+            >
               <Clock size={16} color="var(--pe-forest)" />
               <span>{m.hours} · Asia/Karachi (PKT)</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+              }}
+            >
               <MapPin size={16} color="var(--pe-forest)" />
               <span>{m.address}</span>
             </div>
@@ -282,27 +374,41 @@ export function MarketDetail() {
       {/* Attending Producers Section */}
       <section className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Users size={14} /> Participating Producers</span>
+          <span className="pe-eyebrow">
+            <Users size={14} /> Participating Producers
+          </span>
           <h2 className="pe-section-title">Growers attending this venue.</h2>
           <p className="pe-section-lead">
-            Meet the independent farmers hosting stalls at {m.name}. Reserve produce directly with them for Saturday pickup.
+            Meet the independent farmers hosting stalls at {m.name}. Reserve
+            produce directly with them for Saturday pickup.
           </p>
         </div>
 
         {farmers.length ? (
           <div className="pe-growers-grid">
             {farmers.map((f, i) => {
-              const prodsCount = s.products.filter((p) => p.farmerId === f.id && p.visible).length;
+              const prodsCount = s.products.filter(
+                (p) => p.farmerId === f.id && p.visible,
+              ).length;
               return (
-                <Link className="pe-grower-card" key={f.id} to={`/farmers/${f.id}`}>
+                <Link
+                  className="pe-grower-card"
+                  key={f.id}
+                  to={`/farmers/${f.id}`}
+                >
                   <div className="pe-grower-img-box">
-                    <img src={i % 2 === 0 ? images.carrots : images.tomatoes} alt={f.name} />
+                    <img
+                      src={i % 2 === 0 ? images.carrots : images.tomatoes}
+                      alt={f.name}
+                    />
                     <span className="pe-grower-badge">Stall #1{i + 1}</span>
                   </div>
                   <div className="pe-grower-body">
                     <div>
                       <h3>{f.name}</h3>
-                      <div className="pe-grower-person">Managed by {f.person}</div>
+                      <div className="pe-grower-person">
+                        Managed by {f.person}
+                      </div>
                       <p className="pe-grower-story">{f.story}</p>
                     </div>
                     <div className="pe-grower-footer">
@@ -322,8 +428,12 @@ export function MarketDetail() {
       {/* Available Produce Section */}
       <section id="market-harvest" className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Sprout size={14} /> Available Harvest</span>
-          <h2 className="pe-section-title">Produce available for pre-order at {m.name}.</h2>
+          <span className="pe-eyebrow">
+            <Sprout size={14} /> Available Harvest
+          </span>
+          <h2 className="pe-section-title">
+            Produce available for pre-order at {m.name}.
+          </h2>
           <p className="pe-section-lead">
             Lock in your fresh market bags before the Friday 20:00 cutoff.
           </p>
@@ -343,40 +453,43 @@ export function Farmers() {
   const s = useDiscoveryState();
   const [q, set] = useState("");
   const [selectedMarket, setSelectedMarket] = useState("");
-
+  const reduce = useReducedMotion();
   const fs = s.farmers.filter(
     (f) =>
       f.state === "Approved" &&
-      f.name.toLowerCase().includes(q.toLowerCase()) &&
+      `${f.name} ${f.person}`.toLowerCase().includes(q.toLowerCase()) &&
       (!selectedMarket || f.marketId === selectedMarket),
   );
-
   return (
-    <div className="container section">
-      <Heading
-        eyebrow="Our Regional Producers"
-        title="Meet your market people."
-        intro="The independent growers, family orchards and smallholder gardens behind the fresh weekly harvest."
-      />
-
+    <div className="grower-editorial-page">
+      <SceneHeader kind="growers" target="grower-directory" />
+      <div className="grower-directory-heading" id="grower-directory">
+        <div>
+          <span>The people behind the produce</span>
+          <h2>Meet the growers.</h2>
+        </div>
+        <p>
+          Profiles in this preview are labelled records. The photographs are
+          editorial imagery, not portraits of these growers.
+        </p>
+      </div>
       <div className="filter-bar">
         <label className="search">
           <Search size={18} />
           <input
             aria-label="Search growers"
-            placeholder="Search farm name or grower..."
+            placeholder="A farm, a person, a familiar name"
             value={q}
             onChange={(e) => set(e.target.value)}
           />
         </label>
-
         <label className="inline-field">
-          Market Venue{" "}
+          Market venue
           <select
             value={selectedMarket}
             onChange={(e) => setSelectedMarket(e.target.value)}
           >
-            <option value="">All Market Venues</option>
+            <option value="">All market venues</option>
             {s.markets.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -384,56 +497,81 @@ export function Farmers() {
             ))}
           </select>
         </label>
+        <span>{fs.length} growers</span>
       </div>
-
-      <div className="pe-growers-grid" style={{ marginTop: "32px" }}>
-        {fs.map((f, i) => {
-          const assignedMarket = s.markets.find((m) => m.id === f.marketId);
-          const prodsCount = s.products.filter((p) => p.farmerId === f.id && p.visible).length;
-          return (
-            <Link key={f.id} to={`/farmers/${f.id}`} className="pe-grower-card">
-              <div className="pe-grower-img-box">
-                <img
-                  src={i % 2 === 0 ? images.carrots : images.tomatoes}
-                  alt={f.name}
-                />
-                <span className="pe-grower-badge">
-                  <ShieldCheck size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: "3px" }} />
-                  Verified Producer
-                </span>
-              </div>
-              <div className="pe-grower-body">
-                <div>
-                  <h3>{f.name}</h3>
-                  <div className="pe-grower-person">Managed by {f.person}</div>
-                  <p className="pe-grower-story">{f.story}</p>
+      <div className="grower-editorial-list">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {fs.map((f, i) => {
+            const m = s.markets.find((m) => m.id === f.marketId);
+            const count = s.products.filter(
+              (p) => p.farmerId === f.id && p.visible,
+            ).length;
+            return (
+              <motion.article
+                className="grower-editorial-row"
+                key={f.id}
+                layout={!reduce}
+                initial={{
+                  clipPath: reduce ? "inset(0%)" : "inset(0 0 100% 0)",
+                }}
+                whileInView={{ clipPath: "inset(0%)" }}
+                viewport={{ once: true, amount: 0.15 }}
+                exit={{ opacity: 0, scale: reduce ? 1 : 0.96 }}
+                transition={{
+                  duration: reduce ? 0 : 0.65,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+              >
+                <figure>
+                  <img
+                    loading="lazy"
+                    src={
+                      i % 2 === 0
+                        ? "/images/grower.jpg"
+                        : "/images/market-person.jpg"
+                    }
+                    alt="Editorial agricultural photograph, not the listed grower"
+                  />
+                  <figcaption>
+                    Editorial photograph /{" "}
+                    {i % 2 === 0 ? "Heather Gill" : "Ravi Sharma"}
+                  </figcaption>
+                </figure>
+                <div className="grower-editorial-story">
+                  <span>
+                    0{i + 1} /{" "}
+                    {f.id.startsWith("demo-")
+                      ? "Sample grower"
+                      : "Grower profile"}
+                  </span>
+                  <h2>{f.name}</h2>
+                  <p className="grower-person">{f.person}</p>
+                  <p>{f.story}</p>
+                  <dl>
+                    <div>
+                      <dt>Meet at</dt>
+                      <dd>{m?.name ?? "Market to be confirmed"}</dd>
+                    </div>
+                    <div>
+                      <dt>On the stall</dt>
+                      <dd>{count} listed products</dd>
+                    </div>
+                    <div>
+                      <dt>Market day</dt>
+                      <dd>{m ? date(m.day) : "To be confirmed"}</dd>
+                    </div>
+                  </dl>
+                  <Link to={`/farmers/${f.id}`}>
+                    Step into their story
+                    <ArrowUpRight size={21} />
+                  </Link>
                 </div>
-
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px", color: "var(--pe-harvest)" }}>
-                    {[...Array(5)].map((_, idx) => (
-                      <Star key={idx} size={14} fill="currentColor" />
-                    ))}
-                    <span style={{ fontSize: "12px", color: "var(--pe-muted)", marginLeft: "4px" }}>
-                      (5.0 · Verified Pickup Reviews)
-                    </span>
-                  </div>
-
-                  <div className="pe-grower-footer">
-                    <span>
-                      <MapPin size={13} style={{ display: "inline", verticalAlign: "middle" }} />
-                      {assignedMarket?.name ?? "The Orchard Market"}
-                    </span>
-                    <span>{prodsCount} Produce Lines →</span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+              </motion.article>
+            );
+          })}
+        </AnimatePresence>
+        {!fs.length && <Empty title="No growers match this search." />}
       </div>
-
-      {!fs.length && <Empty title="No growers match that criteria." />}
     </div>
   );
 }
@@ -445,7 +583,9 @@ export function FarmerDetail() {
   if (!f) return <NotFound />;
 
   const m = s.markets.find((m) => m.id === f.marketId);
-  const ownProducts = s.products.filter((p) => p.farmerId === f.id && p.visible);
+  const ownProducts = s.products.filter(
+    (p) => p.farmerId === f.id && p.visible,
+  );
   const farmerReviews = s.reviews.filter((r) => r.visible && r.target === f.id);
 
   return (
@@ -459,44 +599,110 @@ export function FarmerDetail() {
           <img src={images.carrots} alt={f.name} />
         </div>
         <div className="pe-detail-panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "start",
+              marginBottom: "8px",
+            }}
+          >
             <span className="pe-pilot-badge">Verified Producer</span>
             <Favourite id={f.id} />
           </div>
-          <h1 style={{ fontFamily: "Newsreader", fontSize: "38px", margin: "8px 0 6px", color: "var(--pe-forest)" }}>
+          <h1
+            style={{
+              fontFamily: "Newsreader",
+              fontSize: "38px",
+              margin: "8px 0 6px",
+              color: "var(--pe-forest)",
+            }}
+          >
             {f.name}
           </h1>
-          <p style={{ fontSize: "15px", color: "var(--pe-muted)", margin: "0 0 16px" }}>
+          <p
+            style={{
+              fontSize: "15px",
+              color: "var(--pe-muted)",
+              margin: "0 0 16px",
+            }}
+          >
             Lead Grower: {f.person} · Lahore Pilot Region
           </p>
 
-          <p style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--pe-ink)", marginBottom: "20px" }}>
+          <p
+            style={{
+              fontSize: "15px",
+              lineHeight: "1.6",
+              color: "var(--pe-ink)",
+              marginBottom: "20px",
+            }}
+          >
             {f.story}
           </p>
 
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "20px" }}>
-            <span className="pe-cat-btn" style={{ fontSize: "12px", background: "var(--pe-sage)" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              marginBottom: "20px",
+            }}
+          >
+            <span
+              className="pe-cat-btn"
+              style={{ fontSize: "12px", background: "var(--pe-sage)" }}
+            >
               ✓ 100% Organically Grown
             </span>
-            <span className="pe-cat-btn" style={{ fontSize: "12px", background: "var(--pe-sage)" }}>
+            <span
+              className="pe-cat-btn"
+              style={{ fontSize: "12px", background: "var(--pe-sage)" }}
+            >
               ✓ Family Farm
             </span>
-            <span className="pe-cat-btn" style={{ fontSize: "12px", background: "var(--pe-sage)" }}>
+            <span
+              className="pe-cat-btn"
+              style={{ fontSize: "12px", background: "var(--pe-sage)" }}
+            >
               ✓ Direct Stall Handover
             </span>
           </div>
 
-          <div style={{ borderTop: "1px solid var(--pe-border)", paddingTop: "16px" }}>
+          <div
+            style={{
+              borderTop: "1px solid var(--pe-border)",
+              paddingTop: "16px",
+            }}
+          >
             <p style={{ fontSize: "14px", margin: "0 0 8px" }}>
-              <Store size={15} style={{ display: "inline", verticalAlign: "middle", marginRight: "6px" }} />
+              <Store
+                size={15}
+                style={{
+                  display: "inline",
+                  verticalAlign: "middle",
+                  marginRight: "6px",
+                }}
+              />
               <strong>Stall Location:</strong> Stall #14, near South Gate
             </p>
             <p style={{ fontSize: "14px", margin: "0 0 16px" }}>
-              <CalendarDays size={15} style={{ display: "inline", verticalAlign: "middle", marginRight: "6px" }} />
-              <strong>Next Market:</strong> {m ? `${m.name} (${date(m.day)})` : "The Orchard Market"}
+              <CalendarDays
+                size={15}
+                style={{
+                  display: "inline",
+                  verticalAlign: "middle",
+                  marginRight: "6px",
+                }}
+              />
+              <strong>Next Market:</strong>{" "}
+              {m ? `${m.name} (${date(m.day)})` : "The Orchard Market"}
             </p>
             {m && (
-              <Link to={`/markets/${m.id}`} className="button secondary compact">
+              <Link
+                to={`/markets/${m.id}`}
+                className="button secondary compact"
+              >
                 Explore Venue Details →
               </Link>
             )}
@@ -507,10 +713,13 @@ export function FarmerDetail() {
       {/* Produce Catalogue Section */}
       <section className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Sprout size={14} /> Fresh Harvest</span>
+          <span className="pe-eyebrow">
+            <Sprout size={14} /> Fresh Harvest
+          </span>
           <h2 className="pe-section-title">Available from {f.name}.</h2>
           <p className="pe-section-lead">
-            Reserve fresh produce directly from this producer. Pre-orders are harvested fresh and crated in your name for Saturday collection.
+            Reserve fresh produce directly from this producer. Pre-orders are
+            harvested fresh and crated in your name for Saturday collection.
           </p>
         </div>
 
@@ -524,25 +733,68 @@ export function FarmerDetail() {
       {/* Community Reviews Section */}
       <section className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Star size={14} /> Verified Buyer Feedback</span>
+          <span className="pe-eyebrow">
+            <Star size={14} /> Verified Buyer Feedback
+          </span>
           <h2 className="pe-section-title">Words from the market community.</h2>
         </div>
 
         {farmerReviews.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
             {farmerReviews.map((r) => (
-              <blockquote className="review" key={r.id} style={{ background: "#ffffff", border: "1px solid var(--pe-border)", borderRadius: "6px", padding: "20px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", color: "var(--pe-harvest)" }}>
+              <blockquote
+                className="review"
+                key={r.id}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid var(--pe-border)",
+                  borderRadius: "6px",
+                  padding: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    marginBottom: "8px",
+                    color: "var(--pe-harvest)",
+                  }}
+                >
                   {[...Array(r.rating)].map((_, idx) => (
                     <Star key={idx} size={14} fill="currentColor" />
                   ))}
-                  <strong style={{ fontSize: "13px", color: "var(--pe-ink)", marginLeft: "4px" }}>
+                  <strong
+                    style={{
+                      fontSize: "13px",
+                      color: "var(--pe-ink)",
+                      marginLeft: "4px",
+                    }}
+                  >
                     Verified Pickup · Order {r.orderId}
                   </strong>
                 </div>
-                <p style={{ fontSize: "15px", lineHeight: "1.55", margin: "0 0 10px" }}>“{r.text}”</p>
+                <p
+                  style={{
+                    fontSize: "15px",
+                    lineHeight: "1.55",
+                    margin: "0 0 10px",
+                  }}
+                >
+                  “{r.text}”
+                </p>
                 {r.reply && (
-                  <div style={{ borderLeft: "3px solid var(--pe-forest)", paddingLeft: "12px", marginTop: "10px", color: "var(--pe-forest)", fontSize: "13.5px" }}>
+                  <div
+                    style={{
+                      borderLeft: "3px solid var(--pe-forest)",
+                      paddingLeft: "12px",
+                      marginTop: "10px",
+                      color: "var(--pe-forest)",
+                      fontSize: "13.5px",
+                    }}
+                  >
                     <strong>Farmer Reply:</strong> {r.reply}
                   </div>
                 )}
@@ -561,13 +813,16 @@ export function FarmerDetail() {
 
 export function Products() {
   const s = useDiscoveryState();
+  const reduce = useReducedMotion();
   const [params, set] = useSearchParams();
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "";
   const farmer = params.get("farmer") ?? "";
   const market = params.get("market") ?? "";
   const day = params.get("day") ?? "";
-  const [available, setAvailable] = useState(params.get("available") === "true");
+  const [available, setAvailable] = useState(
+    params.get("available") === "true",
+  );
 
   useEffect(() => setAvailable(params.get("available") === "true"), [params]);
 
@@ -589,8 +844,13 @@ export function Products() {
         p.name.toLowerCase().includes(q.toLowerCase()) &&
         (!category || p.category === category) &&
         (!farmer || p.farmerId === farmer) &&
-        (!market || s.farmers.find((f) => f.id === p.farmerId)?.marketId === market) &&
-        (!day || day === demoDate) &&
+        (!market ||
+          s.farmers.find((f) => f.id === p.farmerId)?.marketId === market) &&
+        (!day ||
+          s.slots.some(
+            (slot) =>
+              slot.farmerId === p.farmerId && slot.start.startsWith(day),
+          )) &&
         (!available || (p.available && p.stock > p.reserved)) &&
         p.price <= max * 100,
     )
@@ -603,15 +863,10 @@ export function Products() {
     );
 
   return (
-    <div className="container section">
-      <Heading
-        eyebrow="Direct Field Harvest"
-        title="Fresh for your market day."
-        intro="Browse real harvest allocations published by local growers across Lahore. Reserve your items to guarantee stall availability."
-      />
-
+    <div className="produce-gallery-page">
+      <SceneHeader kind="produce" target="harvest-filters" />
       {/* Category Pills Strip */}
-      <div className="pe-categories-tabs">
+      <div className="pe-categories-tabs" id="harvest-filters">
         <button
           className={`pe-cat-btn ${!category ? "active" : ""}`}
           onClick={() => update("category", "")}
@@ -619,7 +874,9 @@ export function Products() {
           All Produce ({s.products.filter((p) => p.visible).length})
         </button>
         {s.categories.map((c) => {
-          const count = s.products.filter((p) => p.visible && p.category === c).length;
+          const count = s.products.filter(
+            (p) => p.visible && p.category === c,
+          ).length;
           return (
             <button
               key={c}
@@ -699,7 +956,15 @@ export function Products() {
             />
           </Field>
 
-          <label className="checkbox" style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <label
+            className="checkbox"
+            style={{
+              marginTop: "12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
             <input
               type="checkbox"
               checked={available}
@@ -711,20 +976,42 @@ export function Products() {
             <span>In-stock items only</span>
           </label>
 
-          <button className="button quiet" onClick={() => set({})} style={{ marginTop: "16px" }}>
+          <button
+            className="button quiet"
+            onClick={() => set({})}
+            style={{ marginTop: "16px" }}
+          >
             Reset Filters
           </button>
         </aside>
 
         <div>
           <p className="small muted" style={{ marginBottom: "16px" }}>
-            Showing {products.length} dated produce offers for Saturday, 3 October.
+            {products.length} matching offers · review dates and pickup details
+            on each listing.
           </p>
 
           <div className="pe-produce-grid three">
-            {products.map((p) => (
-              <ProductTile product={p} key={p.id} />
-            ))}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {products.map((p) => (
+                <motion.div
+                  key={p.id}
+                  layout={!reduce}
+                  initial={{
+                    opacity: 0,
+                    clipPath: reduce ? "inset(0%)" : "inset(0 100% 0 0)",
+                  }}
+                  animate={{ opacity: 1, clipPath: "inset(0%)" }}
+                  exit={{ opacity: 0, scale: reduce ? 1 : 0.9 }}
+                  transition={{
+                    duration: reduce ? 0 : 0.36,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                >
+                  <ProductTile product={p} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
           {!products.length && (
@@ -740,6 +1027,7 @@ export function Products() {
 
 export function ProductDetail() {
   const s = useDiscoveryState();
+  const reduceDetailMotion = useReducedMotion();
   const act = useAction();
   const { productId } = useParams();
   const p = s.products.find((p) => p.id === productId && p.visible);
@@ -757,29 +1045,47 @@ export function ProductDetail() {
   const stock = Math.max(0, p.stock - p.reserved);
 
   return (
-    <div className="container section">
+    <div className="container section harvest-detail">
       <Link className="back-link" to="/products">
         ← Back to Produce Catalogue
       </Link>
 
       <div className="pe-detail-hero" style={{ marginTop: "16px" }}>
-        <div className="pe-detail-gallery">
+        <motion.div className="pe-detail-gallery" initial={reduceDetailMotion ? false : {clipPath:"inset(0 100% 0 0)"}} animate={{clipPath:"inset(0 0% 0 0)"}} transition={{duration:.75,ease:[.76,0,.24,1]}}> 
           <img src={p.image} alt={p.name} />
-        </div>
+          <span className="detail-photo-label">{p.category} / {p.unit}</span>
+        </motion.div>
 
         <div className="pe-detail-panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "8px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "start",
+              marginBottom: "8px",
+            }}
+          >
             <Link className="eyebrow" to={`/farmers/${f.id}`}>
               {f.name}
             </Link>
             <Favourite id={p.id} />
           </div>
 
-          <h1 style={{ fontFamily: "Newsreader", fontSize: "38px", margin: "4px 0 10px", color: "var(--pe-forest)" }}>
+          <h1
+            style={{
+              fontFamily: "Newsreader",
+              fontSize: "38px",
+              margin: "4px 0 10px",
+              color: "var(--pe-forest)",
+            }}
+          >
             {p.name}
           </h1>
 
-          <div className="pe-produce-price-row" style={{ marginBottom: "16px" }}>
+          <div
+            className="pe-produce-price-row"
+            style={{ marginBottom: "16px" }}
+          >
             <span className="pe-produce-price-val" style={{ fontSize: "28px" }}>
               {money(p.price)}
             </span>
@@ -788,32 +1094,80 @@ export function ProductDetail() {
             </span>
           </div>
 
-          <p style={{ fontSize: "15px", lineHeight: "1.6", color: "var(--pe-ink)", marginBottom: "20px" }}>
+          <p
+            style={{
+              fontSize: "15px",
+              lineHeight: "1.6",
+              color: "var(--pe-ink)",
+              marginBottom: "20px",
+            }}
+          >
             {p.description}
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "16px 0", borderTop: "1px solid var(--pe-border)", borderBottom: "1px solid var(--pe-border)", marginBottom: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              padding: "16px 0",
+              borderTop: "1px solid var(--pe-border)",
+              borderBottom: "1px solid var(--pe-border)",
+              marginBottom: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13.5px",
+              }}
+            >
               <MapPin size={15} color="var(--pe-forest)" />
-              <span>{m?.name ?? "The Orchard Market"} · {m?.address}</span>
+              <span>
+                {m?.name ?? "Market to be confirmed"} · {m?.address}
+              </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13.5px",
+              }}
+            >
               <CalendarDays size={15} color="var(--pe-forest)" />
-              <span>Market Day: Saturday, 3 October · Cutoff Friday 20:00</span>
+              <span>{m?.day ? `Market day: ${m.day}` : "Market date not published"}</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13.5px",
+              }}
+            >
               <Clock size={15} color="var(--pe-forest)" />
-              <span>Available pickup windows: {slots.length > 0 ? `${slots.length} scheduled slots` : "08:00 - 13:00"}</span>
+              <span>
+                Available pickup windows:{" "}
+                {slots.length > 0
+                  ? `${slots.length} scheduled slots`
+                  : "No upcoming windows published"}
+              </span>
             </div>
           </div>
 
           <div className="spread" style={{ marginBottom: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "13px", fontWeight: "600" }}>Quantity:</span>
+              <span style={{ fontSize: "13px", fontWeight: "600" }}>
+                Quantity:
+              </span>
               <div className="fw-stepper">
                 <button
                   type="button"
                   className="fw-stepper-btn"
+                  aria-label="Decrease quantity"
                   disabled={quantity <= 1}
                   onClick={() => set(Math.max(1, quantity - 1))}
                 >
@@ -822,6 +1176,7 @@ export function ProductDetail() {
                 <input
                   type="number"
                   className="fw-stepper-input"
+                  aria-label="Selected quantity"
                   value={quantity}
                   min={1}
                   max={Math.max(1, stock)}
@@ -830,16 +1185,21 @@ export function ProductDetail() {
                 <button
                   type="button"
                   className="fw-stepper-btn"
+                  aria-label="Increase quantity"
                   disabled={quantity >= stock}
                   onClick={() => set(Math.min(stock, quantity + 1))}
                 >
                   +
                 </button>
               </div>
-              <span style={{ fontSize: "13px", color: "var(--pe-muted)" }}>{p.unit}</span>
+              <span style={{ fontSize: "13px", color: "var(--pe-muted)" }}>
+                {p.unit}
+              </span>
             </div>
 
-            <span className={`fw-status-chip ${stock > 0 ? "accepted" : "declined"}`}>
+            <span
+              className={`fw-status-chip ${stock > 0 ? "accepted" : "declined"}`}
+            >
               {stock > 0 ? `${stock} available` : "Sold Out"}
             </span>
           </div>
@@ -856,7 +1216,7 @@ export function ProductDetail() {
                       id: p.id,
                       quantity: (s.basket[p.id] ?? 0) + quantity,
                     },
-                    `Added ${quantity} ${p.unit} of ${p.name} to your market bag.`
+                    `Added ${quantity} ${p.unit} of ${p.name} to your market bag.`,
                   )
                 ) {
                   setAdded(true);
@@ -865,12 +1225,15 @@ export function ProductDetail() {
               }}
             >
               <ShoppingBasket size={18} />
-              {added ? "Added to Market Bag!" : `Add to Bag (${money(p.price * quantity)})`}
+              {added
+                ? "Added to Market Bag!"
+                : `Add to Bag (${money(p.price * quantity)})`}
             </button>
           </div>
 
           <p className="small muted" style={{ margin: 0 }}>
-            Pay in person at pickup. No online card processing fees. Inspect your produce directly at the stall.
+            Pay in person at pickup. No online card processing fees. Inspect
+            your produce directly at the stall.
           </p>
         </div>
       </div>
@@ -878,7 +1241,9 @@ export function ProductDetail() {
       {/* More From This Stall */}
       <section className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Sprout size={14} /> Stall Offerings</span>
+          <span className="pe-eyebrow">
+            <Sprout size={14} /> Stall Offerings
+          </span>
           <h2 className="pe-section-title">More from {f.name}.</h2>
         </div>
 
@@ -894,12 +1259,18 @@ export function ProductDetail() {
       {/* Community Produce Reviews Section */}
       <section className="section">
         <div className="pe-section-header">
-          <span className="pe-eyebrow"><Star size={14} /> Verified Buyer Feedback</span>
-          <h2 className="pe-section-title">Community tasting notes & reviews.</h2>
+          <span className="pe-eyebrow">
+            <Star size={14} /> Community feedback
+          </span>
+          <h2 className="pe-section-title">
+            Community tasting notes & reviews.
+          </h2>
         </div>
 
         {s.reviews.filter((r) => r.visible && r.target === p.id).length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
             {s.reviews
               .filter((r) => r.visible && r.target === p.id)
               .map((r) => (
@@ -932,7 +1303,7 @@ export function ProductDetail() {
                         marginLeft: "4px",
                       }}
                     >
-                      Verified Purchase · Completed Order {r.orderId}
+                      Order reference · {r.orderId}
                     </strong>
                   </div>
                   <p
@@ -962,7 +1333,8 @@ export function ProductDetail() {
           </div>
         ) : (
           <p style={{ color: "var(--pe-muted)", fontStyle: "italic" }}>
-            No customer reviews have been recorded for this item yet. Verified customers can leave feedback after completing pickup.
+            No customer reviews have been recorded for this item yet. Verified
+            customers can leave feedback after completing pickup.
           </p>
         )}
       </section>
@@ -993,18 +1365,37 @@ export function Auth() {
     setError("");
     setLoading(true);
     try {
-      const email = creds?.email || (r === "admin" ? "admin@marketlink.pk" : r === "farmer" ? "tariq@goodearthgrowers.pk" : "hira.khan@example.com");
-      const pass = creds?.pass || (r === "admin" ? "AdminPass123!" : r === "farmer" ? "FarmerPass123!" : "CustomerPass123!");
+      const email =
+        creds?.email ||
+        (r === "admin"
+          ? "admin@marketlink.pk"
+          : r === "farmer"
+            ? "tariq@goodearthgrowers.pk"
+            : "hira.khan@example.com");
+      const pass =
+        creds?.pass ||
+        (r === "admin"
+          ? "AdminPass123!"
+          : r === "farmer"
+            ? "FarmerPass123!"
+            : "CustomerPass123!");
       const session = await loginApi(email, pass);
-      act({ type: "role", role: session.role || r }, `Authenticated as ${session.name || session.email}.`);
+      act(
+        { type: "role", role: session.role || r },
+        `Authenticated as ${session.name || session.email}.`,
+      );
       const next = params.get("next");
       navigate(
-        next && next.startsWith(`/${session.role || r}`) && !next.startsWith("//")
+        next &&
+          next.startsWith(`/${session.role || r}`) &&
+          !next.startsWith("//")
           ? next
           : `/${session.role || r}`,
       );
     } catch (err: any) {
-      setError(err?.message || "Sign in failed. Please verify your credentials.");
+      setError(
+        err?.message || "Sign in failed. Please verify your credentials.",
+      );
     } finally {
       setLoading(false);
     }
@@ -1033,9 +1424,12 @@ export function Auth() {
             phone: value(d, "phone"),
             address: value(d, "address"),
             businessName: value(d, "name"),
-            bio: "Organic field grower registered on MarketLink.",
+            bio: "Organic field grower registered on Gather & Grow.",
           });
-          act({ type: "role", role: "farmer" }, "Farmer account created. Welcome to MarketLink!");
+          act(
+            { type: "role", role: "farmer" },
+            "Farmer account created. Welcome to Gather & Grow!",
+          );
           navigate("/farmer");
         } else {
           await registerCustomerApi({
@@ -1045,19 +1439,29 @@ export function Auth() {
             phone: value(d, "phone"),
             address: value(d, "address"),
           });
-          act({ type: "role", role: "customer" }, "Customer account created. Welcome to MarketLink!");
+          act(
+            { type: "role", role: "customer" },
+            "Customer account created. Welcome to Gather & Grow!",
+          );
           navigate("/customer");
         }
       } catch (err: any) {
-        setError(err?.message || "Registration failed. Please check the provided information.");
+        setError(
+          err?.message ||
+            "Registration failed. Please check the provided information.",
+        );
       } finally {
         setLoading(false);
       }
     } else {
       try {
         const session = await loginApi(email, password);
-        const resolvedRole = session.role || (role === "admin" ? "admin" : loginRole);
-        act({ type: "role", role: resolvedRole }, `Signed in as ${session.name || resolvedRole}.`);
+        const resolvedRole =
+          session.role || (role === "admin" ? "admin" : loginRole);
+        act(
+          { type: "role", role: resolvedRole },
+          `Signed in as ${session.name || resolvedRole}.`,
+        );
         const next = params.get("next");
         navigate(
           next && next.startsWith(`/${resolvedRole}`) && !next.startsWith("//")
@@ -1065,7 +1469,10 @@ export function Auth() {
             : `/${resolvedRole}`,
         );
       } catch (err: any) {
-        setError(err?.message || "Invalid email or password. Please verify your credentials.");
+        setError(
+          err?.message ||
+            "Invalid email or password. Please verify your credentials.",
+        );
       } finally {
         setLoading(false);
       }
@@ -1114,8 +1521,23 @@ export function Auth() {
         ) : (
           <>
             {!register && (
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-                <span style={{ fontSize: "12px", color: "var(--pe-muted)", alignSelf: "center" }}>Quick Fill:</span>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  marginBottom: "16px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--pe-muted)",
+                    alignSelf: "center",
+                  }}
+                >
+                  Quick Fill:
+                </span>
                 <button
                   type="button"
                   className="pe-cat-btn"
@@ -1251,7 +1673,7 @@ export function Auth() {
                   ? "Verifying credentials..."
                   : register
                     ? "Complete Registration"
-                    : "Sign in to MarketLink"}
+                    : "Sign in to Gather & Grow"}
                 <ArrowRight size={18} />
               </button>
             </Form>
@@ -1263,7 +1685,9 @@ export function Auth() {
                   <Link to="/register">New to the market? Join us</Link>
                   <button
                     className="text-button"
-                    onClick={() => enter(role === "admin" ? "admin" : loginRole)}
+                    onClick={() =>
+                      enter(role === "admin" ? "admin" : loginRole)
+                    }
                   >
                     Direct Sign In as {role === "admin" ? "Admin" : loginRole}
                   </button>
@@ -1279,76 +1703,17 @@ export function Auth() {
 
 export function Info() {
   const { pathname } = useLocation();
-  const [q, set] = useState("");
-  const faqs = [
-    [
-      "How do I pay?",
-      "Pay your farmer in person when you collect your order. There is no online payment or delivery.",
-    ],
-    [
-      "Can I change a reservation?",
-      "The planned experience supports eligible changes before the farmer’s cutoff. The demo allows placed and accepted orders to change before its sample cutoff; final rules need API approval.",
-    ],
-    [
-      "Why is my basket grouped by farmer?",
-      "Each farmer prepares a separate pickup commitment. Review every location and window before confirming.",
-    ],
-    [
-      "What does Copilot know?",
-      "This preview uses clearly labelled scripted answers from fictional records. The real service will retrieve only information you are permitted to access.",
-    ],
-    [
-      "What if the map does not load?",
-      "Use the market list and plain addresses. Accurate directions require approved real market coordinates.",
-    ],
-    [
-      "How do reviews work?",
-      "Review a farmer or purchased product after a completed order. In this preview review eligibility is simulated locally.",
-    ],
-  ];
-  if (pathname === "/help")
-    return (
-      <div className="container narrow section">
-        <Heading
-          title="A little market know-how."
-          intro="The practical details, before you head out."
-        />
-        <label className="search">
-          <Search size={18} />
-          <input
-            aria-label="Search help"
-            value={q}
-            onChange={(e) => set(e.target.value)}
-            placeholder="Find an answer"
-          />
-        </label>
-        <div className="section">
-          {faqs
-            .filter(([h, p]) =>
-              `${h} ${p}`.toLowerCase().includes(q.toLowerCase()),
-            )
-            .map(([h, p]) => (
-              <details key={h}>
-                <summary>{h}</summary>
-                <p>{p}</p>
-              </details>
-            ))}
-        </div>
-        <Link className="text-link" to="/contact">
-          Still need a hand? Contact the team <ArrowUpRight size={17} />
-        </Link>
-      </div>
-    );
+  if (pathname === "/help") return <HelpExperience />;
   if (pathname === "/contact")
     return (
       <div className="container section">
         <Heading
           title="Let’s keep in touch."
-          intro="Questions about MarketLink? Start here."
+          intro="Questions about Gather & Grow? Start here."
         />
         <div className="two-col">
           <div>
-            <h2>The MarketLink team</h2>
+            <h2>The Gather & Grow team</h2>
             <Notice>
               Verified team email, phone, address and Google Maps location are
               awaiting owner-provided content. No fictional contact details are
@@ -1389,7 +1754,7 @@ export function Info() {
             meet them.
           </p>
           <p>
-            MarketLink brings discovery, pre-orders and pickup planning into one
+            Gather & Grow brings discovery, pre-orders and pickup planning into one
             shared place for customers, growers and market operators.
           </p>
           <Link className="button" to="/markets">

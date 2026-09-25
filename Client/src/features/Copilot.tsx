@@ -61,7 +61,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           ]
         : [
             "What tomatoes are available this Saturday?",
-            "What can I cook with today's fresh produce?",
+            "What can I cook with fresh Lahore tomatoes and vegetables?",
             "Help me plan my market morning visit",
           ];
 
@@ -71,10 +71,16 @@ export function Copilot({ onClose }: { onClose: () => void }) {
     setBusy(true);
 
     try {
+      // Extract contextual IDs from route if present
+      const pathParts = loc.pathname.split("/").filter(Boolean);
+      const possibleId = pathParts[pathParts.length - 1];
+      const selectedId = possibleId && /^[0-9a-fA-F]{24}$/.test(possibleId) ? possibleId : undefined;
+
       const res: any = await chatCopilotApi(q, {
         history,
         pathname: loc.pathname,
         role,
+        selectedId,
       });
 
       const replyData = res?.data || res;
@@ -121,7 +127,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         ...old,
         {
           question: q,
-          text: `Service unavailable: Could not reach the MarketLink server. Please check your connection or try again. (${err?.message || "Connection failed"})`,
+          text: `The service is temporarily unavailable. Please check your connection or try again. (${err?.message || "Connection failed"})`,
           sources: [],
         },
       ]);
@@ -146,20 +152,111 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                   confirmed: true,
                   summary:
                     data?.summary ||
-                    "Action confirmed and permanently saved to MongoDB Atlas.",
+                    "Done. The proposed changes have been applied successfully.",
                 },
               }
             : r,
         ),
       );
 
-      // Immediately synchronize newly created products/data from backend to active workspace
+      // Immediately synchronize newly created/updated data from backend to active workspace
       await gateway.syncFromBackend();
     } catch (err: any) {
       alert(`Could not confirm action: ${err?.message || "Unknown error"}`);
     } finally {
       setBusy(false);
     }
+  }
+
+  function getActionPreviewTitle(actionType: string) {
+    switch (actionType) {
+      case "create_products":
+        return "Proposed Catalogue Additions";
+      case "edit_saved_product":
+        return "Proposed Catalogue Changes";
+      case "publish_dated_stock":
+        return "Proposed Market Day Allocation";
+      case "update_stall_pin":
+        return "Proposed Stall Assignment";
+      case "cancel_order":
+        return "Order Cancellation Request";
+      case "change_farmer_status":
+        return "Farmer Status Update";
+      case "publish_announcement":
+        return "Platform Announcement Broadcast";
+      default:
+        return "Proposed Action Preview";
+    }
+  }
+
+  function getConfirmButtonLabel(actionType: string) {
+    switch (actionType) {
+      case "create_products":
+        return "Save to Catalogue";
+      case "cancel_order":
+        return "Confirm Order Cancellation";
+      case "change_farmer_status":
+        return "Confirm Status Change";
+      case "publish_dated_stock":
+        return "Publish Market Allocation";
+      case "publish_announcement":
+        return "Broadcast Announcement";
+      default:
+        return "Confirm Proposed Action";
+    }
+  }
+
+  function getConfirmedTitle(actionType: string) {
+    switch (actionType) {
+      case "create_products":
+      case "edit_saved_product":
+        return "Saved to Produce Catalogue";
+      case "publish_dated_stock":
+      case "mark_sold_out":
+        return "Market Allocation Updated";
+      case "update_stall_pin":
+        return "Stall Location Updated";
+      case "cancel_order":
+        return "Reservation Cancelled";
+      case "change_farmer_status":
+        return "Farmer Status Updated";
+      case "publish_announcement":
+        return "Announcement Broadcasted";
+      default:
+        return "Action Completed Successfully";
+    }
+  }
+
+  function renderConfirmedLink(actionType: string) {
+    if (actionType === "create_products" || actionType === "edit_saved_product") {
+      return (
+        <Link to="/farmer/products" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
+          <BookOpen size={14} /> Open Produce Catalogue
+        </Link>
+      );
+    }
+    if (actionType === "publish_dated_stock" || actionType === "mark_sold_out") {
+      return (
+        <Link to="/farmer/stock" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
+          <BookOpen size={14} /> View Stall Inventory
+        </Link>
+      );
+    }
+    if (actionType === "cancel_order") {
+      return (
+        <Link to="/customer/orders" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
+          <BookOpen size={14} /> View Orders
+        </Link>
+      );
+    }
+    if (actionType === "change_farmer_status") {
+      return (
+        <Link to="/admin/farmers" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
+          <BookOpen size={14} /> Open Farmer Directory
+        </Link>
+      );
+    }
+    return null;
   }
 
   return (
@@ -172,7 +269,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       <header>
         <div>
           <span className="eyebrow">
-            MarketLink AI Copilot
+            MarketLink Operating Intelligence
           </span>
           <h2 id="copilot-title">{title}</h2>
         </div>
@@ -186,7 +283,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       </header>
 
       <div className="copilot-context">
-        <span>Workspace: {role === "farmer" ? "Farm Workbench" : role === "admin" ? "Operations Centre" : "Shopper"}</span>
+        <span>Workspace: {role === "farmer" ? "Farm Workbench" : role === "admin" ? "Command Centre" : "Shopper"}</span>
         <span>Route: {loc.pathname}</span>
       </div>
 
@@ -256,39 +353,20 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#203328" }}>
                           <CheckCircle size={18} />
-                          <strong>Saved to Catalogue</strong>
+                          <strong>{getConfirmedTitle(r.proposedAction.actionType)}</strong>
                         </div>
                         <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#203328", whiteSpace: "pre-line" }}>
-                          {r.proposedAction.summary || "Done! Your products have been saved to your catalogue."}
+                          {r.proposedAction.summary}
                         </p>
-                        {role === "farmer" && (
-                          <div style={{ marginTop: "0.5rem" }}>
-                            <Link
-                              to="/farmer/products"
-                              className="button compact"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "0.35rem",
-                                textDecoration: "none",
-                              }}
-                              onClick={onClose}
-                            >
-                              <BookOpen size={14} />
-                              Open Produce Catalogue
-                            </Link>
-                          </div>
-                        )}
+                        <div style={{ marginTop: "0.5rem" }}>
+                          {renderConfirmedLink(r.proposedAction.actionType)}
+                        </div>
                       </div>
                     ) : (
                       <>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#946927" }}>
                           <Sparkles size={16} />
-                          <strong>
-                            {r.proposedAction.actionType === "create_products"
-                              ? "Proposed Catalogue Additions"
-                              : "Proposed Action Preview"}
-                          </strong>
+                          <strong>{getActionPreviewTitle(r.proposedAction.actionType)}</strong>
                         </div>
 
                         {/* Itemized product breakdown with description and details */}
@@ -344,9 +422,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                             disabled={busy}
                             onClick={() => confirmAction(i, r.proposedAction!.draftId)}
                           >
-                            {r.proposedAction.actionType === "create_products"
-                              ? "Save to Catalogue"
-                              : "Confirm Proposed Changes"}
+                            {getConfirmButtonLabel(r.proposedAction.actionType)}
                           </button>
                         </div>
                       </>
