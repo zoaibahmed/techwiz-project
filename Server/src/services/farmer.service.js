@@ -147,6 +147,30 @@ export async function updateMyFarmerProfileService(userId, data) {
 }
 
 export const updateFarmerProfileService = updateMyFarmerProfileService;
+export const getFarmerProfileService = getMyFarmerProfileService;
+
+export async function listFarmersPublicService({ search, marketId } = {}) {
+  const db = getDB();
+  const query = { approvalStatus: 'approved' };
+  if (search) {
+    query.$or = [
+      { businessName: { $regex: search, $options: 'i' } },
+      { contactPerson: { $regex: search, $options: 'i' } },
+    ];
+  }
+  if (marketId) {
+    query.marketIds = new ObjectId(marketId);
+  }
+  const profiles = await db.collection('farmerProfiles').find(query).limit(50).toArray();
+  return profiles.map((p) => ({
+    id: p._id.toString(),
+    businessName: p.businessName,
+    contactPerson: p.contactPerson,
+    bio: p.bio || '',
+    stallNumber: p.stallNumber || '',
+    operatingDays: p.operatingDays || [],
+  }));
+}
 
 export async function getFarmerReportsService(userId) {
   const db = getDB();

@@ -129,3 +129,5 @@ export async function deleteAnnouncementService(adminId, id) {
 
   return { id, deleted: true };
 }
+
+export const updateAnnouncementStatusService = updateAnnouncementService;
