@@ -978,3 +978,23 @@ export async function reorderCustomerOrderService(customerId, orderId, { targetM
   };
 }
 
+export async function listAdminOrdersService(filters = {}, pagination = {}) {
+  const db = getDB();
+  const query = {};
+  if (filters.status) query.status = filters.status;
+  if (filters.marketId) query.marketId = new ObjectId(filters.marketId);
+  if (filters.date) query.marketDate = filters.date;
+
+  const page = parseInt(pagination.page, 10) || 1;
+  const limit = parseInt(pagination.limit, 10) || 50;
+  const skip = (page - 1) * limit;
+
+  const total = await db.collection('orders').countDocuments(query);
+  const docs = await db.collection('orders').find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+
+  return {
+    orders: docs.map(formatOrderDoc),
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+  };
+}
+
