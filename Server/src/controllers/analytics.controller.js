@@ -5,7 +5,7 @@ import {
 
 export async function getPlatformAnalyticsAdmin(req, res, next) {
   try {
-    const data = await getPlatformAnalyticsAdminService();
+    const data = await getPlatformAnalyticsAdminService(req.query);
     res.status(200).json({
       data,
       meta: { timestamp: new Date().toISOString() },

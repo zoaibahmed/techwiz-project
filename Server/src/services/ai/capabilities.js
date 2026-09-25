@@ -891,9 +891,33 @@ export const CAPABILITIES = [
     role: 'farmer',
     type: 'read',
     requiresConfirmation: false,
-    description: 'Retrieve financial metrics: booked order values, collected payments, and sales volume.',
-    parameters: { type: 'object', properties: {} },
-    execute: async (user) => getFarmerReportsService(user.id),
+    description: 'Retrieve executive operational analytics: orders placed, accepted, completed, booked order value, stock health, top products, pickup workloads, and customer review metrics.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', 'this_week', 'last_week', 'this_month', 'last_month', 'custom'], description: 'Analysis time window (defaults to 7d)' },
+        marketId: { type: 'string', description: 'Optional specific market ID filter' },
+        startDate: { type: 'string', description: 'Optional custom start date (YYYY-MM-DD)' },
+        endDate: { type: 'string', description: 'Optional custom end date (YYYY-MM-DD)' },
+      },
+    },
+    execute: async (user, args) => getFarmerReportsService(user.id, args),
+  },
+  {
+    id: 'farmer.get_analytics',
+    name: 'farmer_get_analytics',
+    role: 'farmer',
+    type: 'read',
+    requiresConfirmation: false,
+    description: 'Alias for deep farmer executive analytics and performance breakdown.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', 'this_week', 'last_week', 'this_month', 'last_month', 'custom'], description: 'Analysis time window' },
+        marketId: { type: 'string', description: 'Optional specific market ID filter' },
+      },
+    },
+    execute: async (user, args) => getFarmerReportsService(user.id, args),
   },
 
   // =========================================================================
@@ -1211,9 +1235,18 @@ export const CAPABILITIES = [
     role: 'admin',
     type: 'read',
     requiresConfirmation: false,
-    description: 'Retrieve platform analytics overview: GMV, customer count, order volumes.',
-    parameters: { type: 'object', properties: {} },
-    execute: async () => getPlatformAnalyticsAdminService(),
+    description: 'Retrieve platform analytics, multi-country matrix, market performances, category analytics, booked order value separated by currency, and operational attention queue.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', 'this_week', 'last_week', 'this_month', 'last_month', 'custom'], description: 'Reporting time window (defaults to 7d)' },
+        country: { type: 'string', description: 'Two-letter country code filter (e.g., PK, GB)' },
+        marketId: { type: 'string', description: 'Specific market ID filter' },
+        startDate: { type: 'string', description: 'Custom start date (YYYY-MM-DD)' },
+        endDate: { type: 'string', description: 'Custom end date (YYYY-MM-DD)' },
+      },
+    },
+    execute: async (user, args) => getPlatformAnalyticsAdminService(args),
   },
 ];
 
