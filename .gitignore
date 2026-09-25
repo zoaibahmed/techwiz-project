@@ -4,13 +4,13 @@ atlas-credentials.env
 .env*
 !.env.example
 
-# Git Worktrees & Working State
-.worktrees/
-.work-in-progress/
-
 # Dependencies
 node_modules/
 package-lock.json.bak
+
+# Worktrees & WIP
+.worktrees/
+.work-in-progress/
 
 # Logs
 logs
@@ -19,7 +19,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Runtime data, testing & builds
+# Runtime data & builds
 dist/
 build/
 coverage/
