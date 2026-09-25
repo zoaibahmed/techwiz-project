@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, Sparkles, ArrowUp, BookOpen, CheckCircle } from "lucide-react";
+import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, RotateCcw } from "lucide-react";
 import { useMarket } from "../components/ui";
 import { chatCopilotApi, confirmCopilotActionApi } from "../data/api";
 import { gateway } from "../data/gateway";
@@ -25,9 +25,29 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   const s = useMarket();
   const loc = useLocation();
   const ref = useRef<HTMLDialogElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const role = s.role ?? "customer";
+  const storageKeyReplies = `ml_copilot_${role}_replies`;
+  const storageKeyHistory = `ml_copilot_${role}_history`;
+
   const [question, setQuestion] = useState("");
-  const [replies, setReplies] = useState<Reply[]>([]);
-  const [history, setHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [replies, setReplies] = useState<Reply[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(storageKeyReplies);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [history, setHistory] = useState<{ role: "user" | "assistant"; content: string }[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(storageKeyHistory);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [busy, setBusy] = useState(false);
   const [off, setOff] = useState(false);
 
@@ -38,7 +58,33 @@ export function Copilot({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const role = s.role ?? "customer";
+  // Persist conversation across opens, closes, and page navigation
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKeyReplies, JSON.stringify(replies));
+    } catch {}
+  }, [replies, storageKeyReplies]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKeyHistory, JSON.stringify(history));
+    } catch {}
+  }, [history, storageKeyHistory]);
+
+  // Keep scroll focused on the latest message/action
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [replies, busy]);
+
+  function clearChat() {
+    setReplies([]);
+    setHistory([]);
+    try {
+      sessionStorage.removeItem(storageKeyReplies);
+      sessionStorage.removeItem(storageKeyHistory);
+    } catch {}
+  }
+
   const title =
     role === "farmer"
       ? "Farm Copilot"
@@ -273,13 +319,25 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           </span>
           <h2 id="copilot-title">{title}</h2>
         </div>
-        <button
-          className="button quiet compact"
-          onClick={onClose}
-          aria-label="Close Copilot"
-        >
-          <X size={18} />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          {replies.length > 0 && (
+            <button
+              className="button quiet compact"
+              onClick={clearChat}
+              title="Start a new conversation"
+              aria-label="New conversation"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
+          <button
+            className="button quiet compact"
+            onClick={onClose}
+            aria-label="Close Copilot"
+          >
+            <X size={18} />
+          </button>
+        </div>
       </header>
 
       <div className="copilot-context">
@@ -437,6 +495,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                 Reviewing your request and checking records…
               </p>
             )}
+            <div ref={messagesEndRef} />
           </>
         )}
       </div>
