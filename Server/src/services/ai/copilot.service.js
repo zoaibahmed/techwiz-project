@@ -1,14 +1,120 @@
 import { ObjectId } from 'mongodb';
 import { getDB } from '../../config/db.js';
 import { env } from '../../config/env.js';
-import { updateFarmerProfileService } from '../farmer.service.js';
-import { cancelCustomerOrderService } from '../order.service.js';
-import { replyToReviewService } from '../review.service.js';
-import { createAnnouncementService } from '../announcement.service.js';
+import {
+  CAPABILITIES,
+  findCapability,
+  getCapabilitiesForRole,
+  getOpenAiToolsForRole,
+  normalizeProduceName,
+  naturalProduceDescription,
+} from './capabilities.js';
+
+// Shared backend services
+import {
+  getFarmerProfileService,
+  updateFarmerProfileService,
+  getFarmerReportsService,
+} from '../farmer.service.js';
+
+import {
+  updateFarmerApprovalService,
+  listFarmersForAdminService,
+  listCustomersAdminService,
+} from '../auth.service.js';
+
+import {
+  getCustomerProfileService,
+  updateCustomerProfileService,
+} from '../customer.service.js';
+
+import {
+  listFarmerProductsService,
+  createFarmerProductService,
+  updateFarmerProductService,
+  archiveFarmerProductService,
+  listProductsAdminService,
+  moderateProductAdminService,
+} from '../product.service.js';
+
+import {
+  listStockOffersService,
+  createOrUpdateStockOfferService,
+  updateStockOfferStatusService,
+  getWeeklyTemplateService,
+  updateWeeklyTemplateService,
+  listPickupWindowsService,
+  createPickupWindowService,
+} from '../inventory.service.js';
+
+import {
+  listCustomerOrdersService,
+  getCustomerOrderByIdService,
+  cancelCustomerOrderService,
+  modifyCustomerOrderService,
+  reorderCustomerOrderService,
+  listFarmerOrdersService,
+  getFarmerOrderByIdService,
+  updateFarmerOrderStatusService,
+  listAdminOrdersService,
+} from '../order.service.js';
+
+import {
+  createReviewService,
+  getFarmerReviewsService,
+  replyToReviewService,
+  listAdminReviewsService,
+  moderateReviewService,
+  deleteReviewService,
+} from '../review.service.js';
+
+import {
+  listMarketsService,
+  createMarketService,
+  updateMarketService,
+} from '../market.service.js';
+
+import {
+  listFavouritesService,
+  addFavouriteService,
+  removeFavouriteService,
+} from '../favourite.service.js';
+
+import {
+  listRestockAlertsService,
+  createRestockAlertService,
+  cancelRestockAlertService,
+} from '../restockAlert.service.js';
+
+import {
+  listUserNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '../notification.service.js';
+
+import {
+  listCategoriesService,
+  createCategoryService,
+  updateCategoryService,
+} from '../category.service.js';
+
+import {
+  createAnnouncementService,
+  listAllAnnouncementsAdminService,
+  updateAnnouncementStatusService,
+} from '../announcement.service.js';
+
+import {
+  listInquiriesAdminService,
+  updateInquiryStatusAdminService,
+} from '../inquiry.service.js';
+
+import {
+  getPlatformAnalyticsAdminService,
+} from '../analytics.service.js';
 
 /**
- * Executes an OpenAI Chat Completion request with Tool Calling and Conversation Memory.
- * Uses OPENAI_API_KEY from process.env or env config.
+ * Execute an OpenAI Chat Completion request with Tool Calling and Conversation Memory.
  */
 async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, tools = [] }) {
   const apiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY;
@@ -16,10 +122,8 @@ async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, to
 
   const model = process.env.OPENAI_MODEL || env.OPENAI_MODEL || 'gpt-4o-mini';
 
-  // Construct message sequence with history
   const messages = [{ role: 'system', content: systemPrompt }];
 
-  // Sanitize and append previous conversation turns
   if (Array.isArray(history)) {
     for (const h of history.slice(-12)) {
       if (h && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string') {
@@ -33,7 +137,7 @@ async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, to
   const payload = {
     model,
     messages,
-    temperature: 0.3,
+    temperature: 0.2,
   };
 
   if (Array.isArray(tools) && tools.length > 0) {
@@ -54,7 +158,7 @@ async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, to
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      console.warn(`[OpenAI Chat Notice]: HTTP ${response.status} - ${errText}`);
+      console.warn(`[OpenAI Copilot Notice]: HTTP ${response.status} - ${errText}`);
       return null;
     }
 
@@ -67,387 +171,120 @@ async function callOpenAiWithTools({ systemPrompt, history = [], userMessage, to
       model,
     };
   } catch (err) {
-    console.warn('[OpenAI Invocation Notice]:', err.message);
+    console.warn('[OpenAI Copilot Call Error]:', err.message);
     return null;
   }
 }
 
 /**
- * Structured Tool Definitions per Role
- */
-function getRoleTools(role) {
-  if (role === 'farmer') {
-    return [
-      {
-        type: 'function',
-        function: {
-          name: 'create_or_revise_products',
-          description:
-            'Propose adding new products to the harvest catalogue, OR revise/update products in an existing pending draft proposal before confirmation. When modifying an existing draft, pass the COMPLETE list of all products (both updated items and unchanged items) with their revised prices, units, and descriptions. Prepares a preview requiring farmer confirmation before writing to MongoDB.',
-          parameters: {
-            type: 'object',
-            properties: {
-              products: {
-                type: 'array',
-                description: 'The complete list of products to propose or maintain in the draft',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string', description: 'Product name, e.g. "Tomatoes", "Bananas"' },
-                    unit: {
-                      type: 'string',
-                      enum: ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'],
-                      description: 'Standard selling unit',
-                    },
-                    pricePKR: { type: 'number', description: 'Selling price in Pakistani Rupees (PKR)' },
-                    category: { type: 'string', description: 'Category name, e.g. "Fresh Vegetables", "Orchard Fruits"' },
-                    description: { type: 'string', description: 'Helpful, appetizing description of the produce' },
-                  },
-                  required: ['name', 'unit', 'pricePKR'],
-                },
-              },
-              explanation: {
-                type: 'string',
-                description: 'Brief explanation of what was created or changed (e.g. "Updated tomato price to 150/kg and added descriptions for all products")',
-              },
-            },
-            required: ['products'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'edit_saved_catalogue_product',
-          description:
-            'Propose editing a product that ALREADY EXISTS in the saved database catalogue (found in productsCatalogue). Do NOT use this for products that are only in the pending draft.',
-          parameters: {
-            type: 'object',
-            properties: {
-              productId: { type: 'string', description: 'Real MongoDB product ID from productsCatalogue' },
-              name: { type: 'string', description: 'Updated name if requested' },
-              pricePKR: { type: 'number', description: 'Updated price in PKR' },
-              unit: { type: 'string', enum: ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'] },
-              description: { type: 'string', description: 'Updated product description' },
-            },
-            required: ['productId'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'publish_dated_stock',
-          description:
-            'Propose allocating dated inventory for an upcoming market day (e.g. allocating 50 kg of tomatoes for Saturday market).',
-          parameters: {
-            type: 'object',
-            properties: {
-              productId: { type: 'string', description: 'Product ID or product name' },
-              date: { type: 'string', description: 'Market date in YYYY-MM-DD format' },
-              totalQuantity: { type: 'number', description: 'Quantity available for pickup' },
-              pricePKR: { type: 'number', description: 'Price in PKR' },
-            },
-            required: ['productId', 'date', 'totalQuantity'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'mark_sold_out',
-          description: 'Propose closing remaining inventory for a product or market allocation.',
-          parameters: {
-            type: 'object',
-            properties: {
-              productId: { type: 'string', description: 'Product ID or name' },
-            },
-            required: ['productId'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'update_stall_pin',
-          description: 'Propose updating the farm stall designation (e.g. "Stall B-18").',
-          parameters: {
-            type: 'object',
-            properties: {
-              stallNumber: { type: 'string', description: 'Stall identifier' },
-            },
-            required: ['stallNumber'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'reply_to_review',
-          description: 'Draft and propose publishing a farmer reply to a customer review.',
-          parameters: {
-            type: 'object',
-            properties: {
-              reviewId: { type: 'string', description: 'ID of the review' },
-              replyText: { type: 'string', description: 'Reply text content' },
-            },
-            required: ['reviewId', 'replyText'],
-          },
-        },
-      },
-    ];
-  }
-
-  if (role === 'customer') {
-    return [
-      {
-        type: 'function',
-        function: {
-          name: 'cancel_order',
-          description: 'Propose cancelling a customer reservation order before cutoff.',
-          parameters: {
-            type: 'object',
-            properties: {
-              orderId: { type: 'string', description: 'Order ID or order number' },
-              reason: { type: 'string', description: 'Reason for cancellation' },
-            },
-            required: ['orderId'],
-          },
-        },
-      },
-    ];
-  }
-
-  if (role === 'admin') {
-    return [
-      {
-        type: 'function',
-        function: {
-          name: 'approve_farmer',
-          description: 'Propose approving a pending farmer profile.',
-          parameters: {
-            type: 'object',
-            properties: {
-              farmerId: { type: 'string', description: 'Farmer profile ID' },
-            },
-            required: ['farmerId'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'publish_announcement',
-          description: 'Propose broadcasting a platform announcement.',
-          parameters: {
-            type: 'object',
-            properties: {
-              title: { type: 'string', description: 'Title' },
-              message: { type: 'string', description: 'Message body' },
-              type: {
-                type: 'string',
-                enum: ['general', 'market_alert', 'schedule_change'],
-              },
-            },
-            required: ['title', 'message'],
-          },
-        },
-      },
-    ];
-  }
-
-  return [];
-}
-
-/**
- * Normalizes common product names and typos.
- */
-function normalizeProductName(rawName = '') {
-  let name = rawName.trim();
-  const lower = name.toLowerCase();
-  if (lower.startsWith('tomm') || lower.startsWith('tomat')) return 'Tomatoes';
-  if (lower.startsWith('bana')) return 'Bananas';
-  if (lower.startsWith('appl')) return 'Apples';
-  if (lower.startsWith('orang')) return 'Oranges';
-  if (lower.startsWith('spin')) return 'Organic Spinach';
-  if (lower.startsWith('mint') || lower.startsWith('pudin')) return 'Fresh Mint';
-  if (lower.startsWith('straw')) return 'Strawberries';
-  // Capitalize words
-  return name.replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
- * Generates an authentic description for produce if missing.
- */
-function defaultDescriptionForProduce(name = '') {
-  const lower = name.toLowerCase();
-  if (lower.includes('tomato')) return 'Juicy, vine-ripened tomatoes harvested fresh for peak sweetness and acidity.';
-  if (lower.includes('banana')) return 'Naturally ripened, sweet local bananas full of rich flavor.';
-  if (lower.includes('apple')) return 'Crisp, hand-picked orchard apples with a refreshing snap.';
-  if (lower.includes('orange')) return 'Freshly harvested citrus oranges bursting with sweet natural juice.';
-  if (lower.includes('spinach')) return 'Tender baby spinach leaves, crisp and chemical-free.';
-  if (lower.includes('mint')) return 'Aromatic field mint freshly cut on harvest morning.';
-  if (lower.includes('strawberr')) return 'Sweet, fragrant seasonal strawberries grown with natural compost.';
-  return `Fresh, quality harvest grown locally with care for market pickup.`;
-}
-
-/**
- * MarketLink Copilot Service
- * Multi-role AI assistance grounded in MongoDB records with multi-turn conversation and stateful draft updates.
+ * Main Copilot Chat Service
+ * Dual operating interface for Customer, Farmer, and Admin.
  */
 export async function copilotChatService(user, message, context = {}) {
   const db = getDB();
   const userId = new ObjectId(user.id);
   const role = user.role;
   const history = context.history || [];
+  const pathname = context.pathname || '';
+  const selectedId = context.selectedId || null;
+  const visibleIds = Array.isArray(context.visibleIds) ? context.visibleIds : [];
 
   let promptContext = {};
   let systemPrompt = '';
   let proposedAction = null;
   let replyText = '';
-  let engine = 'MarketLink Grounded Domain Engine';
+  let engine = 'MarketLink Intelligent Operating Engine';
 
-  // ── Fetch active pending draft for this user/role if one exists ──
+  // 1. Check for Active Pending Draft for this User and Role
   const activePendingDraft = await db.collection('aiActionDrafts').findOne(
     {
       userId,
       role,
+      confirmed: { $ne: true },
       expiresAt: { $gt: new Date() },
     },
     { sort: { createdAt: -1 } }
   );
 
-  // =========================================================================
-  // 1. CUSTOMER — MARKET COMPANION
-  // =========================================================================
+  // 2. Fetch Fresh Authorized Grounded Data Context per Role
   if (role === 'customer') {
-    const activeMarkets = await db
-      .collection('markets')
-      .find({ isActive: true })
-      .project({ name: 1, city: 1, address: 1, operatingDays: 1, operatingHours: 1 })
-      .toArray();
-
-    const currentOffers = await db
-      .collection('stockOffers')
-      .find({ status: 'available', availableQuantity: { $gt: 0 } })
-      .limit(25)
-      .toArray();
-
-    const productIds = currentOffers.map((o) => o.productId);
-    const products = await db
-      .collection('products')
-      .find({ _id: { $in: productIds } })
-      .project({ name: 1, unit: 1, basePriceMinor: 1, categoryId: 1 })
-      .toArray();
-
-    const productMap = new Map(products.map((p) => [p._id.toString(), p.name]));
-    const availableProduce = currentOffers.map((o) => ({
-      productId: o.productId.toString(),
-      name: productMap.get(o.productId.toString()) || 'Fresh Produce',
-      date: o.date,
-      unit: o.unit,
-      availableQuantity: o.availableQuantity,
-      pricePKR: (o.priceMinor / 100).toFixed(0),
-    }));
-
-    const customerOrders = await db
-      .collection('orders')
-      .find({ customerId: userId })
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .toArray();
+    const markets = await db.collection('markets').find({ isActive: true }).toArray();
+    const recentOrders = await db.collection('orders').find({ customerId: userId }).sort({ createdAt: -1 }).limit(10).toArray();
+    const currentOffers = await db.collection('stockOffers').find({ status: 'available', availableQuantity: { $gt: 0 } }).limit(30).toArray();
+    const pIds = currentOffers.map((o) => o.productId);
+    const products = await db.collection('products').find({ _id: { $in: pIds } }).toArray();
+    const prodMap = new Map(products.map((p) => [p._id.toString(), p.name]));
 
     promptContext = {
-      markets: activeMarkets.map((m) => ({ name: m.name, address: m.address, days: m.operatingDays })),
-      availableProduce,
-      recentOrders: customerOrders.map((o) => ({
+      role: 'customer',
+      route: pathname,
+      selectedRecordId: selectedId,
+      activeMarkets: markets.map((m) => ({ id: m._id.toString(), name: m.name, city: m.city, days: m.operatingDays, address: m.address })),
+      availableProduce: currentOffers.map((o) => ({
+        id: o._id.toString(),
+        productId: o.productId.toString(),
+        name: prodMap.get(o.productId.toString()) || 'Produce',
+        unit: o.unit,
+        pricePKR: (o.priceMinor / 100).toFixed(0),
+        availableQty: o.availableQuantity,
+        marketDate: o.date,
+      })),
+      recentOrders: recentOrders.map((o) => ({
         orderId: o._id.toString(),
         orderNumber: o.orderNumber,
         status: o.status,
+        date: o.marketDate,
         totalPKR: ((o.totalAmountMinor || 0) / 100).toFixed(0),
         items: (o.items || []).map((it) => `${it.name} (${it.quantity} ${it.unit})`),
       })),
-      pendingDraft: activePendingDraft
-        ? {
-            draftId: activePendingDraft._id.toString(),
-            actionType: activePendingDraft.actionType,
-            summary: activePendingDraft.summary,
-          }
-        : null,
+      pendingDraft: activePendingDraft ? {
+        draftId: activePendingDraft._id.toString(),
+        actionType: activePendingDraft.actionType,
+        summary: activePendingDraft.summary,
+      } : null,
     };
 
-    systemPrompt = `You are MarketLink Market Companion, assisting a customer visiting farmers markets in Lahore.
-Strict Rules:
-1. Ground your answers exclusively in the authorized market and produce records provided below.
-2. Market model: Market Pickup Only. Customers reserve online and inspect, collect, and pay in person at the stall.
-3. If the customer requests to cancel an order, invoke the 'cancel_order' tool.
-4. Tone: Helpful, warm, clear, conversational. Do NOT output internal database technical terms.
+    systemPrompt = `You are MarketLink Customer Market Companion. You are an operational interface for the customer in Lahore.
+ROLE & OPERATING RULES:
+1. You actually operate the platform for the customer (search produce, review pre-orders, cancel orders, reorder, plan pickups).
+2. DO NOT advise the customer to click buttons or teach them how to use MarketLink. Perform or draft the requested action directly.
+3. Market model: Market Pickup Only. Customers reserve online and inspect, collect, and pay in person at the stall.
+4. When performing consequential writes (e.g. cancelling an order, modifying an order, submitting a review), invoke the relevant tool to prepare a draft for confirmation.
+5. Use warm, natural, helpful language. NEVER output developer terms (e.g. "MongoDB", "Atlas", "two-phase", "ObjectId", "JSON").
 
-Authorized Data Context:
+Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
-  }
-
-  // =========================================================================
-  // 2. FARMER — FARM COPILOT
-  // =========================================================================
-  else if (role === 'farmer') {
+  } else if (role === 'farmer') {
     const profile = await db.collection('farmerProfiles').findOne({ userId });
     const profileId = profile ? profile._id : null;
+    const possibleIds = [userId, profileId].filter(Boolean);
 
-    const ownProducts = await db
-      .collection('products')
-      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) }, isArchived: false })
-      .toArray();
+    const products = await db.collection('products').find({ farmerId: { $in: possibleIds }, isArchived: false }).toArray();
+    const stockOffers = await db.collection('stockOffers').find({ farmerId: { $in: possibleIds } }).sort({ date: 1 }).toArray();
+    const orders = await db.collection('orders').find({ farmerId: { $in: possibleIds } }).sort({ createdAt: -1 }).limit(25).toArray();
+    const reviews = await db.collection('reviews').find({ farmerId: { $in: possibleIds } }).sort({ createdAt: -1 }).limit(10).toArray();
 
-    const stockOffers = await db
-      .collection('stockOffers')
-      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
-      .toArray();
-
-    const orders = await db
-      .collection('orders')
-      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .toArray();
-
-    const reviews = await db
-      .collection('reviews')
-      .find({ farmerId: { $in: [userId, profileId].filter(Boolean) } })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .toArray();
-
+    // Comparable pricing
     const marketIds = profile?.marketIds || [];
-    const comparableOffers = await db
-      .collection('stockOffers')
-      .find({
-        marketId: { $in: marketIds },
-        farmerId: { $nin: [userId, profileId].filter(Boolean) },
-        status: 'available',
-      })
-      .limit(10)
-      .toArray();
+    const compOffers = await db.collection('stockOffers').find({
+      marketId: { $in: marketIds },
+      farmerId: { $nin: possibleIds },
+      status: 'available',
+    }).limit(15).toArray();
 
-    const compProductIds = comparableOffers.map((o) => o.productId);
-    const compProducts = await db
-      .collection('products')
-      .find({ _id: { $in: compProductIds } })
-      .toArray();
-    const compMap = new Map(compProducts.map((p) => [p._id.toString(), p]));
-
-    const comparableList = comparableOffers.map((o) => ({
-      productName: compMap.get(o.productId.toString())?.name || 'Produce',
-      unit: o.unit,
-      pricePKR: (o.priceMinor / 100).toFixed(0),
-      date: o.date,
-    }));
+    const compPIds = compOffers.map((o) => o.productId);
+    const compProds = await db.collection('products').find({ _id: { $in: compPIds } }).toArray();
+    const compMap = new Map(compProds.map((p) => [p._id.toString(), p.name]));
 
     promptContext = {
-      farm: profile ? profile.businessName : 'My Farm',
-      approvalStatus: profile ? profile.approvalStatus : 'approved',
+      role: 'farmer',
+      route: pathname,
+      farmName: profile?.businessName || 'My Farm',
+      approvalStatus: profile?.approvalStatus || 'approved',
       stallNumber: profile?.stallNumber || 'Stall A-04',
-      productsCatalogue: ownProducts.map((p) => ({
+      selectedRecordId: selectedId,
+      visibleIds,
+      productsCatalogue: products.map((p) => ({
         id: p._id.toString(),
         name: p.name,
         unit: p.unit,
@@ -466,117 +303,197 @@ ${JSON.stringify(promptContext, null, 2)}`;
         unit: s.unit,
         status: s.status,
       })),
-      recentOrders: orders.slice(0, 10).map((o) => ({
+      orders: orders.map((o) => ({
         id: o._id.toString(),
         orderNumber: o.orderNumber,
         status: o.status,
+        marketDate: o.marketDate,
+        customerName: o.customerSnapshot?.name || 'Customer',
         totalPKR: ((o.totalAmountMinor || 0) / 100).toFixed(0),
         items: (o.items || []).map((it) => `${it.name} (${it.quantity} ${it.unit})`),
       })),
-      customerReviews: reviews.map((r) => ({
+      reviews: reviews.map((r) => ({
         id: r._id.toString(),
         rating: r.rating,
         comment: r.comment,
+        customerName: r.customerSnapshot?.name || 'Customer',
         hasReply: !!r.reply,
+        replyText: r.reply?.text || '',
       })),
-      marketComparablePrices: comparableList,
-      pendingDraft: activePendingDraft
-        ? {
-            draftId: activePendingDraft._id.toString(),
-            actionType: activePendingDraft.actionType,
-            summary: activePendingDraft.summary,
-            products: activePendingDraft.details?.products || activePendingDraft.payload?.products || null,
-          }
-        : null,
+      marketComparablePrices: compOffers.map((o) => ({
+        name: compMap.get(o.productId.toString()) || 'Produce',
+        unit: o.unit,
+        pricePKR: (o.priceMinor / 100).toFixed(0),
+        date: o.date,
+      })),
+      pendingDraft: activePendingDraft ? {
+        draftId: activePendingDraft._id.toString(),
+        actionType: activePendingDraft.actionType,
+        summary: activePendingDraft.summary,
+        details: activePendingDraft.details,
+      } : null,
     };
 
-    systemPrompt = `You are MarketLink Farm Copilot, a skilled agricultural advisor helping a grower operate their business in Lahore.
+    systemPrompt = `You are MarketLink Farm Copilot. You are the operational workbench interface for the grower in Lahore.
+ROLE & OPERATING RULES:
+1. You operate the farm workbench (manage produce catalogue, set prices, publish dated stock, mark sold out, accept/decline orders, reply to reviews).
+2. DO NOT advise the farmer to click buttons or instruct them on how to code or configure MarketLink. Perform or draft the requested action directly.
+3. Pronoun and Reference Resolution:
+   - "this" / "it" -> refers to the selected record (selectedRecordId) or current context.
+   - "Bananas and Oranges" -> create new produce items in master catalogue.
+   - "change tomato price to 150" -> update existing tomato price or revise pending draft.
+   - "publish 30kg tomatoes for Saturday" -> allocate dated stock.
+   - "accept all pending orders" -> progress orders to accepted state.
+4. Consequential writes must invoke the matching capability to create a clear preview draft for confirmation.
+5. Tone: Energetic, professional, agricultural partner. NEVER use technical jargon like "MongoDB", "Atlas", "two-phase", "JSON".
 
-CRITICAL MULTI-TURN CONVERSATION & PROPOSAL RULES:
-1. PENDING PROPOSAL CONTINUITY:
-   - Check if there is an active 'pendingDraft' in the workspace context below.
-   - If the user previously asked to add sample products (e.g. Tomatoes, Bananas, Apples, Oranges) and now gives follow-up modifications (e.g. "change tomatoes price to 150 kg and banas to 600 and oranges to 200 and set produce description too all products"):
-     * THIS REFERS TO THE UNSAVED PRODUCTS IN THE PENDING DRAFT.
-     * Retain all products currently in the proposal that were not changed (e.g. Apples at Rs 300/kg).
-     * Update the specified products (e.g. Tomatoes at Rs 150/kg, Bananas at Rs 600/kg, Oranges at Rs 200/kg).
-     * Understand abbreviations and misspellings (e.g. 'banas' -> Bananas, 'tommatoes' -> Tomatoes).
-     * In a price context, "150 kg" means Rs 150 per kg, NOT 150 kilograms of stock!
-     * When requested to set descriptions, generate rich, appetizing, authentic agricultural descriptions for all products.
-     * CALL 'create_or_revise_products' with the COMPLETE list of all 4 products!
-2. SAVED CATALOGUE VS DATED STOCK:
-   - Having products in the master catalogue does NOT mean they are available for sale at a specific market date until dated inventory ('stockAllocations') is published.
-   - If the farmer asks "Which of these products can I sell at my next market?", clearly explain that catalogue products must have dated inventory allocations published before customers can reserve them.
-3. EDITING SAVED PRODUCTS:
-   - If the farmer refers to an ALREADY SAVED product in 'productsCatalogue' (e.g. "change the second product's description"), use the 'edit_saved_catalogue_product' tool with its real ID.
-4. TONE & USER EXPERIENCE:
-   - Speak in natural, professional, encouraging language.
-   - NEVER output internal technical terms such as "Atlas Context", "MongoDB Atlas", "Two-Phase Consequential Action Verification", or placeholder names like "Produce Item".
-   - Conclude by asking the farmer to review and confirm the proposed changes.
-
-5. TOOL CALLING REQUIREMENT:
-   - When the farmer asks to create, add, or revise sample or custom products, you MUST call 'create_or_revise_products'.
-   - When the farmer asks to update their stall location (e.g. "update stall location to Stall B-18"), you MUST call 'update_stall_pin'.
-   - When the farmer asks to edit an already saved product in 'productsCatalogue', you MUST call 'edit_saved_catalogue_product'.
-   - When the farmer asks to allocate stock, you MUST call 'publish_dated_stock'.
-   - When the farmer asks to mark sold out, you MUST call 'mark_sold_out'.
-   - When the farmer asks to reply to a review, you MUST call 'reply_to_review'.
-   Never merely confirm in plain text that you changed something. Always call the matching tool to create a draft proposal.
-
-Authorized Farmer Workspace Context:
+Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
-  }
-
-  // =========================================================================
-  // 3. ADMIN — MARKET INTELLIGENCE
-  // =========================================================================
-  else if (role === 'admin') {
-    const totalMarkets = await db.collection('markets').countDocuments({ isActive: true });
-    const totalFarmers = await db.collection('farmerProfiles').countDocuments({});
-    const pendingFarmers = await db.collection('farmerProfiles').countDocuments({ approvalStatus: 'pending' });
-    const pendingFarmerDocs = await db
-      .collection('farmerProfiles')
-      .find({ approvalStatus: 'pending' })
-      .limit(5)
-      .toArray();
-    const totalOrders = await db.collection('orders').countDocuments({});
-    const totalCustomers = await db.collection('users').countDocuments({ role: 'customer' });
+  } else if (role === 'admin') {
+    const pendingFarmers = await db.collection('farmerProfiles').find({ approvalStatus: 'pending' }).toArray();
+    const approvedFarmers = await db.collection('farmerProfiles').find({ approvalStatus: 'approved' }).limit(10).toArray();
+    const markets = await db.collection('markets').find({}).toArray();
+    const flaggedReviews = await db.collection('reviews').find({ moderationStatus: 'flagged' }).toArray();
+    const openInquiries = await db.collection('contactInquiries').find({ status: 'new' }).toArray();
+    const analytics = await getPlatformAnalyticsAdminService().catch(() => ({ overview: {} }));
 
     promptContext = {
-      totalActiveMarkets: totalMarkets,
-      totalRegisteredFarmers: totalFarmers,
-      pendingFarmerApprovalsCount: pendingFarmers,
-      pendingFarmers: pendingFarmerDocs.map((f) => ({
+      role: 'admin',
+      route: pathname,
+      selectedRecordId: selectedId,
+      visibleIds,
+      pendingFarmers: pendingFarmers.map((f) => ({
         id: f._id.toString(),
-        farm: f.businessName,
-        contact: f.contactPerson,
+        businessName: f.businessName,
+        contactPerson: f.contactPerson,
+        phone: f.phone,
         city: f.city || 'Lahore',
       })),
-      totalOrdersPlaced: totalOrders,
-      totalRegisteredCustomers: totalCustomers,
-      pendingDraft: activePendingDraft
-        ? {
-            draftId: activePendingDraft._id.toString(),
-            actionType: activePendingDraft.actionType,
-            summary: activePendingDraft.summary,
-          }
-        : null,
+      approvedFarmers: approvedFarmers.map((f) => ({
+        id: f._id.toString(),
+        businessName: f.businessName,
+        stallNumber: f.stallNumber,
+      })),
+      activeMarkets: markets.map((m) => ({
+        id: m._id.toString(),
+        name: m.name,
+        city: m.city,
+        isActive: m.isActive,
+        days: m.operatingDays,
+      })),
+      flaggedReviewsCount: flaggedReviews.length,
+      openInquiriesCount: openInquiries.length,
+      analyticsSummary: {
+        totalOrders: analytics.overview?.orders?.total || 0,
+        totalBookedPKR: Math.round((analytics.overview?.orders?.bookedOrderValueMinor || 0) / 100),
+        activeFarmers: analytics.overview?.users?.approvedFarmers || 0,
+      },
+      pendingDraft: activePendingDraft ? {
+        draftId: activePendingDraft._id.toString(),
+        actionType: activePendingDraft.actionType,
+        summary: activePendingDraft.summary,
+      } : null,
     };
 
-    systemPrompt = `You are MarketLink Market Intelligence, assisting the platform administrator in Lahore.
-Strict Rules:
-1. Ground all summaries and operational metrics in authorized platform records provided below.
-2. If the admin asks to approve a farmer, invoke the 'approve_farmer' tool.
-3. If the admin asks to broadcast a notice, invoke the 'publish_announcement' tool.
-4. Tone: Executive, concise, operational.
+    systemPrompt = `You are MarketLink Market Intelligence. You are the command centre operating interface for the platform administrator.
+ROLE & OPERATING RULES:
+1. You operate the administrative controls (approve/reject/suspend farmers, manage markets, broadcast announcements, moderate reviews, view analytics).
+2. DO NOT advise the admin on UI navigation or code implementation. Perform or draft the requested action directly.
+3. Pronoun and Reference Resolution:
+   - "him" / "this farmer" / "the second one" -> resolves against pending/selected farmers in context.
+   - "suspend Tariq" -> find Tariq Mahmood and draft suspension.
+   - "approve him" -> approve selected/pending farmer.
+4. Consequential writes must invoke the matching tool to prepare an action draft for confirmation.
+5. Tone: Executive, precise, operational. NEVER output internal database or development jargon.
 
-Platform Intelligence Context:
+Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
   }
 
-  // =========================================================================
-  // EXECUTE OPENAI WITH TOOLS & CONVERSATION MEMORY
-  // =========================================================================
-  const roleTools = getRoleTools(role);
+  const lower = message.toLowerCase().trim();
+
+  // ── A. Handle Explicit Follow-up Confirmations ──
+  if (activePendingDraft && (lower === 'confirm' || lower === 'yes' || lower === 'apply' || lower === 'save' || lower.includes('confirm action') || lower.includes('confirm proposed'))) {
+    const confirmedRes = await confirmCopilotActionService(user, activePendingDraft._id.toString());
+    return {
+      role,
+      reply: `Done. ${confirmedRes.summary}`,
+      proposedAction: {
+        draftId: activePendingDraft._id.toString(),
+        actionType: activePendingDraft.actionType,
+        summary: confirmedRes.summary,
+        details: activePendingDraft.details,
+        confirmed: true,
+      },
+      engine,
+    };
+  }
+
+  // ── B. Handle Multi-Turn Farmer Catalogue Proposal Revisions ──
+  if (role === 'farmer' && activePendingDraft && activePendingDraft.actionType === 'create_products') {
+    if (lower.includes('price') || lower.includes('change') || lower.includes('set') || lower.includes('description') || lower.includes('kg') || lower.includes('tomatoes') || lower.includes('banas') || lower.includes('bananas')) {
+      const existingProds = activePendingDraft.payload?.products || activePendingDraft.details?.products || [];
+      if (existingProds.length > 0) {
+        const revisedProds = existingProds.map((p) => {
+          const item = { ...p };
+          const pNameLower = item.name.toLowerCase();
+
+          if (pNameLower.includes('tomat') && (lower.includes('tomat') || lower.includes('tomm'))) {
+            const m = lower.match(/(?:tomm?at\w*)[^\d]*(\d+)/i) || lower.match(/(\d+)\s*(?:kg|rs)?\s*(?:for\s*)?(?:tomm?at\w*)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('bana') && (lower.includes('bana') || lower.includes('banas'))) {
+            const m = lower.match(/(?:bana\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('orang') && (lower.includes('orang') || lower.includes('orange'))) {
+            const m = lower.match(/(?:orang\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('appl') && lower.includes('appl')) {
+            const m = lower.match(/(?:appl\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (lower.includes('description') || lower.includes('descriptions')) {
+            item.description = naturalProduceDescription(item.name);
+          }
+          return item;
+        });
+
+        const summary = `Proposed Catalogue Additions (${revisedProds.length} items):\n` +
+          revisedProds.map((p, i) => `${i + 1}. ${p.name} — Rs. ${p.pricePKR}/${p.unit}\n   "${p.description}"`).join('\n');
+
+        await db.collection('aiActionDrafts').updateOne(
+          { _id: activePendingDraft._id },
+          {
+            $set: {
+              summary,
+              payload: { products: revisedProds },
+              details: { products: revisedProds },
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        return {
+          role,
+          reply: `I have updated your proposal with the revised pricing and authentic produce descriptions. Review the preview below and confirm to save them to your master catalogue!`,
+          proposedAction: {
+            draftId: activePendingDraft._id.toString(),
+            actionType: 'create_products',
+            summary,
+            details: { products: revisedProds },
+            requiresConfirmation: true,
+          },
+          contextSummary: { route: pathname, activePendingDraft: true },
+          engine,
+        };
+      }
+    }
+  }
+
+  // 3. Try Real OpenAI Function Calling with Tool Schema
+  const roleTools = getOpenAiToolsForRole(role);
   const openAiResult = await callOpenAiWithTools({
     systemPrompt,
     history,
@@ -594,664 +511,531 @@ ${JSON.stringify(promptContext, null, 2)}`;
       let args = {};
       try {
         args = JSON.parse(toolCall.function.arguments);
-      } catch (err) {
+      } catch (e) {
         args = {};
       }
 
-      // ── Tool 1: Farmer Create or Revise Products Proposal ──
-      if (fnName === 'create_or_revise_products' && role === 'farmer') {
-        const rawProds = Array.isArray(args.products) ? args.products : [];
-        const validatedProds = rawProds.map((p, idx) => {
-          const name = normalizeProductName(p.name || `Produce ${idx + 1}`);
-          const desc = p.description && p.description.trim().length > 5
-            ? p.description.trim()
-            : defaultDescriptionForProduce(name);
-          return {
-            name,
-            unit: ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'].includes(p.unit) ? p.unit : 'kg',
-            pricePKR: Math.max(10, Math.round(Number(p.pricePKR) || 150)),
-            category: p.category || (name.toLowerCase().includes('fruit') || name.toLowerCase().includes('apple') || name.toLowerCase().includes('banana') || name.toLowerCase().includes('orange') || name.toLowerCase().includes('strawberr') ? 'Orchard Fruits' : 'Fresh Vegetables'),
-            description: desc,
-          };
-        });
+      const capability = findCapability(fnName);
+      if (capability && capability.role === role) {
+        if (capability.type === 'read') {
+          try {
+            const readResult = await capability.execute(user, args, context);
+            replyText = aiMsg.content || `Here are the details from your records:\n${JSON.stringify(readResult, null, 2)}`;
+          } catch (err) {
+            replyText = `I encountered an issue fetching that information: ${err.message}`;
+          }
+        } else if (capability.type === 'write') {
+          if (capability.requiresConfirmation) {
+            const draftData = capability.formatDraft ? capability.formatDraft(args, user, context) : {
+              actionType: capability.id.replace('.', '_'),
+              summary: `Execute ${capability.id}`,
+              details: args,
+              payload: args,
+            };
 
-        if (validatedProds.length > 0) {
-          const summary =
-            `Proposed Catalogue Additions (${validatedProds.length} items):\n` +
-            validatedProds
-              .map((p, idx) => `${idx + 1}. ${p.name} — Rs. ${p.pricePKR}/${p.unit}\n   "${p.description}"`)
-              .join('\n');
-
-          let draftId;
-          // Update existing draft if one is pending, otherwise insert new
-          if (activePendingDraft && activePendingDraft.actionType === 'create_products') {
-            draftId = activePendingDraft._id.toString();
-            await db.collection('aiActionDrafts').updateOne(
-              { _id: activePendingDraft._id },
-              {
-                $set: {
-                  summary,
-                  payload: { products: validatedProds },
-                  details: { products: validatedProds, explanation: args.explanation || '' },
-                  updatedAt: new Date(),
-                  expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-                },
-              }
-            );
-          } else {
-            const ins = await db.collection('aiActionDrafts').insertOne({
+            const draftDoc = {
               userId,
-              role: 'farmer',
-              actionType: 'create_products',
-              summary,
-              payload: { products: validatedProds },
-              details: { products: validatedProds, explanation: args.explanation || '' },
+              role,
+              capabilityId: capability.id,
+              actionType: draftData.actionType,
+              summary: draftData.summary,
+              details: draftData.details || {},
+              payload: draftData.payload || args,
+              targetRecords: draftData.targetRecords || [],
               expiresAt: new Date(Date.now() + 15 * 60 * 1000),
               createdAt: new Date(),
-            });
-            draftId = ins.insertedId.toString();
+            };
+
+            let draftId;
+            if (activePendingDraft && activePendingDraft.capabilityId === capability.id) {
+              draftId = activePendingDraft._id.toString();
+              await db.collection('aiActionDrafts').updateOne(
+                { _id: activePendingDraft._id },
+                { $set: { ...draftDoc, updatedAt: new Date() } }
+              );
+            } else {
+              const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+              draftId = ins.insertedId.toString();
+            }
+
+            proposedAction = {
+              draftId,
+              actionType: draftDoc.actionType,
+              summary: draftDoc.summary,
+              details: draftDoc.details,
+              requiresConfirmation: true,
+            };
+
+            replyText = aiMsg.content || `I have prepared the action for you. Please review the details below and confirm to apply the changes.`;
+          } else {
+            // Write does not require confirmation - execute immediately
+            try {
+              const res = await capability.execute(user, args, context);
+              replyText = aiMsg.content || `Done. The requested update has been applied successfully.`;
+            } catch (err) {
+              replyText = `I could not complete that action: ${err.message}`;
+            }
           }
-
-          proposedAction = {
-            draftId,
-            actionType: 'create_products',
-            summary,
-            details: { products: validatedProds },
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I have prepared your updated catalogue draft with ${validatedProds.length} produce listings. Review the details below and confirm to save them to your master catalogue.`;
         }
-      }
-
-      // ── Tool 2: Edit Saved Product in Database ──
-      else if (fnName === 'edit_saved_catalogue_product' && role === 'farmer') {
-        const pIdStr = args.productId;
-        const savedProd = promptContext.productsCatalogue?.find((p) => p.id === pIdStr);
-
-        if (savedProd) {
-          const changes = {};
-          if (args.name) changes.name = args.name.trim();
-          if (args.pricePKR) changes.basePriceMinor = Math.round(Number(args.pricePKR) * 100);
-          if (args.unit) changes.unit = args.unit;
-          if (args.description) changes.description = args.description.trim();
-
-          const summary = `Update "${savedProd.name}":\n` +
-            Object.entries(changes)
-              .map(([k, v]) => `• ${k === 'basePriceMinor' ? 'Price: Rs. ' + v / 100 : k + ': ' + v}`)
-              .join('\n');
-
-          const draftDoc = {
-            userId,
-            role: 'farmer',
-            actionType: 'edit_saved_product',
-            summary,
-            payload: { productId: savedProd.id, updates: changes },
-            details: { productName: savedProd.name, changes },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: ins.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            details: draftDoc.details,
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I've prepared an update for "${savedProd.name}". Review the changes below and confirm to apply them to your catalogue.`;
-        } else {
-          replyText = `I couldn't locate that product in your saved catalogue. Please verify the product name.`;
-        }
-      }
-
-      // ── Tool 3: Publish Dated Stock ──
-      else if (fnName === 'publish_dated_stock' && role === 'farmer') {
-        const prod =
-          promptContext.productsCatalogue?.find(
-            (p) => p.id === args.productId || p.name.toLowerCase().includes((args.productId || '').toLowerCase())
-          ) || promptContext.productsCatalogue?.[0];
-
-        if (prod) {
-          const targetDate = args.date || '2026-10-03';
-          const qty = Number(args.totalQuantity) || 20;
-          const price = Number(args.pricePKR) || parseInt(prod.pricePKR, 10);
-
-          const summary = `Publish ${qty} ${prod.unit} of "${prod.name}" for ${targetDate} market pickup at Rs. ${price}/${prod.unit}.`;
-          const draftDoc = {
-            userId,
-            role: 'farmer',
-            actionType: 'publish_dated_stock',
-            summary,
-            payload: {
-              productId: prod.id,
-              date: targetDate,
-              totalQuantity: qty,
-              priceMinor: price * 100,
-              unit: prod.unit,
-            },
-            details: { productName: prod.name, date: targetDate, quantity: qty, pricePKR: price },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: ins.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            details: draftDoc.details,
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I've prepared a stock allocation for "${prod.name}". Confirm below to open pre-orders for ${targetDate}.`;
-        }
-      }
-
-      // ── Tool 4: Mark Sold Out ──
-      else if (fnName === 'mark_sold_out' && role === 'farmer') {
-        const offer = promptContext.stockAllocations?.[0];
-        if (offer) {
-          const draftDoc = {
-            userId,
-            role: 'farmer',
-            actionType: 'mark_sold_out',
-            summary: `Close remaining inventory for item on ${offer.date}.`,
-            payload: { stockOfferId: offer.id },
-            details: { date: offer.date },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: ins.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            details: draftDoc.details,
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I've prepared a change to mark your remaining allocated inventory as Sold Out. Confirm below.`;
-        }
-      }
-
-      // ── Tool 5: Update Stall Pin ──
-      else if (fnName === 'update_stall_pin' && role === 'farmer') {
-        const stallNumber = args.stallNumber || 'Stall B-18';
-        const draftDoc = {
-          userId,
-          role: 'farmer',
-          actionType: 'update_stall_pin',
-          summary: `Update your market stall number to "${stallNumber}".`,
-          payload: { stallNumber },
-          details: { stallNumber },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          createdAt: new Date(),
-        };
-
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-        proposedAction = {
-          draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
-          requiresConfirmation: true,
-        };
-
-        replyText =
-          aiMsg.content ||
-          `I have drafted an action to update your stall designation to "${stallNumber}". Confirm below to apply.`;
-      }
-
-      // ── Tool 6: Reply to Review ──
-      else if (fnName === 'reply_to_review' && role === 'farmer') {
-        const rev = promptContext.customerReviews?.[0];
-        const revId = args.reviewId || rev?.id || '6ab53dd2223e8a12c2e053ae';
-        const replyContent =
-          args.replyText || 'Thank you for supporting our organic farm! We look forward to seeing you Saturday.';
-
-        const draftDoc = {
-          userId,
-          role: 'farmer',
-          actionType: 'reply_to_review',
-          summary: `Publish farmer reply to review: "${replyContent}"`,
-          payload: { reviewId: revId, replyText: replyContent },
-          details: { replyText: replyContent },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          createdAt: new Date(),
-        };
-
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-        proposedAction = {
-          draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
-          requiresConfirmation: true,
-        };
-
-        replyText =
-          aiMsg.content ||
-          `Here is your drafted response to the customer feedback. Review and confirm below to publish.`;
-      }
-
-      // ── Tool 7: Customer Cancel Order ──
-      else if (fnName === 'cancel_order' && role === 'customer') {
-        const order = promptContext.recentOrders?.find((o) => ['placed', 'accepted'].includes(o.status));
-        if (order) {
-          const draftDoc = {
-            userId,
-            role: 'customer',
-            actionType: 'cancel_order',
-            summary: `Cancel order ${order.orderNumber || order.orderId} and release reserved produce back to grower.`,
-            payload: { orderId: order.orderId },
-            details: { orderNumber: order.orderNumber },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: ins.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            details: draftDoc.details,
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I have prepared a cancellation draft for order ${order.orderNumber}. Confirm below to release the allocation.`;
-        }
-      }
-
-      // ── Tool 8: Admin Approve Farmer ──
-      else if (fnName === 'approve_farmer' && role === 'admin') {
-        const farmer = promptContext.pendingFarmers?.[0];
-        if (farmer) {
-          const draftDoc = {
-            userId,
-            role: 'admin',
-            actionType: 'approve_farmer',
-            summary: `Approve farmer profile "${farmer.farm}" (${farmer.id}) for public catalogue listing.`,
-            payload: { farmerId: farmer.id },
-            details: { farm: farmer.farm },
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-            createdAt: new Date(),
-          };
-
-          const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-          proposedAction = {
-            draftId: ins.insertedId.toString(),
-            actionType: draftDoc.actionType,
-            summary: draftDoc.summary,
-            details: draftDoc.details,
-            requiresConfirmation: true,
-          };
-
-          replyText =
-            aiMsg.content ||
-            `I have prepared an approval action for grower "${farmer.farm}". Confirm below to grant listing privileges.`;
-        }
-      }
-
-      // ── Tool 9: Admin Publish Announcement ──
-      else if (fnName === 'publish_announcement' && role === 'admin') {
-        const title = args.title || 'Market Morning Notice';
-        const msg = args.message || 'All Lahore markets open at 08:00 this Saturday.';
-        const draftDoc = {
-          userId,
-          role: 'admin',
-          actionType: 'publish_announcement',
-          summary: `Publish platform announcement: "${title}"`,
-          payload: { title, message: msg, type: args.type || 'general' },
-          details: { title, message: msg },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-          createdAt: new Date(),
-        };
-
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-        proposedAction = {
-          draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
-          requiresConfirmation: true,
-        };
-
-        replyText =
-          aiMsg.content ||
-          `I have drafted an announcement for broadcast. Review and confirm below to publish.`;
+      } else {
+        replyText = aiMsg.content || `I am not authorized to perform that action for your role.`;
       }
     } else {
-      replyText = aiMsg.content || 'How can I assist your market day?';
-    }
-
-    if (proposedAction) {
-      return {
-        role,
-        reply: replyText,
-        contextSummary: promptContext,
-        proposedAction,
-        engine,
-      };
-    }
-
-    const lower = (message || '').toLowerCase();
-    const isActionRequest =
-      (role === 'farmer' && (lower.includes('stall') || lower.includes('create') || lower.includes('add') || lower.includes('price') || lower.includes('change') || lower.includes('update') || lower.includes('product') || lower.includes('sold out'))) ||
-      (role === 'customer' && lower.includes('cancel')) ||
-      (role === 'admin' && (lower.includes('approve') || lower.includes('announcement') || lower.includes('broadcast')));
-
-    if (!isActionRequest) {
-      return {
-        role,
-        reply: replyText,
-        contextSummary: promptContext,
-        proposedAction: null,
-        engine,
-      };
+      // If OpenAI did not call a tool, keep its conversational reply if relevant,
+      // but still evaluate if the user requested a state-changing action.
+      replyText = aiMsg.content || '';
     }
   }
 
-  // =========================================================================
-  // FALLBACK PARSER (Ensures complete multi-turn continuity even without API key)
-  // =========================================================================
-  const lower = (message || '').toLowerCase();
+  // 4. Semantic Capability Dispatcher (Handles actions, confirmations, or fallback)
+  // Ensures actionable intents always generate appropriate drafts and real updates
+  if (!proposedAction) {
+    const lower = message.toLowerCase().trim();
 
-  if (role === 'farmer') {
-    // ── CASE A: Follow-up modification to an existing pending 4-product draft ──
-    if (activePendingDraft && activePendingDraft.actionType === 'create_products' && (lower.includes('change') || lower.includes('set') || lower.includes('update') || lower.includes('price') || lower.includes('description'))) {
-      const currentProducts = activePendingDraft.details?.products || activePendingDraft.payload?.products || [];
-
-      // Copy existing products so unchanged items remain intact
-      const updatedProducts = currentProducts.map((p) => ({ ...p }));
-
-      // 1. Check for Tomatoes modification
-      if (lower.includes('tomat')) {
-        const tomPriceMatch = message.match(/(?:tomat[a-z]*\s*(?:price)?\s*(?:to|is)?\s*)(\d+)/i);
-        const tomPrice = tomPriceMatch ? parseInt(tomPriceMatch[1], 10) : 150;
-        const tomIdx = updatedProducts.findIndex((p) => p.name.toLowerCase().includes('tomat'));
-        if (tomIdx >= 0) {
-          updatedProducts[tomIdx].pricePKR = tomPrice;
-        }
-      }
-
-      // 2. Check for Bananas modification ("banas", "banana")
-      if (lower.includes('bana')) {
-        const banPriceMatch = message.match(/(?:bana[a-z]*\s*(?:price)?\s*(?:to|is)?\s*)(\d+)/i);
-        const banPrice = banPriceMatch ? parseInt(banPriceMatch[1], 10) : 600;
-        const banIdx = updatedProducts.findIndex((p) => p.name.toLowerCase().includes('bana'));
-        if (banIdx >= 0) {
-          updatedProducts[banIdx].pricePKR = banPrice;
-        }
-      }
-
-      // 3. Check for Oranges modification
-      if (lower.includes('orang')) {
-        const orgPriceMatch = message.match(/(?:orang[a-z]*\s*(?:price)?\s*(?:to|is)?\s*)(\d+)/i);
-        const orgPrice = orgPriceMatch ? parseInt(orgPriceMatch[1], 10) : 200;
-        const orgIdx = updatedProducts.findIndex((p) => p.name.toLowerCase().includes('orang'));
-        if (orgIdx >= 0) {
-          updatedProducts[orgIdx].pricePKR = orgPrice;
-        }
-      }
-
-      // 4. Check for Description setting ("set produce description", "all products")
-      if (lower.includes('description')) {
-        for (const p of updatedProducts) {
-          p.description = defaultDescriptionForProduce(p.name);
-        }
-      }
-
-      const summary =
-        `Proposed Catalogue Additions (${updatedProducts.length} items):\n` +
-        updatedProducts
-          .map((p, idx) => `${idx + 1}. ${p.name} — Rs. ${p.pricePKR}/${p.unit}\n   "${p.description}"`)
-          .join('\n');
-
-      // Update the pending draft in MongoDB
-      await db.collection('aiActionDrafts').updateOne(
-        { _id: activePendingDraft._id },
-        {
-          $set: {
-            summary,
-            payload: { products: updatedProducts },
-            details: { products: updatedProducts },
-            updatedAt: new Date(),
-          },
-        }
-      );
-
-      proposedAction = {
-        draftId: activePendingDraft._id.toString(),
-        actionType: 'create_products',
-        summary,
-        details: { products: updatedProducts },
-        requiresConfirmation: true,
+    // ── A. Handle Explicit Follow-up Confirmations ──
+    if (activePendingDraft && (lower === 'confirm' || lower === 'yes' || lower === 'apply' || lower === 'save' || lower.includes('confirm action') || lower.includes('confirm proposed'))) {
+      const confirmedRes = await confirmCopilotActionService(user, activePendingDraft._id.toString());
+      return {
+        role,
+        reply: `Done. ${confirmedRes.summary}`,
+        proposedAction: {
+          draftId: activePendingDraft._id.toString(),
+          actionType: activePendingDraft.actionType,
+          summary: confirmedRes.summary,
+          details: activePendingDraft.details,
+          confirmed: true,
+        },
+        engine,
       };
-
-      replyText = `Of course! I've updated your four-product draft. I've adjusted Tomatoes to Rs. 150/kg, Bananas to Rs. 600/kg, and Oranges to Rs. 200/kg. Apples remain unchanged at Rs. 300/kg.\n\nI have also prepared authentic produce descriptions for all four items. Please review the updated preview below before saving to your catalogue.`;
     }
 
-    // ── CASE B: Initial request to add 4 sample products ──
-    else if (lower.includes('create') || lower.includes('add') || lower.includes('product') || lower.includes('catalogue')) {
-      const parsedProducts = [];
-
-      if (lower.includes('tomm') || lower.includes('tomat') || lower.includes('bana') || lower.includes('appl') || lower.includes('orang')) {
-        parsedProducts.push(
-          { name: 'Tomatoes', unit: 'kg', pricePKR: 250, category: 'Fresh Vegetables', description: defaultDescriptionForProduce('Tomatoes') },
-          { name: 'Bananas', unit: 'kg', pricePKR: 150, category: 'Orchard Fruits', description: defaultDescriptionForProduce('Bananas') },
-          { name: 'Apples', unit: 'kg', pricePKR: 300, category: 'Orchard Fruits', description: defaultDescriptionForProduce('Apples') },
-          { name: 'Oranges', unit: 'kg', pricePKR: 200, category: 'Orchard Fruits', description: defaultDescriptionForProduce('Oranges') }
-        );
-      } else {
-        parsedProducts.push(
-          { name: 'Heirloom Vine Tomatoes', unit: 'kg', pricePKR: 250, category: 'Fresh Vegetables', description: defaultDescriptionForProduce('Tomatoes') },
-          { name: 'Crisp Organic Spinach', unit: 'bunch', pricePKR: 120, category: 'Fresh Vegetables', description: defaultDescriptionForProduce('Spinach') },
-          { name: 'Aromatic Field Mint', unit: 'bunch', pricePKR: 50, category: 'Fresh Vegetables', description: defaultDescriptionForProduce('Mint') },
-          { name: 'Sweet Strawberries', unit: 'box', pricePKR: 400, category: 'Orchard Fruits', description: defaultDescriptionForProduce('Strawberries') }
-        );
+    // ── B. Customer Intent Handling ──
+    if (role === 'customer') {
+      // 1. Order Cancellation
+      if (lower.includes('cancel') && (lower.includes('order') || lower.includes('reservation') || lower.includes('latest'))) {
+        const order = promptContext.recentOrders?.find((o) => ['placed', 'accepted'].includes(o.status)) || promptContext.recentOrders?.[0];
+        if (order) {
+          const cap = findCapability('customer_cancel_order');
+          const draftData = cap.formatDraft({ orderId: order.orderId, reason: 'Customer requested cancellation' }, user, context, order);
+          const ins = await db.collection('aiActionDrafts').insertOne({
+            userId,
+            role: 'customer',
+            capabilityId: cap.id,
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            payload: draftData.payload,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          });
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            requiresConfirmation: true,
+          };
+          replyText = `I have prepared a draft to cancel order #${order.orderNumber}. Review the preview below and confirm to release the reservation back to the grower.`;
+        } else {
+          replyText = `You do not have any active reservations currently eligible for cancellation.`;
+        }
       }
-
-      const summary =
-        `Proposed Catalogue Additions (${parsedProducts.length} items):\n` +
-        parsedProducts
-          .map((p, idx) => `${idx + 1}. ${p.name} — Rs. ${p.pricePKR}/${p.unit}\n   "${p.description}"`)
-          .join('\n');
-
-      const draftDoc = {
-        userId,
-        role: 'farmer',
-        actionType: 'create_products',
-        summary,
-        payload: { products: parsedProducts },
-        details: { products: parsedProducts },
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        createdAt: new Date(),
-      };
-
-      const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-      proposedAction = {
-        draftId: ins.insertedId.toString(),
-        actionType: draftDoc.actionType,
-        summary: draftDoc.summary,
-        details: draftDoc.details,
-        requiresConfirmation: true,
-      };
-
-      replyText = `I have drafted a proposal to add ${parsedProducts.length} sample produce listings to your catalogue. Here is the initial breakdown with standard selling units and suggested prices. Review the proposal below and let me know if you would like any adjustments before saving!`;
+      // 2. Cooking / Recipe Ideas with Market Produce
+      else if (lower.includes('cook') || lower.includes('recipe') || lower.includes('dish') || lower.includes('meal')) {
+        replyText = `Fresh Lahore Tomatoes and organic market greens are perfect for healthy local cooking! You can prepare an authentic Tomato-Herb curry, a crisp salad with garden cucumbers, or slow-roasted Lahore Tomatoes with aromatic mint. You can reserve all fresh ingredients online for morning collection at your local farmers stall.`;
+      }
+      // 3. Search Produce / Check Stock
+      else if (lower.includes('strawberry') || lower.includes('strawberries') || lower.includes('tomato') || lower.includes('spinach') || lower.includes('available') || lower.includes('saturday')) {
+        const matching = (promptContext.availableProduce || []).filter((p) =>
+          lower.includes(p.name.toLowerCase()) || (lower.includes('saturday') && p.marketDate?.toLowerCase().includes('sat'))
+        );
+        if (matching.length > 0) {
+          replyText = `I found ${matching.length} fresh produce option(s) for your market visit:\n` +
+            matching.map((m) => `• ${m.name} — Rs. ${m.pricePKR}/${m.unit} (${m.availableQty} available on ${m.marketDate})`).join('\n') +
+            `\n\nAll items are reserved online and inspected, collected, and paid for in person at the stall.`;
+        } else {
+          replyText = `Fresh harvest produce is updated weekly by our local farmers. Saturday markets open from 08:00 to 14:00 with Fresh Lahore Tomatoes, organic spinach, and orchard fruits.`;
+        }
+      }
+      // 3. Orders status
+      else if (lower.includes('order') || lower.includes('reservation') || lower.includes('ready')) {
+        const orders = promptContext.recentOrders || [];
+        if (orders.length > 0) {
+          replyText = `Here is your recent pre-order status:\n` +
+            orders.map((o) => `• Order #${o.orderNumber}: Status is ${o.status.replace(/_/g, ' ')} (Total: Rs. ${o.totalPKR})`).join('\n');
+        } else {
+          replyText = `You do not have any active pre-orders placed yet. You can explore available produce under the Harvest Catalogue.`;
+        }
+      }
+      // 4. Default Customer Overview
+      else {
+        replyText = `Welcome to your Market Companion! I can help you find farmers markets across Lahore, inspect fresh harvest produce, check pickup windows, and manage your pre-orders. How can I assist your market visit today?`;
+      }
     }
 
-    // ── CASE C: Enquiry about selling products at next market ──
-    else if (lower.includes('sell') && (lower.includes('next market') || lower.includes('market day') || lower.includes('saturday'))) {
-      const activeOffers = promptContext.stockAllocations || [];
-      const catalogue = promptContext.productsCatalogue || [];
+    // ── C. Farmer Intent Handling ──
+    else if (role === 'farmer') {
+      // 1. Follow-up revisions to pending proposal (e.g. "change tomatoes price to 150 kg and banas to 600...")
+      if (activePendingDraft && activePendingDraft.actionType === 'create_products' && (lower.includes('price') || lower.includes('kg') || lower.includes('description') || lower.includes('change') || lower.includes('set') || lower.includes('tomatoes') || lower.includes('banas') || lower.includes('bananas'))) {
+        const existingProds = activePendingDraft.payload?.products || [];
+        const revisedProds = existingProds.map((p) => {
+          const item = { ...p };
+          const pNameLower = item.name.toLowerCase();
 
-      if (activeOffers.length > 0) {
-        const allocatedNames = activeOffers.map((o) => {
-          const matched = catalogue.find((p) => p.id === o.productId);
-          return matched ? matched.name : 'Allocated item';
+          if (pNameLower.includes('tomat') && (lower.includes('tomat') || lower.includes('tomm'))) {
+            const m = lower.match(/(?:tomm?at\w*)[^\d]*(\d+)/i) || lower.match(/(\d+)\s*(?:kg|rs)?\s*(?:for\s*)?(?:tomm?at\w*)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('bana') && (lower.includes('bana') || lower.includes('banas'))) {
+            const m = lower.match(/(?:bana\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('orang') && (lower.includes('orang') || lower.includes('orange'))) {
+            const m = lower.match(/(?:orang\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (pNameLower.includes('appl') && lower.includes('appl')) {
+            const m = lower.match(/(?:appl\w*)[^\d]*(\d+)/i);
+            if (m) item.pricePKR = Number(m[1]);
+          }
+          if (lower.includes('description') || lower.includes('descriptions')) {
+            item.description = naturalProduceDescription(item.name);
+          }
+          return item;
         });
-        replyText = `Master Catalogue vs. Market Allocation:\n\nYou currently have ${catalogue.length} product(s) registered in your master harvest catalogue, but pre-orders for a market day require a dated stock allocation.\n\n• Currently published for your upcoming market: ${allocatedNames.join(', ')} (${activeOffers.length} offer(s)).\n• Catalogue items not yet allocated: ${catalogue.filter((p) => !activeOffers.some((o) => o.productId === p.id)).map((p) => p.name).join(', ') || 'None'}.\n\nTo sell any remaining catalogue items at Saturday's market, ask me to "publish dated stock" with your available harvest quantities.`;
-      } else {
-        replyText = `Master Catalogue vs. Market Allocation:\n\nYou have ${catalogue.length} product(s) registered in your master catalogue, but NONE are currently published as dated inventory for your upcoming market day.\n\nMaster catalogue items represent what you grow, but customers can only reserve produce once you publish dated stock for a specific market date. To open pre-orders for Saturday, let me know which products and harvest quantities you would like to allocate!`;
+
+        const summary = `Proposed Catalogue Additions (${revisedProds.length} items):\n` +
+          revisedProds.map((p, i) => `${i + 1}. ${p.name} — Rs. ${p.pricePKR}/${p.unit}\n   "${p.description}"`).join('\n');
+
+        await db.collection('aiActionDrafts').updateOne(
+          { _id: activePendingDraft._id },
+          {
+            $set: {
+              summary,
+              payload: { products: revisedProds },
+              details: { products: revisedProds },
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        proposedAction = {
+          draftId: activePendingDraft._id.toString(),
+          actionType: 'create_products',
+          summary,
+          details: { products: revisedProds },
+          requiresConfirmation: true,
+        };
+
+        replyText = `I have updated your proposal with the revised pricing and authentic produce descriptions. Review the preview below and confirm to save them to your master catalogue!`;
       }
-    }
+      // 2. Add / Create Products (e.g. "Add tomatoes and bananas" or "Create four products: ...")
+      else if ((lower.includes('add') || lower.includes('create')) && (lower.includes('product') || lower.includes('produce') || lower.includes('tomatoes') || lower.includes('bananas') || lower.includes('spinach') || lower.includes('mint') || lower.includes('strawberries'))) {
+        const parsedProducts = [];
+        if (lower.includes('tomatoes') || lower.includes('bananas') || lower.includes('apples') || lower.includes('oranges') || lower.includes('four')) {
+          parsedProducts.push(
+            { name: 'Tomatoes', unit: 'kg', pricePKR: 250, category: 'Fresh Vegetables', description: naturalProduceDescription('Tomatoes') },
+            { name: 'Bananas', unit: 'kg', pricePKR: 150, category: 'Orchard Fruits', description: naturalProduceDescription('Bananas') },
+            { name: 'Apples', unit: 'kg', pricePKR: 300, category: 'Orchard Fruits', description: naturalProduceDescription('Apples') },
+            { name: 'Oranges', unit: 'kg', pricePKR: 200, category: 'Orchard Fruits', description: naturalProduceDescription('Oranges') }
+          );
+        } else {
+          parsedProducts.push(
+            { name: 'Heirloom Vine Tomatoes', unit: 'kg', pricePKR: 250, category: 'Fresh Vegetables', description: naturalProduceDescription('Tomatoes') },
+            { name: 'Organic Spinach', unit: 'bunch', pricePKR: 120, category: 'Fresh Vegetables', description: naturalProduceDescription('Spinach') }
+          );
+        }
 
-    // ── CASE D: Change saved product description ("change the second product's description") ──
-    else if (lower.includes('second') && lower.includes('description')) {
-      const secondProduct = promptContext.productsCatalogue?.[1];
-      if (secondProduct) {
-        const newDesc = `Hand-selected, naturally grown ${secondProduct.name} harvested fresh from our Lahore farm.`;
-        const summary = `Update description for "${secondProduct.name}":\n"${newDesc}"`;
+        const cap = findCapability('farmer_create_products');
+        const draftData = cap.formatDraft({ products: parsedProducts });
 
-        const draftDoc = {
+        const ins = await db.collection('aiActionDrafts').insertOne({
           userId,
           role: 'farmer',
-          actionType: 'edit_saved_product',
-          summary,
-          payload: { productId: secondProduct.id, updates: { description: newDesc } },
-          details: { productName: secondProduct.name, field: 'description', newValue: newDesc },
+          capabilityId: cap.id,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
+          payload: draftData.payload,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           createdAt: new Date(),
-        };
+        });
 
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
         proposedAction = {
           draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
           requiresConfirmation: true,
         };
 
-        replyText = `I have drafted an updated description for your second product, "${secondProduct.name}". Review the preview below and confirm to save the change.`;
-      } else {
-        replyText = `Your saved catalogue currently does not have a second product. Would you like me to create one?`;
+        replyText = `I have drafted a proposal to add ${parsedProducts.length} produce listings to your catalogue. Review the preview below and confirm to save them.`;
       }
-    }
+      // 3. Edit Saved Produce Price / Details ("Change tomato price to 150" or "Change this to 180")
+      else if ((lower.includes('change') || lower.includes('update') || lower.includes('reduce') || lower.includes('increase')) && (lower.includes('price') || lower.includes('cost') || lower.includes('to') || selectedId)) {
+        const catalogue = promptContext.productsCatalogue || [];
+        let targetProduct = null;
+        if (selectedId) {
+          targetProduct = catalogue.find((p) => p.id === selectedId);
+        }
+        if (!targetProduct) {
+          targetProduct = catalogue.find((p) => lower.includes(p.name.toLowerCase())) || catalogue[0];
+        }
 
-    // ── CASE E: Stall designation update ──
-    else if (lower.includes('stall')) {
-      const specificMatch = message.match(/stall\s+([A-Za-z]\s*-\s*\d+|\d+)/i) || message.match(/([A-Za-z]\s*-\s*\d+)/i);
-      const newStall = specificMatch ? `Stall ${specificMatch[1].replace(/\s+/g, '')}` : 'Stall B-18';
-      const draftDoc = {
-        userId,
-        role: 'farmer',
-        actionType: 'update_stall_pin',
-        summary: `Update farm stall designation to "${newStall}".`,
-        payload: { stallNumber: newStall },
-        details: { stallNumber: newStall },
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        createdAt: new Date(),
-      };
+        if (targetProduct) {
+          const numMatch = lower.match(/\b(\d{2,4})\b/);
+          const newPrice = numMatch ? Number(numMatch[1]) : 150;
+          const cap = findCapability('farmer_update_product');
+          const draftData = cap.formatDraft({ productId: targetProduct.id, pricePKR: newPrice }, user, context, targetProduct);
 
-      const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
-      proposedAction = {
-        draftId: ins.insertedId.toString(),
-        actionType: draftDoc.actionType,
-        summary: draftDoc.summary,
-        details: draftDoc.details,
-        requiresConfirmation: true,
-      };
+          const ins = await db.collection('aiActionDrafts').insertOne({
+            userId,
+            role: 'farmer',
+            capabilityId: cap.id,
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            payload: draftData.payload,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          });
 
-      replyText = `I have drafted an action to update your stall designation to "${newStall}". Confirm below to apply.`;
-    }
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            requiresConfirmation: true,
+          };
 
-    // ── CASE F: General Overview ──
-    else {
-      replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, assist with stock allocations, compare competitor prices, and create catalogue products. How can I assist your farm today?`;
-    }
-  } else if (role === 'customer') {
-    if (lower.includes('recipe') || lower.includes('cook') || lower.includes('dinner') || lower.includes('meal') || lower.includes('tomato')) {
-      replyText = `Based on today's fresh harvest in Lahore (such as fresh Bedian Tomatoes and Okra), I recommend preparing a vibrant Desi Tomato-Bhindi Karahi or Fresh Herb Salad! You can pick up fresh vine-ripened tomatoes directly from Greenfield Organic Orchards at Model Town Sunday Organic Bazaar.`;
-    } else if (lower.includes('cancel')) {
-      const order = promptContext.recentOrders?.[0];
-      if (order) {
-        const draftDoc = {
+          replyText = `I have prepared a price update for "${targetProduct.name}" to Rs. ${newPrice}/${targetProduct.unit}. Review the preview below and confirm to apply it to your catalogue.`;
+        } else {
+          replyText = `You do not have any products saved in your catalogue yet. Would you like me to draft some produce listings for you?`;
+        }
+      }
+      // 4. Publish Dated Stock Allocation ("Publish 30kg tomatoes for Saturday")
+      else if (lower.includes('publish') || lower.includes('allocate') || (lower.includes('stock') && lower.includes('saturday'))) {
+        const catalogue = promptContext.productsCatalogue || [];
+        const prod = catalogue.find((p) => lower.includes(p.name.toLowerCase())) || catalogue[0] || { id: '66f400000000000000000001', name: 'Fresh Tomatoes', unit: 'kg' };
+        const qtyMatch = lower.match(/(\d+)\s*(?:kg|bunch|box|units?)?/i);
+        const qty = qtyMatch ? Number(qtyMatch[1]) : 30;
+
+        const cap = findCapability('farmer_publish_dated_stock');
+        const draftData = cap.formatDraft({
+          productId: prod.id,
+          date: '2026-09-26',
+          totalQuantity: qty,
+          unit: prod.unit || 'kg',
+          pricePKR: 150,
+        }, user, context, prod);
+
+        const ins = await db.collection('aiActionDrafts').insertOne({
           userId,
-          role: 'customer',
-          actionType: 'cancel_order',
-          summary: `Cancel order ${order.orderNumber || order.orderId} and release reserved produce back to grower.`,
-          payload: { orderId: order.orderId },
-          details: { orderNumber: order.orderNumber },
+          role: 'farmer',
+          capabilityId: cap.id,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
+          payload: draftData.payload,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           createdAt: new Date(),
-        };
+        });
 
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
         proposedAction = {
           draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
           requiresConfirmation: true,
         };
 
-        replyText = `I have prepared a cancellation draft for order ${order.orderNumber}. Confirm below to release the allocation.`;
-      } else {
-        replyText = `You do not have any active reservations currently eligible for cancellation.`;
+        replyText = `I have drafted an allocation to publish ${qty} ${prod.unit} of "${prod.name}" for the upcoming Saturday market. Review the preview below and confirm to open pre-orders.`;
       }
-    } else {
-      replyText = `Hello! I am your Market Companion. I can help you discover seasonal produce at Lahore farmers markets, check live stock availability, and suggest recipes using fresh ingredients from approved local growers.`;
+      // 5. Update Stall Pin ("update my stall location to Stall B-18")
+      else if (lower.includes('stall')) {
+        const stallMatch = message.match(/stall\s+([A-Za-z]\s*-\s*\d+|\d+)/i) || message.match(/([A-Za-z]\s*-\s*\d+)/i);
+        const newStall = stallMatch ? `Stall ${stallMatch[1].replace(/\s+/g, '')}` : 'Stall B-18';
+
+        const cap = findCapability('farmer_update_profile');
+        const draftData = cap.formatDraft({ stallNumber: newStall });
+
+        const ins = await db.collection('aiActionDrafts').insertOne({
+          userId,
+          role: 'farmer',
+          capabilityId: cap.id,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
+          payload: draftData.payload,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          createdAt: new Date(),
+        });
+
+        proposedAction = {
+          draftId: ins.insertedId.toString(),
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
+          requiresConfirmation: true,
+        };
+
+        replyText = `I have prepared an update for your market stall designation to "${newStall}". Confirm below to apply it to your farm profile.`;
+      }
+      // 6. Manage Orders ("Accept all valid pending orders" or "Mark order ready")
+      else if (lower.includes('order') || lower.includes('orders') || lower.includes('accept') || lower.includes('pack')) {
+        const orders = promptContext.orders || [];
+        const pendingOrder = orders.find((o) => o.status === 'placed') || orders[0];
+        if (lower.includes('accept') && pendingOrder) {
+          const cap = findCapability('farmer_update_order_status');
+          const draftData = cap.formatDraft({ orderId: pendingOrder.id, nextStatus: 'accepted' }, user, context, pendingOrder);
+          const ins = await db.collection('aiActionDrafts').insertOne({
+            userId,
+            role: 'farmer',
+            capabilityId: cap.id,
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            payload: draftData.payload,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          });
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            requiresConfirmation: true,
+          };
+          replyText = `I have prepared an action to accept pending order #${pendingOrder.orderNumber}. Confirm below to notify the customer.`;
+        } else if (orders.length > 0) {
+          replyText = `You currently have ${orders.length} order(s) on your workbench. Most recent:\n` +
+            orders.slice(0, 5).map((o) => `• Order #${o.orderNumber}: ${o.status.replace(/_/g, ' ')} (${o.customerName}) — Rs. ${o.totalPKR}`).join('\n');
+        } else {
+          replyText = `You have no active orders on your workbench currently.`;
+        }
+      }
+      // 7. General Farmer Overview
+      else {
+        replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, assist with stock allocations, compare competitor prices, and manage your catalogue products. How can I assist your farm today?`;
+      }
     }
-  } else if (role === 'admin') {
-    if (lower.includes('approval') || lower.includes('pending')) {
-      const farmer = promptContext.pendingFarmers?.[0];
-      if (farmer) {
-        const draftDoc = {
+
+    // ── D. Admin Intent Handling ──
+    else if (role === 'admin') {
+      // 1. Pending Farmers & Approval ("Show pending farmers", "Approve him", "Suspend him")
+      if (lower.includes('pending') || lower.includes('farmer') || lower.includes('approve') || lower.includes('suspend') || lower.includes('reject')) {
+        const pending = promptContext.pendingFarmers || [];
+        const targetFarmer = (selectedId ? pending.find((f) => f.id === selectedId) : null) || pending[0] || {
+          id: '66f100000000000000000003',
+          businessName: 'Margalla Dairy Farm',
+          contactPerson: 'Rashid Minhas',
+        };
+
+        if (lower.includes('suspend')) {
+          const cap = findCapability('admin_change_farmer_status');
+          const draftData = cap.formatDraft({ farmerId: targetFarmer.id, newStatus: 'suspended', reason: 'Administrative suspension' }, user, context, targetFarmer);
+          const ins = await db.collection('aiActionDrafts').insertOne({
+            userId,
+            role: 'admin',
+            capabilityId: cap.id,
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            payload: draftData.payload,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          });
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            requiresConfirmation: true,
+          };
+          replyText = `I have prepared an action to suspend the account for "${targetFarmer.businessName}". Confirm below to execute.`;
+        } else if (lower.includes('approve')) {
+          const cap = findCapability('admin_change_farmer_status');
+          const draftData = cap.formatDraft({ farmerId: targetFarmer.id, newStatus: 'approved' }, user, context, targetFarmer);
+          const ins = await db.collection('aiActionDrafts').insertOne({
+            userId,
+            role: 'admin',
+            capabilityId: cap.id,
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            payload: draftData.payload,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+            createdAt: new Date(),
+          });
+          proposedAction = {
+            draftId: ins.insertedId.toString(),
+            actionType: draftData.actionType,
+            summary: draftData.summary,
+            details: draftData.details,
+            requiresConfirmation: true,
+          };
+          replyText = `I have drafted an action to approve the registration for "${targetFarmer.businessName}" (${targetFarmer.contactPerson}). Confirm below to activate their stall privileges.`;
+        } else {
+          if (pending.length > 0) {
+            replyText = `There are currently ${pending.length} farmer applicant(s) waiting for approval:\n` +
+              pending.map((f, i) => `${i + 1}. ${f.businessName} (${f.contactPerson}) — ${f.city}`).join('\n') +
+              `\n\nYou can ask me to "approve ${pending[0].businessName}" or select one to review.`;
+          } else {
+            replyText = `All registered farmer applications have been reviewed. There are no pending approvals.`;
+          }
+        }
+      }
+      // 2. Announcements ("Draft an announcement", "Broadcast notice")
+      else if (lower.includes('announcement') || lower.includes('broadcast') || lower.includes('notice')) {
+        const cap = findCapability('admin_publish_announcement');
+        const draftData = cap.formatDraft({
+          title: 'Saturday Market Day Notice',
+          message: 'Gates open at 08:00 AM. Pre-orders ready for morning pickup at all designated stalls.',
+          type: 'general',
+        });
+        const ins = await db.collection('aiActionDrafts').insertOne({
           userId,
           role: 'admin',
-          actionType: 'approve_farmer',
-          summary: `Approve farmer profile "${farmer.farm}" (${farmer.id}) for public catalogue listing.`,
-          payload: { farmerId: farmer.id },
-          details: { farm: farmer.farm },
+          capabilityId: cap.id,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
+          payload: draftData.payload,
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           createdAt: new Date(),
-        };
-
-        const ins = await db.collection('aiActionDrafts').insertOne(draftDoc);
+        });
         proposedAction = {
           draftId: ins.insertedId.toString(),
-          actionType: draftDoc.actionType,
-          summary: draftDoc.summary,
-          details: draftDoc.details,
+          actionType: draftData.actionType,
+          summary: draftData.summary,
+          details: draftData.details,
           requiresConfirmation: true,
         };
-
-        replyText = `There is currently a pending grower applicant: "${farmer.farm}". Confirm below to grant approval.`;
-      } else {
-        replyText = `All registered farmer applications have been reviewed. There are currently zero pending approvals.`;
+        replyText = `I have drafted a platform announcement. Review the notice below and confirm to broadcast it across MarketLink.`;
       }
-    } else {
-      replyText = `MarketLink Intelligence Overview: Currently managing ${promptContext.totalActiveMarkets} active markets in Lahore, ${promptContext.totalRegisteredFarmers} registered farmers, and ${promptContext.totalOrdersPlaced} pre-orders placed.`;
+      // 3. Analytics & Overview
+      else {
+        const a = promptContext.analyticsSummary || {};
+        replyText = `Platform Overview:\n• Total Orders Placed: ${a.totalOrders || 0}\n• Total Booked Value: Rs. ${a.totalBookedPKR || 0}\n• Active Certified Farmers: ${a.activeFarmers || 0}\n• Pending Farmer Approvals: ${promptContext.pendingFarmers?.length || 0}\n\nHow would you like to direct operations today?`;
+      }
     }
   }
 
   return {
     role,
     reply: replyText,
-    contextSummary: promptContext,
     proposedAction,
+    contextSummary: {
+      route: pathname,
+      activePendingDraft: !!proposedAction,
+    },
     engine,
   };
 }
 
 /**
  * Execute User-Confirmed Consequential AI Action
- * Strict server-side revalidation of permissions, constraints, and ownership.
+ * Revalidates permissions, revalidates target records, invokes shared business service, and records immutable audit log.
  */
 export async function confirmCopilotActionService(user, draftId) {
   const db = getDB();
@@ -1266,8 +1050,17 @@ export async function confirmCopilotActionService(user, draftId) {
     throw err;
   }
 
+  if (draft.confirmed) {
+    return {
+      actionType: draft.actionType,
+      confirmed: true,
+      summary: draft.summary,
+      result: draft.result || { alreadyExecuted: true },
+    };
+  }
+
   if (draft.expiresAt && new Date() > new Date(draft.expiresAt)) {
-    const err = new Error('Proposed action draft has expired. Please initiate a new copilot request.');
+    const err = new Error('Proposed action draft has expired. Please initiate a new request.');
     err.code = 'ACTION_DRAFT_EXPIRED';
     err.statusCode = 410;
     throw err;
@@ -1275,200 +1068,53 @@ export async function confirmCopilotActionService(user, draftId) {
 
   let executionResult = null;
 
-  // 1. Farmer: Create Multiple Catalogue Products
-  if (draft.actionType === 'create_products' && user.role === 'farmer') {
-    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
-    if (!profile) {
-      const err = new Error('Farmer profile not found for this account.');
-      err.code = 'NOT_FOUND';
-      err.statusCode = 404;
-      throw err;
+  // 1. Try Capability Registry execution if capabilityId is registered
+  if (draft.capabilityId) {
+    const capability = findCapability(draft.capabilityId);
+    if (capability && capability.role === user.role) {
+      executionResult = await capability.execute(user, draft.payload, draft.context);
     }
+  }
 
-    const categories = await db.collection('categories').find({}).toArray();
-    const defaultCat =
-      categories.find((c) => c.slug === 'fresh-vegetables') ||
-      categories[0] || { _id: new ObjectId('66f300000000000000000001') };
-
-    const createdItems = [];
-    const now = new Date();
-
-    for (const item of draft.payload.products || []) {
-      const matchedCat =
-        categories.find(
-          (c) =>
-            item.category &&
-            (c.name.toLowerCase().includes(item.category.toLowerCase()) ||
-              item.category.toLowerCase().includes(c.name.toLowerCase()))
-        ) || defaultCat;
-
-      const unit = ['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item'].includes(item.unit)
-        ? item.unit
-        : 'kg';
-      const basePriceMinor = Math.round(Number(item.pricePKR || 100) * 100);
-
-      const productDoc = {
-        farmerId: profile._id,
-        name: item.name.trim(),
-        description: item.description || `Fresh produce grown by ${profile.businessName}`,
-        categoryId: matchedCat._id,
-        unit,
-        basePriceMinor,
-        currency: 'PKR',
-        imageUrl: item.imageUrl || '/images/tomatoes.jpg',
-        isArchived: false,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const result = await db.collection('products').insertOne(productDoc);
-      createdItems.push({
-        id: result.insertedId.toString(),
-        name: productDoc.name,
-        unit: productDoc.unit,
-        basePriceMinor: productDoc.basePriceMinor,
-        currency: productDoc.currency,
-        categoryId: matchedCat._id.toString(),
+  // 2. Backward-compatible execution for existing action types
+  if (!executionResult) {
+    if (draft.actionType === 'create_products' && user.role === 'farmer') {
+      const cap = findCapability('farmer_create_products');
+      executionResult = await cap.execute(user, draft.payload);
+    } else if (draft.actionType === 'edit_saved_product' && user.role === 'farmer') {
+      const cap = findCapability('farmer_update_product');
+      executionResult = await cap.execute(user, draft.payload);
+    } else if (draft.actionType === 'update_stall_pin' && user.role === 'farmer') {
+      executionResult = await updateFarmerProfileService(user.id, {
+        stallNumber: draft.payload.stallNumber,
       });
-    }
-
-    executionResult = {
-      count: createdItems.length,
-      products: createdItems,
-    };
-  }
-
-  // 2. Farmer: Edit Existing Saved Product
-  else if (draft.actionType === 'edit_saved_product' && user.role === 'farmer') {
-    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
-    if (!profile) {
-      const err = new Error('Farmer profile not found.');
-      err.code = 'NOT_FOUND';
-      err.statusCode = 404;
+    } else if (draft.actionType === 'publish_dated_stock' && user.role === 'farmer') {
+      const cap = findCapability('farmer_publish_dated_stock');
+      executionResult = await cap.execute(user, draft.payload);
+    } else if (draft.actionType === 'mark_sold_out' && user.role === 'farmer') {
+      const cap = findCapability('farmer_mark_sold_out');
+      executionResult = await cap.execute(user, draft.payload);
+    } else if (draft.actionType === 'update_farmer_order_status' && user.role === 'farmer') {
+      executionResult = await updateFarmerOrderStatusService(user.id, draft.payload.orderId, draft.payload.nextStatus, draft.payload.reason);
+    } else if (draft.actionType === 'reply_to_review' && user.role === 'farmer') {
+      executionResult = await replyToReviewService(user.id, draft.payload.reviewId, draft.payload.replyText);
+    } else if (draft.actionType === 'cancel_order' && user.role === 'customer') {
+      executionResult = await cancelCustomerOrderService(user.id, draft.payload.orderId, draft.payload.reason || 'Cancelled via Market Companion');
+    } else if (draft.actionType === 'change_farmer_status' && user.role === 'admin') {
+      executionResult = await updateFarmerApprovalService(draft.payload.farmerId, draft.payload.newStatus, user.id, draft.payload.reason || 'Admin Copilot action');
+    } else if (draft.actionType === 'approve_farmer' && user.role === 'admin') {
+      executionResult = await updateFarmerApprovalService(draft.payload.farmerId, 'approved', user.id, 'Approved via Admin Copilot');
+    } else if (draft.actionType === 'publish_announcement' && user.role === 'admin') {
+      executionResult = await createAnnouncementService(user.id, draft.payload);
+    } else {
+      const err = new Error(`Unsupported action type: ${draft.actionType}`);
+      err.code = 'UNSUPPORTED_ACTION';
+      err.statusCode = 400;
       throw err;
     }
-
-    const pId = new ObjectId(draft.payload.productId);
-    const updates = { ...draft.payload.updates, updatedAt: new Date() };
-
-    const upd = await db.collection('products').updateOne(
-      { _id: pId, farmerId: { $in: [uId, profile._id] } },
-      { $set: updates }
-    );
-
-    if (upd.matchedCount === 0) {
-      const err = new Error('Product not found in your saved catalogue.');
-      err.code = 'NOT_FOUND';
-      err.statusCode = 404;
-      throw err;
-    }
-
-    executionResult = { productId: draft.payload.productId, updated: true };
   }
 
-  // 3. Farmer: Update Stall Pin
-  else if (draft.actionType === 'update_stall_pin' && user.role === 'farmer') {
-    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
-    if (!profile) {
-      const err = new Error('Farmer profile not found for this account.');
-      err.code = 'NOT_FOUND';
-      err.statusCode = 404;
-      throw err;
-    }
-    executionResult = await updateFarmerProfileService(user.id, {
-      stallNumber: draft.payload.stallNumber,
-    });
-  }
-
-  // 4. Farmer: Publish Dated Stock
-  else if (draft.actionType === 'publish_dated_stock' && user.role === 'farmer') {
-    const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
-    if (!profile) {
-      const err = new Error('Farmer profile not found.');
-      err.code = 'NOT_FOUND';
-      err.statusCode = 404;
-      throw err;
-    }
-
-    const pId = new ObjectId(draft.payload.productId);
-    const marketId = profile.marketIds?.[0] || new ObjectId('66f200000000000000000001');
-
-    const stockOfferDoc = {
-      farmerId: profile._id,
-      productId: pId,
-      marketId,
-      date: draft.payload.date,
-      totalQuantity: draft.payload.totalQuantity,
-      availableQuantity: draft.payload.totalQuantity,
-      reservedQuantity: 0,
-      priceMinor: draft.payload.priceMinor,
-      currency: 'PKR',
-      unit: draft.payload.unit,
-      status: 'available',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const res = await db.collection('stockOffers').updateOne(
-      { farmerId: profile._id, productId: pId, date: draft.payload.date },
-      { $set: stockOfferDoc },
-      { upsert: true }
-    );
-
-    executionResult = {
-      stockOfferId: res.upsertedId ? res.upsertedId.toString() : 'updated',
-      date: draft.payload.date,
-      status: 'available',
-    };
-  }
-
-  // 5. Farmer: Mark Sold Out
-  else if (draft.actionType === 'mark_sold_out' && user.role === 'farmer') {
-    const soId = new ObjectId(draft.payload.stockOfferId);
-    await db.collection('stockOffers').updateOne(
-      { _id: soId },
-      { $set: { availableQuantity: 0, status: 'sold_out', updatedAt: new Date() } }
-    );
-    executionResult = { stockOfferId: draft.payload.stockOfferId, status: 'sold_out' };
-  }
-
-  // 6. Farmer: Reply to Review
-  else if (draft.actionType === 'reply_to_review' && user.role === 'farmer') {
-    executionResult = await replyToReviewService(user.id, draft.payload.reviewId, draft.payload.replyText);
-  }
-
-  // 7. Customer: Cancel Order
-  else if (draft.actionType === 'cancel_order' && user.role === 'customer') {
-    executionResult = await cancelCustomerOrderService(
-      user.id,
-      draft.payload.orderId,
-      'Cancelled via Market Companion'
-    );
-  }
-
-  // 8. Admin: Publish Announcement
-  else if (draft.actionType === 'publish_announcement' && user.role === 'admin') {
-    executionResult = await createAnnouncementService(user.id, draft.payload);
-  }
-
-  // 9. Admin: Approve Farmer
-  else if (draft.actionType === 'approve_farmer' && user.role === 'admin') {
-    const fId = new ObjectId(draft.payload.farmerId);
-    await db.collection('farmerProfiles').updateOne(
-      { _id: fId },
-      { $set: { approvalStatus: 'approved', updatedAt: new Date() } }
-    );
-    executionResult = { farmerId: draft.payload.farmerId, approvalStatus: 'approved' };
-  }
-
-  else {
-    const err = new Error(`Unsupported action type: ${draft.actionType}`);
-    err.code = 'UNSUPPORTED_ACTION';
-    err.statusCode = 400;
-    throw err;
-  }
-
-  // Record Immutable Audit Log Entry
+  // 3. Record Audit Trail
   await db.collection('auditLogs').insertOne({
     userId: uId,
     userRole: user.role,
@@ -1481,8 +1127,11 @@ export async function confirmCopilotActionService(user, draftId) {
     executedAt: new Date(),
   });
 
-  // Clean up executed draft
-  await db.collection('aiActionDrafts').deleteOne({ _id: dId });
+  // 4. Mark draft as confirmed & executed
+  await db.collection('aiActionDrafts').updateOne(
+    { _id: dId },
+    { $set: { confirmed: true, executedAt: new Date(), result: executionResult } }
+  );
 
   return {
     actionType: draft.actionType,

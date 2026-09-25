@@ -37,6 +37,12 @@ describe('Market & Catalogue Engine Test Suite (Phase 2)', () => {
     const adminUser = await db.collection('users').findOne({ role: 'admin' });
     const farmerUser = await db.collection('users').findOne({ email: 'farmer.greenfield@marketlink.com' });
     const pendingFarmerUser = await db.collection('users').findOne({ email: 'farmer.pending@marketlink.com' });
+    if (pendingFarmerUser) {
+      await db.collection('farmerProfiles').updateOne(
+        { userId: pendingFarmerUser._id },
+        { $set: { approvalStatus: 'pending' } }
+      );
+    }
     const customerUser = await db.collection('users').findOne({ email: 'customer.sarah@marketlink.com' });
     const demoMarket = await db.collection('markets').findOne({ isActive: true });
     const demoFarmerProfile = await db.collection('farmerProfiles').findOne({ approvalStatus: 'approved' });
