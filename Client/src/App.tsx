@@ -63,7 +63,7 @@ export function App() {
   if (!fixtureEnabled)
     return (
       <main className="container section">
-        <h1>MarketLink integration is not configured.</h1>
+        <h1>Gather & Grow integration is not configured.</h1>
         <p>
           The approved live API adapter is pending. This production build does
           not silently substitute fictional records.

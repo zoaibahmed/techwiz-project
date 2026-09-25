@@ -9,7 +9,6 @@ import {
   Check,
   ArrowRight,
   HelpCircle,
-  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useVisitor } from "../data/visitor-context";
@@ -199,7 +198,7 @@ export function LocationModal() {
 
           <div className="location-modal-body">
             {/* Step 1: Language Selection */}
-            <div className="location-section">
+            <div className="location-section location-language-section">
               <label className="location-label">
                 <Globe size={15} />
                 <span>{t("language")}</span>
@@ -207,6 +206,7 @@ export function LocationModal() {
               <div className="location-lang-toggle">
                 <button
                   type="button"
+                  aria-pressed={selectedLocale === "en"}
                   className={`lang-btn ${selectedLocale === "en" ? "active" : ""}`}
                   onClick={() => setSelectedLocale("en")}
                 >
@@ -215,6 +215,7 @@ export function LocationModal() {
                 </button>
                 <button
                   type="button"
+                  aria-pressed={selectedLocale === "ur"}
                   className={`lang-btn ${selectedLocale === "ur" ? "active" : ""}`}
                   onClick={() => setSelectedLocale("ur")}
                 >
@@ -229,7 +230,7 @@ export function LocationModal() {
             </div>
 
             {/* Step 2: Country Selection (Independent & Comprehensive ISO) */}
-            <div className="location-section">
+            <div className="location-section location-country-section">
               <div className="location-label-row">
                 <label
                   className="location-label"
@@ -244,31 +245,6 @@ export function LocationModal() {
                     {selectedCountry})
                   </span>
                 )}
-              </div>
-
-              {/* Quick shortcut pills */}
-              <div className="quick-country-row">
-                <button
-                  type="button"
-                  className={`quick-pill ${selectedCountry === "PK" ? "active" : ""}`}
-                  onClick={() => handleSelectCountry("PK")}
-                >
-                  🇵🇰 Pakistan ({t("lahore")})
-                </button>
-                <button
-                  type="button"
-                  className={`quick-pill ${selectedCountry === "GB" ? "active" : ""}`}
-                  onClick={() => handleSelectCountry("GB")}
-                >
-                  🇬🇧 United Kingdom
-                </button>
-                <button
-                  type="button"
-                  className={`quick-pill ${selectedCountry === "US" ? "active" : ""}`}
-                  onClick={() => handleSelectCountry("US")}
-                >
-                  🇺🇸 United States
-                </button>
               </div>
 
               {/* Search box */}
@@ -295,7 +271,8 @@ export function LocationModal() {
               </div>
 
               {/* Country options list */}
-              <div className="country-list-scroll">
+              <div className="country-list-scroll" aria-label={t("country")}>
+                {countries.length === 0 && <p className="location-no-results">{isDraftRTL ? "کوئی ملک نہیں ملا" : "No countries found. Try a name or country code."}</p>}
                 {countries.map(([code, name]) => {
                   const isCurrent = selectedCountry === code;
                   const hasLocalMarkets = hasMarketCoverage(s.markets, code);
@@ -303,13 +280,14 @@ export function LocationModal() {
                     <button
                       key={code}
                       type="button"
+                      aria-pressed={isCurrent}
                       className={`country-item ${isCurrent ? "selected" : ""}`}
                       onClick={() => handleSelectCountry(code)}
                     >
                       <span className="country-name">{name}</span>
                       <span className="country-tag">
                         {hasLocalMarkets ? (
-                          <span className="tag-demo">Demo markets</span>
+                          <span className="tag-demo">{s.markets.filter(m => m.countryCode === code).every(m => m.id.startsWith("demo-")) ? "Demo markets" : "Markets listed"}</span>
                         ) : (
                           <span className="tag-code">{code}</span>
                         )}
@@ -372,7 +350,7 @@ export function LocationModal() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : selectedCountry ? (
               /* Beautiful Empty State for countries without active markets */
               <div className="location-empty-card">
                 <Sprout size={24} className="empty-icon" />
@@ -380,16 +358,9 @@ export function LocationModal() {
                   <h4>{t("emptyTitle")}</h4>
                   <p>{t("emptyBody")}</p>
                 </div>
-                <button
-                  type="button"
-                  className="empty-action-btn"
-                  onClick={handleDemo}
-                >
-                  <Sparkles size={15} />
-                  <span>{t("demo")}</span>
-                </button>
+
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Footer Actions */}
@@ -406,7 +377,7 @@ export function LocationModal() {
               >
                 {t("demo")}
               </button>
-              <button type="button" className="apply-btn" onClick={handleApply}>
+              <button type="button" className="apply-btn" disabled={!selectedCountry} onClick={handleApply}>
                 <span>{t("apply")}</span>
                 <ArrowRight size={16} />
               </button>

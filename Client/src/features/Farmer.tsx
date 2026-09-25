@@ -1662,7 +1662,7 @@ function FarmerOnboardingWizard({ f }: { f: any }) {
           <div className="stack">
             <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Farm Location & Region</h2>
             <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Where is your harvest cultivated? MarketLink prioritises local growers within 150 km of venue clusters.
+              Where is your harvest cultivated? Gather & Grow prioritises local growers within 150 km of venue clusters.
             </p>
             <Field label="Province / Region">
               <input value={region} onChange={(e) => setRegion(e.target.value)} required />

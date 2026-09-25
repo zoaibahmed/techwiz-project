@@ -1,0 +1,7 @@
+.scroll-choreography{display:contents}
+.scroll-choreography .global-grower-photo,
+.scroll-choreography .harvest-index-picture,
+.scroll-choreography .pickup-visual,
+.scroll-choreography .scene-photo,
+.scroll-choreography .grower-editorial-row figure{backface-visibility:hidden;transform-style:preserve-3d}
+@media(prefers-reduced-motion:reduce){.scroll-choreography{scroll-behavior:auto}}

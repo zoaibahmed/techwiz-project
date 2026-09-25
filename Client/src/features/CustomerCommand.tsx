@@ -261,7 +261,7 @@ export function CustomerCommand() {
             <div>
               <Sparkles size={20} />
               <span>
-                Market Companion<small>MarketLink Copilot</small>
+                Market Companion<small>Gather & Grow Copilot</small>
               </span>
             </div>
             <p>Understand your next pickup or find available produce.</p>

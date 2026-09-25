@@ -537,3 +537,32 @@
     justify-content: center;
   }
 }
+/* Location settings: one country browser, a compact language panel, persistent actions. */
+.location-modal-overlay .location-modal-card{max-width:850px;max-height:min(880px,94svh);border-radius:12px;overflow:hidden;background:#f8f7ef;border:1px solid #ced7c5;box-shadow:0 30px 100px #061f2955}
+.location-modal-overlay .location-modal-header{padding:18px 28px;border:0;background:#183f2c;color:#f7f5e9;flex-shrink:0}
+.location-modal-overlay .location-modal-badge{color:inherit;letter-spacing:0;text-transform:none;font-size:13px}
+.location-modal-overlay .location-modal-close{color:#f7f5e9;background:#ffffff12;border:1px solid #ffffff35;border-radius:50%;width:36px;height:36px}
+.location-modal-overlay .location-modal-heading{padding:24px 28px 18px;flex-shrink:0}
+.location-modal-overlay .location-modal-heading h2{font-family:Newsreader,serif;font-weight:400;font-size:36px;line-height:1.05;letter-spacing:-.02em;margin:0 0 10px}
+.location-modal-overlay .location-modal-heading p{font-size:13px;line-height:1.55;margin:0;max-width:650px}
+.location-modal-overlay .location-modal-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);grid-template-areas:'country language' 'country local';gap:18px 25px;overflow-y:auto;overscroll-behavior:contain;min-height:0;padding:0 28px 24px;align-items:start}
+.location-modal-overlay .location-country-section{grid-area:country;margin:0;min-width:0}
+.location-modal-overlay .location-language-section{grid-area:language;margin:0;padding:18px;background:#e9eedf;border-radius:8px}
+.location-modal-overlay .location-section-grid,.location-modal-overlay .location-empty-card{grid-area:local;display:flex;flex-direction:column;gap:18px;margin:0;padding:18px;border:1px solid #d0d9c5;background:transparent;border-radius:8px;min-width:0}
+.location-modal-overlay .location-empty-card .empty-icon{display:none}
+.location-modal-overlay .location-empty-card h4{font-size:17px;margin:0 0 8px}
+.location-modal-overlay .location-empty-card p{font-size:12px;line-height:1.6;margin:0}
+.location-modal-overlay .location-label-row{align-items:start;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.location-modal-overlay .location-label{font-size:12px;margin-bottom:10px;letter-spacing:0;text-transform:none}
+.location-modal-overlay .selected-country-pill{font-size:11px;background:#dde8cd;padding:4px 8px;border:0;border-radius:3px;max-width:100%;overflow-wrap:anywhere}
+.location-modal-overlay .location-search-box{background:#fff;border:1px solid #a8b99b;border-radius:5px;min-height:46px;margin-bottom:8px}
+.location-modal-overlay .location-search-box input{width:100%;min-width:0;font-size:14px;padding:12px 0}
+.location-modal-overlay .country-list-scroll{height:260px;max-height:260px;border:1px solid #dae0d1;border-radius:5px;background:#fff;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;display:block;padding:4px}
+.location-modal-overlay .country-item{width:100%;min-height:42px;border:0;border-radius:3px;padding:11px 12px;display:flex;justify-content:space-between;gap:8px;text-align:start;font-size:13px;background:transparent}
+.location-modal-overlay .country-item.selected{background:#dce8ce;color:#143e2a}.location-modal-overlay .country-item:hover{background:#eef2e6}.location-modal-overlay .country-name{min-width:0;overflow-wrap:anywhere}.location-modal-overlay .country-tag{flex-shrink:0;font-size:10px}
+.location-modal-overlay .location-lang-toggle{display:flex;gap:6px;padding:4px;background:#d8e1ca;border-radius:6px}
+.location-modal-overlay .lang-btn{flex:1;padding:10px 5px;min-width:0;border:0;background:transparent;border-radius:4px;text-align:center}.location-modal-overlay .lang-btn.active{background:#fffdf5;box-shadow:0 2px 4px #1b382411;color:#153c2c}.location-modal-overlay .lang-name{font-size:16px}.location-modal-overlay .lang-sub{font-size:10px;margin-top:4px}.location-modal-overlay .location-hint{font-size:11px;line-height:1.5;align-items:flex-start;margin:12px 0 0}.location-modal-overlay .location-hint svg{flex-shrink:0;margin-top:2px}
+.location-modal-overlay .location-modal-footer{flex-shrink:0;margin:0;padding:16px 28px;background:#efefe3;border-top:1px solid #d7ddcd;gap:12px}.location-modal-overlay .primary-actions{gap:12px}.location-modal-overlay .apply-btn{border-radius:4px;min-height:44px}.location-modal-overlay .apply-btn:disabled{opacity:.45;cursor:not-allowed}.location-modal-overlay .demo-switch-btn,.location-modal-overlay .skip-btn{font-size:12px}.location-no-results{padding:20px;font-size:13px;line-height:1.5}
+@media(max-width:620px){.location-modal-overlay{padding:10px}.location-modal-overlay .location-modal-card{max-height:96svh;border-radius:10px}.location-modal-overlay .location-modal-header{padding:12px 18px}.location-modal-overlay .location-modal-heading{padding:18px 18px 14px}.location-modal-overlay .location-modal-heading h2{font-size:29px}.location-modal-overlay .location-modal-body{display:flex;flex-direction:column;padding:0 18px 18px;gap:18px}.location-modal-overlay .location-country-section{order:0;width:100%}.location-modal-overlay .location-language-section{order:1;width:100%;padding:14px}.location-modal-overlay .location-section-grid,.location-modal-overlay .location-empty-card{order:2;width:100%;padding:14px}.location-modal-overlay .country-list-scroll{height:170px;max-height:170px}.location-modal-overlay .location-modal-footer{padding:12px 18px;flex-wrap:wrap}.location-modal-overlay .primary-actions{display:flex;flex:1;justify-content:flex-end}.location-modal-overlay .apply-btn{font-size:12px;padding:10px 12px}.location-modal-overlay .location-section-grid .location-section{margin:0}}
+.location-modal-overlay .lang-btn .lang-sub{color:#52634b;opacity:1}.location-modal-overlay .lang-btn.active .lang-name{color:#153c2c}.location-modal-overlay .country-item:focus-visible,.location-modal-overlay .lang-btn:focus-visible{outline:2px solid #173e2c;outline-offset:-2px}
+@media(min-width:621px) and (max-width:760px){.location-modal-overlay .location-modal-body{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}.location-modal-overlay .location-language-section{padding:12px}.location-modal-overlay .location-search-box input{font-size:12px}}
