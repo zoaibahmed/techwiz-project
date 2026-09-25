@@ -55,7 +55,7 @@ export async function updateMyFarmerProfile(req, res, next) {
 export async function getFarmerReports(req, res, next) {
   try {
     const { getFarmerReportsService } = await import('../services/farmer.service.js');
-    const reports = await getFarmerReportsService(req.user.id);
+    const reports = await getFarmerReportsService(req.user.id, req.query);
     res.status(200).json({
       data: reports,
       meta: { timestamp: new Date().toISOString() },

@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getDB } from '../config/db.js';
+import { resolveDateRange, calculateComparison } from '../utils/date-range.js';
 
 export async function getPublicFarmerProfileService(farmerProfileId) {
   const db = getDB();
@@ -172,21 +173,55 @@ export async function listFarmersPublicService({ search, marketId } = {}) {
   }));
 }
 
-export async function getFarmerReportsService(userId) {
+export async function getFarmerAnalyticsService(userId, options = {}) {
   const db = getDB();
   const fId = new ObjectId(userId);
   const profile = await db.collection('farmerProfiles').findOne({ userId: fId });
   const possibleIds = [fId];
   if (profile) possibleIds.push(profile._id);
 
-  // 1. Order aggregation by status
-  const orders = await db
-    .collection('orders')
-    .find({ $or: [{ farmerId: { $in: possibleIds } }, { farmerProfileId: { $in: possibleIds } }] })
-    .toArray();
+  const dateRange = resolveDateRange(options.period || '7d', options.startDate, options.endDate);
+  const { startDate, endDate, prevStartDate, prevEndDate, period, label } = dateRange;
+  const todayStr = new Date().toISOString().split('T')[0];
 
+  // 1. Markets & Currency
+  const marketIds = profile?.marketIds || [];
+  const markets = await db.collection('markets').find({ _id: { $in: marketIds } }).toArray();
+  const primaryCurrency = markets[0]?.currency || 'PKR';
+  const marketMap = new Map(markets.map((m) => [m._id.toString(), m]));
+
+  // 2. Orders retrieval
+  const orderFilter = {
+    $or: [{ farmerId: { $in: possibleIds } }, { farmerProfileId: { $in: possibleIds } }],
+  };
+  if (options.marketId && ObjectId.isValid(options.marketId)) {
+    orderFilter.marketId = new ObjectId(options.marketId);
+  }
+
+  const allOrders = await db.collection('orders').find(orderFilter).toArray();
+
+  // Partition into current period, previous period, upcoming
+  const hasExplicitPeriod = Boolean(options.period || options.startDate || options.endDate);
+  const currentOrders = hasExplicitPeriod
+    ? allOrders.filter((o) => {
+        const d = o.marketDate || (o.createdAt instanceof Date ? o.createdAt.toISOString().split('T')[0] : '');
+        return d >= startDate && d <= endDate;
+      })
+    : allOrders;
+
+  const prevOrders = allOrders.filter((o) => {
+    const d = o.marketDate || (o.createdAt instanceof Date ? o.createdAt.toISOString().split('T')[0] : '');
+    return d >= prevStartDate && d <= prevEndDate;
+  });
+
+  const upcomingOrders = allOrders.filter((o) => {
+    const d = o.marketDate || '';
+    return d >= todayStr && ['placed', 'accepted', 'confirmed', 'ready_for_pickup'].includes(o.status);
+  });
+
+  // Calculate current period counts & financials
   const counts = {
-    total: orders.length,
+    total: currentOrders.length,
     placed: 0,
     accepted: 0,
     ready_for_pickup: 0,
@@ -196,102 +231,417 @@ export async function getFarmerReportsService(userId) {
   };
 
   let bookedOrderValueMinor = 0;
-  let actualCollectedPaymentMinor = 0;
+  let recordedCollectedValueMinor = 0;
 
-  const productSalesMap = new Map();
-
-  for (const o of orders) {
+  for (const o of currentOrders) {
     const status = o.status === 'confirmed' ? 'accepted' : o.status;
-    if (counts[status] !== undefined) {
-      counts[status]++;
-    }
-
+    if (counts[status] !== undefined) counts[status]++;
     const orderTotal = o.totalAmountMinor || (o.total ? o.total.amountMinor : 0) || 0;
 
-    // Booked value: Active pre-orders reserved
-    if (['placed', 'accepted', 'ready_for_pickup'].includes(status)) {
+    if (['placed', 'accepted', 'ready_for_pickup', 'completed'].includes(status)) {
       bookedOrderValueMinor += orderTotal;
     }
-
-    // Actual collected payment: Physical payment recorded at pickup
     if (status === 'completed' && (o.payment?.status === 'paid_at_pickup' || o.paymentStatus === 'paid')) {
-      actualCollectedPaymentMinor += (o.payment?.paidAmountMinor || orderTotal);
+      recordedCollectedValueMinor += (o.payment?.paidAmountMinor || orderTotal);
     }
+  }
 
-    // Aggregate product sales from completed and active pre-orders
+  // Previous period counts & financials for comparison
+  let prevBookedOrderValueMinor = 0;
+  for (const o of prevOrders) {
+    const status = o.status === 'confirmed' ? 'accepted' : o.status;
+    const orderTotal = o.totalAmountMinor || (o.total ? o.total.amountMinor : 0) || 0;
     if (['placed', 'accepted', 'ready_for_pickup', 'completed'].includes(status)) {
-      for (const item of (o.items || [])) {
-        const pIdStr = item.productId ? item.productId.toString() : '';
-        const prev = productSalesMap.get(pIdStr) || {
-          productId: pIdStr,
-          productName: item.name,
-          unit: item.unit,
-          quantitySold: 0,
-          revenueMinor: 0,
-        };
-        prev.quantitySold += item.quantity || 0;
-        prev.revenueMinor += (item.totalPriceMinor || ((item.unitPriceMinor || 0) * (item.quantity || 0)));
-        productSalesMap.set(pIdStr, prev);
+      prevBookedOrderValueMinor += orderTotal;
+    }
+  }
+
+  const ordersComparison = calculateComparison(currentOrders.length, prevOrders.length);
+  const bookedValueComparison = calculateComparison(bookedOrderValueMinor, prevBookedOrderValueMinor);
+  const averageBookedOrderValueMinor = currentOrders.length > 0 ? Math.round(bookedOrderValueMinor / currentOrders.length) : 0;
+
+  // 3. Products & Stock Health
+  const products = await db.collection('products').find({ farmerId: { $in: possibleIds } }).toArray();
+  const activeProducts = products.filter((p) => !p.isArchived);
+  const prodMap = new Map(products.map((p) => [p._id.toString(), p]));
+
+  const stockOffers = await db.collection('stockOffers').find({
+    farmerId: { $in: possibleIds },
+    ...(options.marketId && ObjectId.isValid(options.marketId) ? { marketId: new ObjectId(options.marketId) } : {}),
+  }).toArray();
+
+  let totalPublishedUnits = 0;
+  let totalReservedUnits = 0;
+  let totalAvailableUnits = 0;
+  let soldOutOffersCount = 0;
+  let lowStockOffersCount = 0;
+
+  const productStockStats = new Map();
+
+  for (const s of stockOffers) {
+    totalPublishedUnits += s.totalQuantity || 0;
+    totalReservedUnits += s.reservedQuantity || 0;
+    totalAvailableUnits += s.availableQuantity || 0;
+    if (s.availableQuantity <= 0) soldOutOffersCount++;
+    else if (s.availableQuantity < 10) lowStockOffersCount++;
+
+    const pIdStr = s.productId ? s.productId.toString() : '';
+    const prev = productStockStats.get(pIdStr) || {
+      productId: pIdStr,
+      productName: prodMap.get(pIdStr)?.name || 'Produce',
+      unit: s.unit || 'kg',
+      published: 0,
+      reserved: 0,
+      available: 0,
+    };
+    prev.published += s.totalQuantity || 0;
+    prev.reserved += s.reservedQuantity || 0;
+    prev.available += s.availableQuantity || 0;
+    productStockStats.set(pIdStr, prev);
+  }
+
+  const stockUtilizationPct = totalPublishedUnits > 0
+    ? Math.round((totalReservedUnits / totalPublishedUnits) * 100)
+    : 0;
+
+  let stockHealthSummary = 'No stock published';
+  if (totalPublishedUnits > 0) {
+    if (stockUtilizationPct >= 85) {
+      stockHealthSummary = `Reservations consuming ${stockUtilizationPct}% of published stock`;
+    } else if (stockUtilizationPct >= 50) {
+      stockHealthSummary = 'Healthy reservation velocity';
+    } else {
+      stockHealthSummary = 'High availability across catalogue';
+    }
+  }
+
+  // 4. Daily Time-Series (Orders & Booked Value Trend)
+  const dailySeries = [];
+  const currStart = new Date(dateRange.startDateTime);
+  const currEnd = new Date(dateRange.endDateTime);
+  let highestValueDay = { date: '', amountMinor: 0, ordersCount: 0 };
+
+  for (let d = new Date(currStart); d <= currEnd; d.setDate(d.getDate() + 1)) {
+    const dStr = d.toISOString().split('T')[0];
+    const dayOrders = currentOrders.filter((o) => (o.marketDate || (o.createdAt instanceof Date ? o.createdAt.toISOString().split('T')[0] : '')) === dStr);
+
+    let dayPlaced = 0;
+    let dayAccepted = 0;
+    let dayReady = 0;
+    let dayCompleted = 0;
+    let dayCancelled = 0;
+    let dayBookedMinor = 0;
+
+    for (const o of dayOrders) {
+      const status = o.status === 'confirmed' ? 'accepted' : o.status;
+      if (status === 'placed') dayPlaced++;
+      else if (status === 'accepted') dayAccepted++;
+      else if (status === 'ready_for_pickup') dayReady++;
+      else if (status === 'completed') dayCompleted++;
+      else if (['declined', 'cancelled'].includes(status)) dayCancelled++;
+
+      const val = o.totalAmountMinor || (o.total ? o.total.amountMinor : 0) || 0;
+      if (['placed', 'accepted', 'ready_for_pickup', 'completed'].includes(status)) {
+        dayBookedMinor += val;
       }
     }
+
+    if (dayBookedMinor > highestValueDay.amountMinor) {
+      highestValueDay = { date: dStr, amountMinor: dayBookedMinor, ordersCount: dayOrders.length };
+    }
+
+    dailySeries.push({
+      date: dStr,
+      placed: dayPlaced,
+      accepted: dayAccepted,
+      ready: dayReady,
+      completed: dayCompleted,
+      cancelled: dayCancelled,
+      bookedValueMinor: dayBookedMinor,
+      totalOrders: dayOrders.length,
+    });
   }
 
-  const bestSellingProducts = Array.from(productSalesMap.values())
-    .sort((a, b) => b.quantitySold - a.quantitySold)
-    .slice(0, 10);
+  // 5. Order Status Distribution
+  const totalPeriodOrders = Math.max(1, currentOrders.length);
+  const statusDistribution = [
+    { status: 'placed', label: 'Placed (Awaiting)', count: counts.placed, percentage: Math.round((counts.placed / totalPeriodOrders) * 100), color: '#D97706' },
+    { status: 'accepted', label: 'Accepted', count: counts.accepted, percentage: Math.round((counts.accepted / totalPeriodOrders) * 100), color: '#2563EB' },
+    { status: 'ready_for_pickup', label: 'Ready for Pickup', count: counts.ready_for_pickup, percentage: Math.round((counts.ready_for_pickup / totalPeriodOrders) * 100), color: '#10B981' },
+    { status: 'completed', label: 'Completed', count: counts.completed, percentage: Math.round((counts.completed / totalPeriodOrders) * 100), color: '#059669' },
+    { status: 'declined', label: 'Declined', count: counts.declined, percentage: Math.round((counts.declined / totalPeriodOrders) * 100), color: '#DC2626' },
+    { status: 'cancelled', label: 'Cancelled', count: counts.cancelled, percentage: Math.round((counts.cancelled / totalPeriodOrders) * 100), color: '#9CA3AF' },
+  ];
 
-  // 2. Upcoming pickup schedule (grouped by date)
-  const today = new Date().toISOString().split('T')[0];
-  const upcomingOrders = orders.filter(
-    (o) => ['placed', 'accepted', 'confirmed', 'ready_for_pickup'].includes(o.status) && o.marketDate >= today
-  );
-  const scheduleMap = new Map();
+  // 6. Top Products Aggregation
+  const productAggMap = new Map();
+  const ordersForProductAgg = currentOrders.length > 0 ? currentOrders : allOrders;
+
+  for (const o of ordersForProductAgg) {
+    const isCountable = !['declined', 'cancelled'].includes(o.status);
+    if (!isCountable) continue;
+
+    for (const it of (o.items || [])) {
+      const pIdStr = it.productId ? it.productId.toString() : '';
+      const prod = prodMap.get(pIdStr);
+      const prev = productAggMap.get(pIdStr) || {
+        productId: pIdStr,
+        name: it.name || prod?.name || 'Produce Item',
+        category: prod?.category || 'Produce',
+        unit: it.unit || prod?.unit || 'kg',
+        quantityReserved: 0,
+        ordersCount: 0,
+        bookedValueMinor: 0,
+        remainingStock: productStockStats.get(pIdStr)?.available || 0,
+      };
+
+      prev.quantityReserved += it.quantity || 0;
+      prev.ordersCount += 1;
+      const lineVal = it.totalPriceMinor || ((it.unitPriceMinor || 0) * (it.quantity || 0));
+      prev.bookedValueMinor += lineVal;
+      productAggMap.set(pIdStr, prev);
+    }
+  }
+
+  // 7. Reviews & Ratings
+  const reviews = await db.collection('reviews').find({
+    farmerId: { $in: possibleIds },
+    moderationStatus: { $ne: 'hidden' },
+  }).sort({ createdAt: -1 }).toArray();
+
+  const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let ratingSum = 0;
+  let reviewsNeedingReply = 0;
+
+  for (const r of reviews) {
+    const rate = Math.min(5, Math.max(1, Math.round(r.rating || 5)));
+    ratingCounts[rate]++;
+    ratingSum += r.rating || 5;
+    if (!r.reply || !r.reply.text) reviewsNeedingReply++;
+  }
+
+  const averageRating = reviews.length > 0 ? Math.round((ratingSum / reviews.length) * 10) / 10 : 5.0;
+
+  const topProductsList = Array.from(productAggMap.values()).map((p) => {
+    const prodReviews = reviews.filter((r) => r.productId && r.productId.toString() === p.productId);
+    const pAvg = prodReviews.length > 0
+      ? Math.round((prodReviews.reduce((sum, r) => sum + r.rating, 0) / prodReviews.length) * 10) / 10
+      : null;
+    return {
+      ...p,
+      rating: pAvg,
+      reviewCount: prodReviews.length,
+    };
+  });
+
+  const topProducts = {
+    byOrders: [...topProductsList].sort((a, b) => b.ordersCount - a.ordersCount).slice(0, 10),
+    byValue: [...topProductsList].sort((a, b) => b.bookedValueMinor - a.bookedValueMinor).slice(0, 10),
+    byVolume: [...topProductsList].sort((a, b) => b.quantityReserved - a.quantityReserved).slice(0, 10),
+    byRating: [...topProductsList].filter((p) => p.rating !== null).sort((a, b) => b.rating - a.rating).slice(0, 10),
+  };
+
+  // 8. Market Performance Comparison
+  const marketPerformanceMap = new Map();
+  for (const m of markets) {
+    const mIdStr = m._id.toString();
+    marketPerformanceMap.set(mIdStr, {
+      marketId: mIdStr,
+      marketName: m.name,
+      city: m.city || 'Lahore',
+      currency: m.currency || primaryCurrency,
+      ordersCount: 0,
+      completedPickups: 0,
+      cancelledOrders: 0,
+      bookedValueMinor: 0,
+      topProductName: 'None',
+      _topProductMap: new Map(),
+    });
+  }
+
+  for (const o of allOrders) {
+    const mIdStr = o.marketId ? o.marketId.toString() : '';
+    if (!marketPerformanceMap.has(mIdStr)) continue;
+    const entry = marketPerformanceMap.get(mIdStr);
+    entry.ordersCount++;
+    const status = o.status === 'confirmed' ? 'accepted' : o.status;
+    const val = o.totalAmountMinor || (o.total ? o.total.amountMinor : 0) || 0;
+
+    if (status === 'completed') {
+      entry.completedPickups++;
+      entry.bookedValueMinor += val;
+    } else if (['placed', 'accepted', 'ready_for_pickup'].includes(status)) {
+      entry.bookedValueMinor += val;
+    } else if (['declined', 'cancelled'].includes(status)) {
+      entry.cancelledOrders++;
+    }
+
+    for (const it of (o.items || [])) {
+      const pName = it.name || 'Produce';
+      entry._topProductMap.set(pName, (entry._topProductMap.get(pName) || 0) + (it.quantity || 1));
+    }
+  }
+
+  const marketComparison = Array.from(marketPerformanceMap.values()).map((mp) => {
+    let topProd = 'N/A';
+    let maxQty = 0;
+    for (const [name, qty] of mp._topProductMap.entries()) {
+      if (qty > maxQty) {
+        maxQty = qty;
+        topProd = name;
+      }
+    }
+    const cancellationRate = mp.ordersCount > 0 ? Math.round((mp.cancelledOrders / mp.ordersCount) * 100) : 0;
+    const averageOrderValueMinor = mp.ordersCount > 0 ? Math.round(mp.bookedValueMinor / mp.ordersCount) : 0;
+    return {
+      marketId: mp.marketId,
+      marketName: mp.marketName,
+      city: mp.city,
+      currency: mp.currency,
+      ordersCount: mp.ordersCount,
+      completedPickups: mp.completedPickups,
+      cancellationRate,
+      bookedValueMinor: mp.bookedValueMinor,
+      averageOrderValueMinor,
+      topProductName: topProd,
+    };
+  });
+
+  // 9. Pickup Workload by Time Slot
+  const slotMap = new Map();
   for (const uo of upcomingOrders) {
-    const date = uo.marketDate;
-    const prev = scheduleMap.get(date) || {
-      date,
+    const window = uo.pickupWindow || {};
+    const slotLabel = (window.startTime && window.endTime)
+      ? `${window.startTime}–${window.endTime}`
+      : 'Morning Collection Slot';
+
+    const prev = slotMap.get(slotLabel) || {
+      timeSlot: slotLabel,
       orderCount: 0,
-      totalBookedMinor: 0,
-      marketName: uo.marketSnapshot?.name || 'Farmers Market',
+      totalItemsCount: 0,
+      date: uo.marketDate,
     };
     prev.orderCount++;
-    prev.totalBookedMinor += uo.totalAmountMinor || 0;
-    scheduleMap.set(date, prev);
+    prev.totalItemsCount += (uo.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+    slotMap.set(slotLabel, prev);
   }
 
-  const upcomingPickupSchedule = Array.from(scheduleMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-
-  // 3. Weekly stock summary count
-  const stockOffers = await db
-    .collection('stockOffers')
-    .find({
-      farmerId: { $in: possibleIds },
-      date: { $gte: today },
-    })
-    .sort({ date: 1 })
-    .toArray();
+  const pickupWorkload = Array.from(slotMap.values()).sort((a, b) => a.timeSlot.localeCompare(b.timeSlot));
 
   return {
     farmerId: userId,
-    businessName: profile?.businessName || 'Farm',
+    businessName: profile?.businessName || profile?.farmName || 'Farm Workbench',
+    primaryCurrency,
+    period: {
+      key: period,
+      label,
+      startDate,
+      endDate,
+      prevStartDate,
+      prevEndDate,
+    },
+    kpis: {
+      ordersCount: currentOrders.length,
+      ordersComparison,
+      awaitingAcceptance: counts.placed,
+      acceptedOrders: counts.accepted,
+      readyForPickup: counts.ready_for_pickup,
+      completedOrders: counts.completed,
+      cancelledOrDeclined: counts.cancelled + counts.declined,
+      bookedOrderValueMinor,
+      bookedValueComparison,
+      recordedCollectedValueMinor,
+      averageBookedOrderValueMinor,
+      activeCatalogueProducts: activeProducts.length,
+      publishedDatedOffers: stockOffers.length,
+      reservedStockTotal: totalReservedUnits,
+      availableStockTotal: totalAvailableUnits,
+      lowStockProductsCount: lowStockOffersCount,
+      soldOutProductsCount: soldOutOffersCount,
+      stockUtilizationPct,
+      stockHealthSummary,
+      averageRating,
+      reviewCount: reviews.length,
+      reviewsRequiringReply: reviewsNeedingReply,
+      upcomingPickupsCount: upcomingOrders.length,
+    },
+    ordersTrend: dailySeries,
+    bookedValueTrend: {
+      series: dailySeries.map((d) => ({ date: d.date, bookedValueMinor: d.bookedValueMinor })),
+      highestValueDay,
+      currency: primaryCurrency,
+    },
+    orderStatusDistribution: statusDistribution,
+    topProducts,
+    stockHealth: {
+      totalPublished: totalPublishedUnits,
+      totalReserved: totalReservedUnits,
+      totalAvailable: totalAvailableUnits,
+      soldOutCount: soldOutOffersCount,
+      lowStockCount: lowStockOffersCount,
+      utilizationPct: stockUtilizationPct,
+      summary: stockHealthSummary,
+      items: Array.from(productStockStats.values()).slice(0, 15),
+    },
+    marketComparison,
+    pickupWorkload,
+    reviewsSummary: {
+      averageRating,
+      reviewCount: reviews.length,
+      reviewsRequiringReply: reviewsNeedingReply,
+      distribution: ratingCounts,
+      recent: reviews.slice(0, 5).map((r) => ({
+        id: r._id.toString(),
+        rating: r.rating,
+        comment: r.comment,
+        customerName: r.customerSnapshot?.name || 'Customer',
+        hasReply: !!(r.reply?.text),
+        replyText: r.reply?.text || '',
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+      })),
+    },
+  };
+}
+
+export async function getFarmerReportsService(userId, options = {}) {
+  const analytics = await getFarmerAnalyticsService(userId, options);
+
+  // Return full analytics plus backwards-compatible keys expected by customer-engagement.test.js
+  return {
+    ...analytics,
     metrics: {
-      orderCounts: counts,
+      orderCounts: {
+        total: analytics.kpis.ordersCount,
+        placed: analytics.kpis.awaitingAcceptance,
+        accepted: analytics.kpis.acceptedOrders,
+        ready_for_pickup: analytics.kpis.readyForPickup,
+        completed: analytics.kpis.completedOrders,
+        declined: analytics.orderStatusDistribution.find((s) => s.status === 'declined')?.count || 0,
+        cancelled: analytics.orderStatusDistribution.find((s) => s.status === 'cancelled')?.count || 0,
+      },
       bookedOrderValue: {
-        amountMinor: bookedOrderValueMinor,
-        currency: 'PKR',
+        amountMinor: analytics.kpis.bookedOrderValueMinor,
+        currency: analytics.primaryCurrency,
         description: 'Value of currently reserved pre-orders pending pickup',
       },
       actualCollectedPayment: {
-        amountMinor: actualCollectedPaymentMinor,
-        currency: 'PKR',
+        amountMinor: analytics.kpis.recordedCollectedValueMinor,
+        currency: analytics.primaryCurrency,
         description: 'Physical payment confirmed by farmer at market stall pickup',
       },
     },
-    bestSellingProducts,
-    upcomingPickupSchedule,
-    activeStockOffersCount: stockOffers.length,
+    bestSellingProducts: analytics.topProducts.byVolume.map((p) => ({
+      productId: p.productId,
+      productName: p.name,
+      unit: p.unit,
+      quantitySold: p.quantityReserved,
+      revenueMinor: p.bookedValueMinor,
+    })),
+    upcomingPickupSchedule: analytics.pickupWorkload,
+    activeStockOffersCount: analytics.kpis.publishedDatedOffers,
   };
 }
+
 
 // --- GUIDED MULTI-STEP ONBOARDING WIZARD SERVICES ---
 

@@ -33,6 +33,7 @@ router.get('/profile', authenticateToken, requireRole(['farmer']), getMyFarmerPr
 router.patch('/profile', authenticateToken, requireRole(['farmer']), csrfProtection, updateMyFarmerProfile);
 router.get('/reports', authenticateToken, requireRole(['farmer']), getFarmerReports);
 router.get('/insights', authenticateToken, requireRole(['farmer']), getFarmerReports); // SRS alias
+router.get('/analytics', authenticateToken, requireRole(['farmer']), getFarmerReports); // Analytics alias
 
 // Guided Multi-Step Onboarding Wizard (Accessible to all registered farmers)
 router.get('/onboarding', authenticateToken, requireRole(['farmer']), getFarmerOnboarding);
