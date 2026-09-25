@@ -8,6 +8,7 @@ import "./experience.css";
 import "./location-modal.css";
 import "./farmer-workbench.css";
 import "./public-experience.css";
+import "./components/analytics/analytics.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

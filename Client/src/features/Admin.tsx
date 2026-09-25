@@ -5,10 +5,8 @@ import {
   Users,
   Flag,
   ShieldCheck,
-  Building2,
   CheckCircle2,
   Plus,
-  DollarSign,
   Search,
   Megaphone,
   Store,
@@ -24,9 +22,11 @@ import {
   Confirm,
 } from "../components/ui";
 import { Notifications } from "./Customer";
-import { Reports } from "./Farmer";
 import { NotFound } from "./Public";
-import { money, total } from "../data/market";
+import {
+  AdminCommandOperationalStats,
+  AdminAnalyticsWorkspace,
+} from "./AdminAnalytics";
 
 export function AdminPage() {
   const { pathname } = useLocation();
@@ -34,7 +34,7 @@ export function AdminPage() {
   const id = pathname.split("/")[3];
 
   if (page === "notifications") return <Notifications />;
-  if (page === "reports") return <Reports />;
+  if (page === "reports" || page === "analytics") return <AdminAnalyticsWorkspace />;
   if (page === "markets" && (id || pathname.includes("/new"))) return <MarketEditor />;
   if (page === "farmers" && id) return <AdminFarmerDetail id={id} />;
   if (page === "farmers") return <AdminFarmersHub />;
@@ -55,10 +55,6 @@ function AdminOverviewCockpit() {
   const s = useMarket();
 
   const pendingFarmers = s.farmers.filter((f) => f.state === "Pending");
-  const hiddenProducts = s.products.filter((p) => !p.visible);
-  const totalVolume = s.orders
-    .filter((o) => !["Cancelled", "Declined"].includes(o.stage))
-    .reduce((n, o) => n + total(o.lines), 0);
 
   return (
     <div className="farmer-workbench container">
@@ -132,60 +128,8 @@ function AdminOverviewCockpit() {
         </div>
       </div>
 
-      {/* Global Platform KPIs */}
-      <div className="fw-kpi-grid">
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Registered Producers</span>
-            <div className="fw-kpi-icon"><Users size={18} /></div>
-          </div>
-          <p className="fw-kpi-val">{s.farmers.length}</p>
-          <div className="fw-kpi-meta">
-            {pendingFarmers.length > 0 ? (
-              <span style={{ color: "var(--fw-harvest)", fontWeight: "600" }}>
-                {pendingFarmers.length} pending verification
-              </span>
-            ) : (
-              <span style={{ color: "var(--fw-success)" }}>All producers verified</span>
-            )}
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Active Market Locations</span>
-            <div className="fw-kpi-icon"><Building2 size={18} /></div>
-          </div>
-          <p className="fw-kpi-val">{s.markets.filter((m) => m.active).length}</p>
-          <div className="fw-kpi-meta">
-            <span>{s.markets.length} total venues configured</span>
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Platform GMV Volume</span>
-            <div className="fw-kpi-icon"><DollarSign size={18} /></div>
-          </div>
-          <p className="fw-kpi-val">{money(totalVolume)}</p>
-          <div className="fw-kpi-meta">
-            <span>Across {s.orders.length} registered pre-orders</span>
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Moderation Queue</span>
-            <div className="fw-kpi-icon" style={{ background: hiddenProducts.length > 0 ? "var(--fw-harvest-light)" : "var(--fw-sage)", color: hiddenProducts.length > 0 ? "var(--fw-harvest)" : "var(--fw-forest)" }}>
-              <Flag size={18} />
-            </div>
-          </div>
-          <p className="fw-kpi-val">{hiddenProducts.length}</p>
-          <div className="fw-kpi-meta">
-            <span>Listings hidden or under review</span>
-          </div>
-        </div>
-      </div>
+      {/* Multi-Country Operational Command & Executive KPI Area */}
+      <AdminCommandOperationalStats />
 
       {/* Action Queues & Snapshot Grid */}
       <div className="adm-overview-grid">
@@ -390,7 +334,7 @@ function AdminFarmersHub() {
       </div>
 
       <div className="record-list" style={{ marginTop: "16px" }}>
-        {filtered.map((f) => {
+        {filtered.map((f: any) => {
           const m = s.markets.find((m) => m.id === f.marketId);
           const prods = s.products.filter((p) => p.farmerId === f.id);
           return (
