@@ -7,14 +7,12 @@ import {
   Clock,
   PackageCheck,
   CheckCircle2,
-  AlertCircle,
   Search,
   Plus,
   Edit3,
   Star,
   MapPin,
   Layers,
-  Store,
   DollarSign,
   Printer,
   Sliders,
@@ -38,6 +36,10 @@ import {
   saveFarmerOnboardingStepApi,
   submitFarmerOnboardingApi,
 } from "../data/api";
+import {
+  FarmerOperationalStatsArea,
+  FarmerInsightsWorkspace,
+} from "./FarmerAnalytics";
 
 export function FarmerPage() {
   const s = useMarket();
@@ -64,7 +66,7 @@ export function FarmerPage() {
   if (page === "pickup-windows") return <PickupWindows f={f} />;
   if (page === "orders") return <FarmerOrdersQueue ownOrders={ownOrders} />;
   if (page === "pickups") return <FarmerPickupsStation ownOrders={ownOrders} />;
-  if (page === "insights") return <Reports farmer />;
+  if (page === "insights" || page === "reports") return <FarmerInsightsWorkspace />;
   if (page === "reviews") return <FarmerReviewsHub f={f} />;
 
   // Default: Overview Cockpit / Main Workbench
@@ -83,22 +85,9 @@ function FarmerOverviewCockpit({
   ownProducts: Product[];
   ownOrders: Order[];
 }) {
-  const s = useMarket();
   const act = useAction();
   const pendingOrders = ownOrders.filter((o) => o.stage === "Placed");
-
-  const totalReservedValue = ownOrders
-    .filter((o) => !["Cancelled", "Declined"].includes(o.stage))
-    .reduce((n, o) => n + total(o.lines), 0);
-
   const activeReservationsCount = ownOrders.filter(activeOrder).length;
-
-  // Packing progress calculation
-  const totalItemsToPack = ownOrders
-    .filter(activeOrder)
-    .reduce((sum, o) => sum + o.lines.reduce((lsum, l) => lsum + l.quantity, 0), 0);
-  const packedItemsCount = s.checklist.filter((id) => id.startsWith("prep-")).length;
-  const prepProgressPct = totalItemsToPack > 0 ? Math.min(100, Math.round((packedItemsCount / Math.max(1, ownProducts.length)) * 100)) : 100;
 
   return (
     <div className="farmer-workbench container">
@@ -200,64 +189,8 @@ function FarmerOverviewCockpit({
         </div>
       </div>
 
-      {/* High-Density Operational KPI Grid */}
-      <div className="fw-kpi-grid">
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Awaiting Acceptance</span>
-            <div className="fw-kpi-icon" style={{ background: "var(--fw-harvest-light)", color: "var(--fw-harvest)" }}>
-              <AlertCircle size={18} />
-            </div>
-          </div>
-          <p className="fw-kpi-val">{pendingOrders.length}</p>
-          <div className="fw-kpi-meta">
-            {pendingOrders.length > 0 ? (
-              <span style={{ color: "var(--fw-harvest)", fontWeight: "600" }}>Requires action before cutoff</span>
-            ) : (
-              <span style={{ color: "var(--fw-success)" }}>All pending orders cleared</span>
-            )}
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Reserved Harvest Value</span>
-            <div className="fw-kpi-icon">
-              <DollarSign size={18} />
-            </div>
-          </div>
-          <p className="fw-kpi-val">{money(totalReservedValue)}</p>
-          <div className="fw-kpi-meta">
-            <span>Across {ownOrders.filter((o) => !["Cancelled", "Declined"].includes(o.stage)).length} customer bags</span>
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Prep & Pack Progress</span>
-            <div className="fw-kpi-icon">
-              <PackageCheck size={18} />
-            </div>
-          </div>
-          <p className="fw-kpi-val">{prepProgressPct}%</p>
-          <div className="fw-kpi-meta">
-            <span>{packedItemsCount} of {ownProducts.length} produce varieties packed</span>
-          </div>
-        </div>
-
-        <div className="fw-kpi-card">
-          <div className="fw-kpi-top">
-            <span className="fw-kpi-label">Active Catalogue</span>
-            <div className="fw-kpi-icon">
-              <Store size={18} />
-            </div>
-          </div>
-          <p className="fw-kpi-val">{ownProducts.filter((p) => p.visible).length}</p>
-          <div className="fw-kpi-meta">
-            <span>{ownProducts.filter((p) => p.available).length} listed as in-stock</span>
-          </div>
-        </div>
-      </div>
+      {/* High-Density Operational Analytics & Executive KPI Area */}
+      <FarmerOperationalStatsArea f={f} ownProducts={ownProducts} ownOrders={ownOrders} />
 
       {/* Priority Action Section: Orders Awaiting Response */}
       {pendingOrders.length > 0 && (

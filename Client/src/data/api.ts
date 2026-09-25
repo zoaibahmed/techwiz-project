@@ -494,9 +494,17 @@ export async function replyToReviewApi(reviewId: string, replyText: string): Pro
   });
 }
 
-export async function fetchFarmerReportsApi(): Promise<any> {
-  return request<any>('/farmer/reports');
+export async function fetchFarmerReportsApi(params: { period?: string; marketId?: string; startDate?: string; endDate?: string } = {}): Promise<any> {
+  const q = new URLSearchParams();
+  if (params.period) q.set('period', params.period);
+  if (params.marketId) q.set('marketId', params.marketId);
+  if (params.startDate) q.set('startDate', params.startDate);
+  if (params.endDate) q.set('endDate', params.endDate);
+  const qs = q.toString();
+  return request<any>(`/farmer/reports${qs ? '?' + qs : ''}`);
 }
+
+export const fetchFarmerAnalyticsApi = fetchFarmerReportsApi;
 
 // ─── Admin Operations ───────────────────────────────────────────────────────
 export async function fetchAdminFarmersApi(query: { status?: string } = {}): Promise<any[]> {
@@ -553,8 +561,15 @@ export async function createAdminCategoryApi(data: { name: string; slug: string;
   });
 }
 
-export async function fetchAdminAnalyticsApi(): Promise<any> {
-  return request<any>('/admin/analytics');
+export async function fetchAdminAnalyticsApi(params: { period?: string; country?: string; marketId?: string; startDate?: string; endDate?: string } = {}): Promise<any> {
+  const q = new URLSearchParams();
+  if (params.period) q.set('period', params.period);
+  if (params.country) q.set('country', params.country);
+  if (params.marketId) q.set('marketId', params.marketId);
+  if (params.startDate) q.set('startDate', params.startDate);
+  if (params.endDate) q.set('endDate', params.endDate);
+  const qs = q.toString();
+  return request<any>(`/admin/analytics${qs ? '?' + qs : ''}`);
 }
 
 export async function fetchAdminReviewsApi(query: { status?: string } = {}): Promise<any[]> {
