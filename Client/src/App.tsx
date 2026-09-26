@@ -27,6 +27,7 @@ import {
   Favourites,
   Notifications,
   Profile,
+  CustomerInboxWorkspace,
 } from "./features/Customer";
 const FarmerPage = lazy(() =>
   import("./features/Farmer").then((m) => ({ default: m.FarmerPage })),
@@ -111,6 +112,7 @@ export function App() {
                   <Route path="customer" element={<CustomerHome />} />
                   <Route path="customer/market-day" element={<Planner />} />
                   <Route path="customer/orders" element={<Orders />} />
+                  <Route path="customer/messages" element={<CustomerInboxWorkspace />} />
                   {[
                     "customer/orders/:orderId",
                     "customer/orders/:orderId/edit",

@@ -9,6 +9,7 @@ import "./location-modal.css";
 import "./farmer-workbench.css";
 import "./public-experience.css";
 import "./components/analytics/analytics.css";
+import "./chat.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

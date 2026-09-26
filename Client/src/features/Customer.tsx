@@ -7,7 +7,9 @@ import {
   Clock,
   ShoppingBasket,
   Check,
+  MessageSquare,
 } from "lucide-react";
+import { CustomerChatModal } from "../components/CustomerChatModal";
 import {
   fetchCustomerProfileApi,
   updateCustomerProfileApi,
@@ -30,6 +32,7 @@ import {
 import { money, total, time, date, activeOrder } from "../data/market";
 import type { Order } from "../data/market";
 import { NotFound } from "./Public";
+export { CustomerInboxWorkspace } from "./CustomerInbox";
 
 export function OrderRows({
   orders,
@@ -483,6 +486,7 @@ export function OrderDetail() {
   const o = s.orders.find((o) => o.id === orderId);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [target, setTarget] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
   if (!o) return <NotFound />;
   const f = s.farmers.find((f) => f.id === o.farmerId)!;
   const slot = s.slots.find((x) => x.id === o.slotId)!;
@@ -741,6 +745,25 @@ export function OrderDetail() {
               </button>
             </div>
           )}
+          <div style={{ marginTop: "1rem" }}>
+            <button
+              type="button"
+              className="button secondary full"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
+              onClick={() => setChatOpen(true)}
+            >
+              <MessageSquare size={16} /> Message Farmer about Order
+            </button>
+          </div>
+          <CustomerChatModal
+            farmerId={f.id}
+            farmerName={f.name}
+            farmerPerson={f.name}
+            orderId={o.id}
+            orderNumber={o.id}
+            isOpen={chatOpen}
+            onClose={() => setChatOpen(false)}
+          />
         </aside>
       </div>
     </div>

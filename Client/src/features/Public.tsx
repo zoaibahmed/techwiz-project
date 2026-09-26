@@ -23,7 +23,9 @@ import {
   Store,
   Sprout,
   Users,
+  MessageSquare,
 } from "lucide-react";
+import { CustomerChatModal } from "../components/CustomerChatModal";
 import {
   useMarket,
   useAction,
@@ -579,6 +581,7 @@ export function Farmers() {
 export function FarmerDetail() {
   const s = useDiscoveryState();
   const { farmerId } = useParams();
+  const [chatOpen, setChatOpen] = useState(false);
   const f = s.farmers.find((f) => f.id === farmerId && f.state === "Approved");
   if (!f) return <NotFound />;
 
@@ -698,17 +701,35 @@ export function FarmerDetail() {
               <strong>Next Market:</strong>{" "}
               {m ? `${m.name} (${date(m.day)})` : "The Orchard Market"}
             </p>
-            {m && (
-              <Link
-                to={`/markets/${m.id}`}
-                className="button secondary compact"
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              {m && (
+                <Link
+                  to={`/markets/${m.id}`}
+                  className="button secondary compact"
+                >
+                  Explore Venue Details →
+                </Link>
+              )}
+              <button
+                type="button"
+                className="button compact"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                onClick={() => setChatOpen(true)}
               >
-                Explore Venue Details →
-              </Link>
-            )}
+                <MessageSquare size={14} /> Message Grower
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      <CustomerChatModal
+        farmerId={f.id}
+        farmerName={f.name}
+        farmerPerson={f.person}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
 
       {/* Produce Catalogue Section */}
       <section className="section">
@@ -1033,6 +1054,7 @@ export function ProductDetail() {
   const p = s.products.find((p) => p.id === productId && p.visible);
   const [quantity, set] = useState(1);
   const [added, setAdded] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   if (!p || s.farmers.find((f) => f.id === p.farmerId)?.state !== "Approved")
     return <NotFound />;
@@ -1229,6 +1251,14 @@ export function ProductDetail() {
                 ? "Added to Market Bag!"
                 : `Add to Bag (${money(p.price * quantity)})`}
             </button>
+            <button
+              type="button"
+              className="button secondary grow"
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "8px" }}
+              onClick={() => setChatOpen(true)}
+            >
+              <MessageSquare size={16} /> Message Grower about this Produce
+            </button>
           </div>
 
           <p className="small muted" style={{ margin: 0 }}>
@@ -1237,6 +1267,16 @@ export function ProductDetail() {
           </p>
         </div>
       </div>
+
+      <CustomerChatModal
+        farmerId={f.id}
+        farmerName={f.name}
+        farmerPerson={f.person}
+        productId={p.id}
+        productName={p.name}
+        isOpen={chatOpen}
+        onClose={() => setChatOpen(false)}
+      />
 
       {/* More From This Stall */}
       <section className="section">
