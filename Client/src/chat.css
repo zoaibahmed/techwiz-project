@@ -1,0 +1,738 @@
+/* =========================================================================
+   MARKETLINK REAL CUSTOMER <-> FARMER CHAT & INBOX SYSTEM
+   Strict Design Rules: Solid Luxury Colors Only. NO GRADIENTS.
+   ========================================================================= */
+
+/* ── Modal & Backdrop ── */
+.ml-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(17, 24, 39, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: mlFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ml-chat-modal {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 580px;
+  height: 85vh;
+  max-height: 720px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Auth Prompt Modal ── */
+.ml-chat-auth-prompt {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 440px;
+  padding: 32px 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ml-chat-auth-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.ml-chat-auth-prompt h3 {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+.ml-chat-auth-prompt p {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0 0 24px;
+}
+
+.ml-chat-auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.ml-chat-auth-btn-primary {
+  background-color: #1b382b;
+  color: #ffffff;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #1b382b;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ml-chat-auth-btn-primary:hover {
+  background-color: #12251d;
+}
+
+.ml-chat-auth-btn-secondary {
+  background-color: #f9fafb;
+  color: #1b382b;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #d1d5db;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.ml-chat-auth-btn-secondary:hover {
+  background-color: #f3f4f6;
+}
+
+.ml-chat-auth-btn-cancel {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  font-size: 13.5px;
+  padding: 8px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.ml-chat-auth-btn-cancel:hover {
+  color: #111827;
+  text-decoration: underline;
+}
+
+/* ── Modal Header ── */
+.ml-chat-header {
+  padding: 16px 20px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.ml-chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ml-chat-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-color: #1b382b;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ml-chat-header-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.ml-chat-header-name {
+  font-weight: 700;
+  font-size: 16px;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ml-chat-header-sub {
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+.ml-chat-close-btn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ml-chat-close-btn:hover {
+  background-color: #e5e7eb;
+  color: #111827;
+}
+
+/* ── Context Ribbon ── */
+.ml-chat-context-ribbon {
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #374151;
+  flex-shrink: 0;
+}
+
+.ml-chat-context-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.ml-chat-context-badge {
+  background-color: #e5e7eb;
+  color: #1f2937;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Messages Container ── */
+.ml-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-color: #ffffff;
+}
+
+/* ── Message Bubbles ── */
+.ml-chat-bubble-row {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  animation: mlMessageSlide 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ml-chat-bubble-row.outgoing {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.ml-chat-bubble-row.incoming {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.ml-chat-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+  position: relative;
+}
+
+.ml-chat-bubble-row.outgoing .ml-chat-bubble {
+  background-color: #1b382b;
+  color: #ffffff;
+  border-bottom-right-radius: 3px;
+  border: 1px solid #1b382b;
+}
+
+.ml-chat-bubble-row.incoming .ml-chat-bubble {
+  background-color: #f3f4f6;
+  color: #111827;
+  border-bottom-left-radius: 3px;
+  border: 1px solid #e5e7eb;
+}
+
+.ml-chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+.ml-chat-retry-btn {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 6px;
+}
+
+/* ── Empty State ── */
+.ml-chat-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 320px;
+  padding: 30px 16px;
+}
+
+.ml-chat-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+
+.ml-chat-empty h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 6px;
+}
+
+.ml-chat-empty p {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Input Bar ── */
+.ml-chat-input-bar {
+  padding: 14px 18px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ml-chat-textarea {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  min-height: 42px;
+  max-height: 110px;
+  font-family: inherit;
+  color: #111827;
+  background-color: #f9fafb;
+}
+
+.ml-chat-textarea:focus {
+  background-color: #ffffff;
+  border-color: #1b382b;
+  box-shadow: 0 0 0 1px #1b382b;
+}
+
+.ml-chat-send-btn {
+  background-color: #1b382b;
+  color: #ffffff;
+  border: 1px solid #1b382b;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  transition: background-color 0.15s ease;
+}
+
+.ml-chat-send-btn:hover:not(:disabled) {
+  background-color: #12251d;
+}
+
+.ml-chat-send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* =========================================================================
+   FARMER DASHBOARD INBOX WORKSPACE
+   ========================================================================= */
+.farmer-inbox-workspace {
+  display: flex;
+  height: calc(100vh - 160px);
+  min-height: 620px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background-color: #ffffff;
+  overflow: hidden;
+  margin-top: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* ── Inbox Sidebar / Left List ── */
+.farmer-inbox-list {
+  width: 340px;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  background-color: #f9fafb;
+  flex-shrink: 0;
+}
+
+.farmer-inbox-list-header {
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: #ffffff;
+}
+
+.farmer-inbox-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.farmer-inbox-title-row h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.farmer-inbox-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.farmer-inbox-search input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 13px;
+  outline: none;
+  background-color: #f9fafb;
+}
+
+.farmer-inbox-search input:focus {
+  background-color: #ffffff;
+  border-color: #1b382b;
+}
+
+.farmer-inbox-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.farmer-inbox-filters {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.farmer-inbox-filter-tab {
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.farmer-inbox-filter-tab.active {
+  background-color: #1b382b;
+  color: #ffffff;
+  border-color: #1b382b;
+}
+
+.farmer-inbox-items {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.farmer-inbox-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  position: relative;
+  background-color: #ffffff;
+}
+
+.farmer-inbox-item:hover {
+  background-color: #f9fafb;
+}
+
+.farmer-inbox-item.active {
+  background-color: #f0fdf4;
+  border-left: 3px solid #166534;
+}
+
+.farmer-inbox-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.farmer-inbox-item-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+}
+
+.farmer-inbox-item-time {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.farmer-inbox-item-preview {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+.farmer-inbox-item-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.farmer-unread-badge {
+  background-color: #166534;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.farmer-context-badge {
+  background-color: #f3f4f6;
+  color: #4b5563;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+/* ── Active Conversation / Centre ── */
+.farmer-inbox-conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.farmer-inbox-conv-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #ffffff;
+  flex-shrink: 0;
+}
+
+.farmer-inbox-conv-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.farmer-inbox-conv-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Smart Reply Banner for Farmer ── */
+.farmer-smart-reply-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.farmer-smart-reply-btn {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1b382b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.farmer-smart-reply-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+/* ── Right Context Panel ── */
+.farmer-inbox-context-panel {
+  width: 300px;
+  border-left: 1px solid #e5e7eb;
+  background-color: #fcfbf7;
+  padding: 20px 18px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.farmer-context-card {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.farmer-context-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.farmer-context-card p {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0 0 4px;
+}
+
+.farmer-context-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  font-size: 12.5px;
+}
+
+.farmer-context-card dt {
+  color: #6b7280;
+}
+
+.farmer-context-card dd {
+  margin: 0;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ── Mobile Responsive ── */
+@media (max-width: 900px) {
+  .farmer-inbox-context-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .farmer-inbox-workspace {
+    flex-direction: column;
+    height: calc(100vh - 120px);
+  }
+
+  .farmer-inbox-list {
+    width: 100%;
+    height: 100%;
+  }
+
+  .farmer-inbox-list.hidden-on-mobile {
+    display: none;
+  }
+
+  .farmer-inbox-conversation.hidden-on-mobile {
+    display: none;
+  }
+
+  .ml-chat-modal {
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+}
+
+@keyframes mlFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mlMessageSlide {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

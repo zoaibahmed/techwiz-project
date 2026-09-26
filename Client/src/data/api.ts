@@ -625,6 +625,145 @@ export async function uploadImageApi(file: File): Promise<{ url: string; filenam
   });
 }
 
+// ─── Real Customer <-> Farmer Messaging ──────────────────────────────────────
+export interface ChatConversation {
+  id: string;
+  customerId: string;
+  customerName: string;
+  farmerProfileId: string;
+  farmerUserId?: string;
+  farmerBusinessName: string;
+  farmerContactPerson?: string;
+  relatedProductId?: string | null;
+  relatedProductName?: string | null;
+  relatedOrderId?: string | null;
+  relatedOrderNumber?: string | null;
+  status: 'active' | 'archived';
+  lastMessageText: string;
+  lastMessageAt: string | null;
+  lastSenderRole?: 'customer' | 'farmer';
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+  productContext?: {
+    id: string;
+    name: string;
+    priceMinor: number;
+    currency: string;
+    unit: string;
+    imageUrl?: string;
+  } | null;
+  orderContext?: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    totalAmountMinor: number;
+    currency: string;
+    pickupDate: string;
+    pickupTimeSlot: string;
+    lines: Array<{
+      name: string;
+      quantity: number;
+      unit: string;
+      lineTotalMinor: number;
+    }>;
+  } | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderRole: 'customer' | 'farmer';
+  senderName: string;
+  body: string;
+  isSelf: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export async function fetchUnreadChatCountApi(): Promise<{ unreadConversations: number }> {
+  return request<{ unreadConversations: number }>('/chat/unread-count');
+}
+
+export async function fetchConversationsApi(
+  filter: 'all' | 'unread' | 'order-linked' | 'archived' = 'all',
+  search: string = ''
+): Promise<ChatConversation[]> {
+  const params = new URLSearchParams();
+  if (filter && filter !== 'all') params.set('filter', filter);
+  if (search.trim()) params.set('search', search.trim());
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return request<ChatConversation[]>(`/chat/conversations${qs}`);
+}
+
+export async function fetchConversationDetailApi(id: string): Promise<ChatConversation> {
+  return request<ChatConversation>(`/chat/conversations/${id}`);
+}
+
+export async function fetchMessagesApi(
+  conversationId: string,
+  limit: number = 100
+): Promise<ChatMessage[]> {
+  return request<ChatMessage[]>(`/chat/conversations/${conversationId}/messages?limit=${limit}`);
+}
+
+export async function startConversationApi(payload: {
+  farmerId: string;
+  productId?: string | null;
+  orderId?: string | null;
+  message: string;
+}): Promise<{
+  conversationId: string;
+  messageId: string;
+  status: string;
+  conversation: ChatConversation;
+}> {
+  return request<any>('/chat/conversations', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendMessageApi(
+  conversationId: string,
+  message: string
+): Promise<ChatMessage> {
+  return request<ChatMessage>(`/chat/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
+export async function markConversationReadApi(
+  conversationId: string
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/chat/conversations/${conversationId}/read`, {
+    method: 'PATCH',
+  });
+}
+
+export async function setConversationArchiveApi(
+  conversationId: string,
+  isArchived: boolean
+): Promise<{ success: boolean; status: string }> {
+  return request<{ success: boolean; status: string }>(`/chat/conversations/${conversationId}/archive`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isArchived }),
+  });
+}
+
+export async function suggestReplyApi(
+  conversationId: string
+): Promise<{ suggestedReply: string; groundingNotes?: string }> {
+  return request<{ suggestedReply: string; groundingNotes?: string }>(
+    `/chat/conversations/${conversationId}/suggest-reply`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
 // ─── Prober ─────────────────────────────────────────────────────────────────
 export async function probeServer(): Promise<boolean> {
   try {
@@ -634,3 +773,4 @@ export async function probeServer(): Promise<boolean> {
     return false;
   }
 }
+

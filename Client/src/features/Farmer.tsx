@@ -40,6 +40,7 @@ import {
   FarmerOperationalStatsArea,
   FarmerInsightsWorkspace,
 } from "./FarmerAnalytics";
+import { FarmerInboxWorkspace } from "./FarmerInbox";
 
 export function FarmerPage() {
   const s = useMarket();
@@ -51,6 +52,8 @@ export function FarmerPage() {
 
   // Subpage Routing checks
   if (page === "notifications") return <Notifications />;
+  if (page === "messages" || page === "inbox")
+    return <FarmerInboxWorkspace f={f} ownProducts={ownProducts} ownOrders={ownOrders} />;
   if (page === "products" && pathname.split("/").length > 3)
     return <ProductEditor />;
   if (page === "orders" && pathname.split("/").length > 3)

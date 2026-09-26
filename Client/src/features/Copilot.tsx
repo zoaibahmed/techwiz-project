@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, RotateCcw } from "lucide-react";
+import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, RotateCcw, MessageSquare } from "lucide-react";
 import { useMarket } from "../components/ui";
 import { chatCopilotApi, confirmCopilotActionApi } from "../data/api";
 import { gateway } from "../data/gateway";
@@ -95,9 +95,10 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   const prompts =
     role === "farmer"
       ? [
-          "Create four products: Heirloom Tomatoes (250/kg), Organic Spinach (120/bunch), Fresh Mint (50/bunch), Strawberries (400/box)",
+          "Check customer messages and inquiries",
           "How is my business performing this week?",
           "Compare my tomato prices and suggest how I can improve sales",
+          "Create four products: Heirloom Tomatoes (250/kg), Organic Spinach (120/bunch), Fresh Mint (50/bunch), Strawberries (400/box)",
         ]
       : role === "admin"
         ? [
@@ -143,6 +144,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         sources.push({ title: "Harvest Catalogue", href: "/products" });
       } else if (role === "farmer") {
         sources.push({ title: "Order Workbench", href: "/farmer/orders" });
+        sources.push({ title: "Customer Messages", href: "/farmer/messages" });
         sources.push({ title: "Stall Inventory", href: "/farmer/stock" });
         sources.push({ title: "Produce Catalogue", href: "/farmer/products" });
       } else if (role === "admin") {
@@ -230,6 +232,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         return "Farmer Status Update";
       case "publish_announcement":
         return "Platform Announcement Broadcast";
+      case "send_chat_message":
+        return "Proposed Message Reply";
       default:
         return "Proposed Action Preview";
     }
@@ -247,6 +251,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         return "Publish Market Allocation";
       case "publish_announcement":
         return "Broadcast Announcement";
+      case "send_chat_message":
+        return "Send Reply to Customer";
       default:
         return "Confirm Proposed Action";
     }
@@ -268,6 +274,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
         return "Farmer Status Updated";
       case "publish_announcement":
         return "Announcement Broadcasted";
+      case "send_chat_message":
+        return "Message Delivered to Customer";
       default:
         return "Action Completed Successfully";
     }
@@ -299,6 +307,13 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       return (
         <Link to="/admin/farmers" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
           <BookOpen size={14} /> Open Farmer Directory
+        </Link>
+      );
+    }
+    if (actionType === "send_chat_message") {
+      return (
+        <Link to="/farmer/messages" className="button compact" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", textDecoration: "none" }} onClick={onClose}>
+          <MessageSquare size={14} /> Open Messages
         </Link>
       );
     }

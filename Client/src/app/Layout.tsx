@@ -20,12 +20,13 @@ import {
   MapPin,
   LogOut,
   Globe,
+  MessageSquare,
 } from "lucide-react";
 import { useMarket, useAction, Notice } from "../components/ui";
 import { useVisitor } from "../data/visitor-context";
 import { countryName } from "../data/visitor";
 import { gateway } from "../data/gateway";
-import { fetchMeApi, logoutApi } from "../data/api";
+import { fetchMeApi, logoutApi, fetchUnreadChatCountApi } from "../data/api";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
 import { CompanionContext } from "./companion-context";
@@ -36,12 +37,14 @@ export const nav: Record<Role, [string, string][]> = {
     ["/customer", "Market day"],
     ["/customer/market-day", "My planner"],
     ["/customer/orders", "Orders"],
+    ["/customer/messages", "Messages"],
     ["/customer/favourites", "Favourites"],
     ["/customer/notifications", "Notifications"],
     ["/customer/profile", "Profile"],
   ],
   farmer: [
     ["/farmer", "Weekly planner"],
+    ["/farmer/messages", "Messages"],
     ["/farmer/orders", "Orders"],
     ["/farmer/pickups", "Pickup queue"],
     ["/farmer/products", "Products"],
@@ -75,6 +78,7 @@ export function Layout() {
   const [menu, setMenu] = useState(false);
   const [assistant, setAssistant] = useState(false);
   const [controls, setControls] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const role: Role | null =
     pathname.startsWith("/farmer/") || pathname === "/farmer"
       ? "farmer"
@@ -101,6 +105,24 @@ export function Layout() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!role) return;
+    let isMounted = true;
+    const fetchCount = () => {
+      fetchUnreadChatCountApi()
+        .then((res) => {
+          if (isMounted) setUnreadChatCount(res?.unreadConversations || 0);
+        })
+        .catch(() => {});
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 6000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [role, pathname]);
 
   const handleSignOut = async () => {
     try {
@@ -238,11 +260,15 @@ export function Layout() {
             {s.role ? t('workspace') : t('signIn')}
           </Link>
           {role &&
-            nav[role].map(([path, label]) => (
-              <Link key={path} to={path}>
-                {label}
-              </Link>
-            ))}
+            nav[role].map(([path, label]) => {
+              const isMessages = path.endsWith('/messages');
+              const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
+              return (
+                <Link key={path} to={path}>
+                  {label}{badge}
+                </Link>
+              );
+            })}
         </nav>
       )}
       <div
@@ -259,10 +285,13 @@ export function Layout() {
                   LayoutDashboard,
                   CalendarDays,
                   ClipboardList,
+                  MessageSquare,
                   Heart,
                   Bell,
                   UserRound,
-                ][i];
+                ][i] || MessageSquare;
+                const isMessages = path.endsWith('/messages');
+                const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
                 return (
                   <NavLink end to={path} key={path}>
                     {pathname === path && (
@@ -277,7 +306,7 @@ export function Layout() {
                       />
                     )}
                     <Icon size={18} />
-                    {label}
+                    {label}{badge}
                   </NavLink>
                 );
               })}
@@ -323,11 +352,15 @@ export function Layout() {
               {role === "farmer" ? "Your stall" : "Administration"}
             </p>
             <nav aria-label={`${role} workspace`}>
-              {nav[role].map(([path, label]) => (
-                <NavLink key={path} end to={path}>
-                  {label}
-                </NavLink>
-              ))}
+              {nav[role].map(([path, label]) => {
+                const isMessages = path.endsWith('/messages');
+                const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
+                return (
+                  <NavLink key={path} end to={path}>
+                    {label}{badge}
+                  </NavLink>
+                );
+              })}
             </nav>
             <div className="sidebar-note">
               <Sprout />
