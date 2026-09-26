@@ -219,7 +219,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
           <div className="farmer-inbox-list-header">
             <div className="farmer-inbox-title-row">
               <h2>Conversations</h2>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a665c' }}>
                 {conversations.length} total
               </span>
             </div>
@@ -268,18 +268,18 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
 
           <div className="farmer-inbox-items">
             {loading ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#6b7280', fontSize: '13.5px' }}>
+              <div style={{ padding: '30px', textAlign: 'center', color: '#5a665c', fontSize: '13.5px' }}>
                 Loading conversations…
               </div>
             ) : conversations.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ffffff', color: '#5a665c', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <MessageSquare size={18} />
                 </div>
-                <h4 style={{ fontSize: '14.5px', fontWeight: 600, margin: '0 0 6px', color: '#111827' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: 600, margin: '0 0 6px', color: '#242b23' }}>
                   No customer conversations yet
                 </h4>
-                <p style={{ fontSize: '12.5px', color: '#6b7280', margin: 0, lineHeight: 1.5 }}>
+                <p style={{ fontSize: '12.5px', color: '#5a665c', margin: 0, lineHeight: 1.5 }}>
                   Messages from shoppers interested in your produce will appear here.
                 </p>
               </div>
@@ -353,10 +353,10 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
                     {selectedConvo.customerName.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#242b23' }}>
                       {selectedConvo.customerName}
                     </h3>
-                    <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                    <span style={{ fontSize: '12px', color: '#5a665c' }}>
                       Verified Market Customer
                     </span>
                   </div>
@@ -385,7 +385,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
               {/* Messages Thread */}
               <div className="farmer-inbox-conv-messages">
                 {messagesLoading ? (
-                  <div style={{ margin: 'auto', textAlign: 'center', color: '#6b7280', fontSize: '13px' }}>
+                  <div style={{ margin: 'auto', textAlign: 'center', color: '#5a665c', fontSize: '13px' }}>
                     Loading message history…
                   </div>
                 ) : messages.length === 0 ? (
@@ -411,7 +411,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
                           {isFarmer && (
                             m.readAt ? (
                               <span title="Read by customer" style={{ display: 'inline-flex' }}>
-                                <CheckCheck size={13} color="#166534" />
+                                <CheckCheck size={13} color="#234e3b" />
                               </span>
                             ) : (
                               <span title="Delivered" style={{ display: 'inline-flex' }}>
@@ -430,7 +430,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
               {/* AI Smart Reply Suggestions for Farmer */}
               <div className="farmer-smart-reply-box">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} color="#166534" />
+                  <Sparkles size={16} color="#234e3b" />
                   <span>
                     {smartReplyNotice || 'Need a fast grounded reply? Farm Copilot drafts responses using your live inventory.'}
                   </span>
@@ -480,13 +480,13 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
             </>
           ) : (
             <div style={{ margin: 'auto', textAlign: 'center', padding: '40px', maxWidth: '360px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ffffff', color: '#5a665c', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <MessageSquare size={22} />
               </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 600, color: '#111827', margin: '0 0 8px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 600, color: '#242b23', margin: '0 0 8px' }}>
                 Select a conversation
               </h3>
-              <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.5, margin: 0 }}>
+              <p style={{ fontSize: '13px', color: '#5a665c', lineHeight: 1.5, margin: 0 }}>
                 Choose a customer conversation from the list to view history, review pre-order inquiries, and reply.
               </p>
             </div>
@@ -517,7 +517,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
                 <h4>
                   <Package size={15} /> Inquired Produce
                 </h4>
-                <p style={{ fontWeight: 600, color: '#111827' }}>
+                <p style={{ fontWeight: 600, color: '#242b23' }}>
                   {selectedConvo.productContext.name}
                 </p>
                 <dl style={{ marginTop: '8px' }}>
@@ -549,11 +549,11 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
                 </dl>
 
                 {selectedConvo.orderContext.lines && selectedConvo.orderContext.lines.length > 0 && (
-                  <div style={{ marginTop: '12px', borderTop: '1px solid #f3f4f6', paddingTop: '10px' }}>
-                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+                  <div style={{ marginTop: '12px', borderTop: '1px solid #ffffff', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#5a665c', textTransform: 'uppercase' }}>
                       Reserved Items:
                     </span>
-                    <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '12.5px', color: '#374151' }}>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: '16px', fontSize: '12.5px', color: '#3b4539' }}>
                       {selectedConvo.orderContext.lines.map((l, idx) => (
                         <li key={idx}>
                           {l.quantity} {l.unit} {l.name}

@@ -1,0 +1,90 @@
+/* Theme contract: loaded last. Earlier stylesheets override each other's
+   backgrounds; these rules pin each surface to a readable text colour from the
+   theme tokens so no section ever ends up light-on-light or dark-on-dark. */
+
+/* Homepage: the "Find your gathering" chapter sits on sage, so its statement
+   is forest; the dark chapters keep cream type. */
+.global-market .market-chapter.chapter-discover .chapter-statement,
+.market-chapter.chapter-discover .chapter-statement {
+  color: var(--forest-900);
+  text-shadow: none;
+}
+.market-chapter.chapter-discover .chapter-foot,
+.market-chapter.chapter-discover .chapter-foot p { color: var(--forest-900); }
+
+/* Selected-market ribbon under the explorer map */
+.selected-market-ribbon,
+.global-explorer .selected-market-ribbon {
+  background: var(--forest-900);
+  border-color: var(--forest-900);
+  color: var(--paper);
+}
+.selected-market-ribbon span,
+.global-explorer .selected-market-ribbon span { color: var(--forest-300); }
+.selected-market-ribbon strong,
+.global-explorer .selected-market-ribbon strong { color: var(--paper); }
+.selected-market-ribbon > a,
+.global-explorer .selected-market-ribbon > a { color: var(--harvest-200); }
+
+/* "Know the hands behind your harvest" grower section (light surface) */
+.global-growers { background: var(--harvest-50); color: var(--forest-900); }
+.global-grower-copy > span { color: var(--harvest-700); }
+.global-grower-copy h2 { color: var(--forest-900); }
+.global-grower-copy > p { color: var(--ink-soft); }
+.global-grower-copy .grower-switcher button { border-color: var(--sage-400); color: var(--forest-900); }
+.global-grower-copy .grower-switcher button[aria-pressed="true"] { background: var(--forest-900); border-color: var(--forest-900); color: var(--paper); }
+.global-grower-copy a { color: var(--forest-900); }
+
+/* Small numbering and meta labels must reach 4.5:1 on paper */
+.grower-editorial-story > span,
+.grower-editorial-story dt { color: var(--muted); }
+.scene-kicker { color: var(--harvest-200); }
+
+/* Form controls follow the palette instead of the browser's blue */
+:root { accent-color: var(--forest-900); }
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px !important;
+  background-color: var(--white);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23183b2b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  text-overflow: ellipsis;
+}
+::selection { background: var(--harvest-200); color: var(--forest-950); }
+:focus-visible { outline-color: var(--harvest-500); }
+
+/* Market explorer: the list panel is dark forest; the selected row is sage. */
+.global-list-count strong { color: var(--paper); }
+.explorer-market-choice .global-market-number,
+.explorer-market-choice small { color: var(--forest-300); }
+.explorer-market-choice.selected .global-market-number,
+.explorer-market-choice.selected small { color: var(--muted); }
+.global-days button { color: var(--forest-900); }
+.global-days button span { color: inherit; }
+.global-days button[aria-pressed="true"],
+.global-days button.active,
+.global-days button.selected { background: var(--forest-900); color: var(--paper); }
+.global-grower-story p { color: var(--ink-soft); }
+.global-section-title p,
+.global-market-terms { color: var(--muted); }
+
+/* Remaining small labels */
+.evaluator-role { color: var(--harvest-700); }
+.help-answers ol span,
+.help-answers li > button > span:first-child,
+.help-answer-list span { color: var(--muted); }
+.explorer-market-choice small,
+.explorer-market-choice .global-market-number { color: inherit; opacity: 0.8; }
+.help-answers article > button > span:first-child { color: var(--muted); }
+
+/* Dashboards */
+.fw-status-chip.placed { color: var(--harvest-700); }
+.rail-caption { color: var(--muted); }
+.command-market-list small,
+.map-leaflet-container small,
+.command-market-list small,
+.command-location-note { color: var(--muted); }
+.an-stock-legend strong,
+.an-stock-meta strong { color: var(--harvest-700); }

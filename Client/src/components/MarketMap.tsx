@@ -7,6 +7,7 @@ export interface MarketMapViewProps {
   markets: Market[];
   selected: string;
   onSelect: (id: string) => void;
+  occludeRight?: number;
 }
 // UI renderer boundary only, not an API DTO. A real map adapter must map approved
 // coordinates into these selected IDs and preserve accessible list navigation.

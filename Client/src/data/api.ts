@@ -324,14 +324,14 @@ export async function fetchFavouritesApi(): Promise<{ farmers: any[]; products: 
   return request<{ farmers: any[]; products: any[] }>('/favourites');
 }
 
-export async function addFavouriteApi(targetType: 'farmer' | 'product', targetId: string): Promise<any> {
+export async function addFavouriteApi(targetType: 'farmer' | 'product' | 'market', targetId: string): Promise<any> {
   return request<any>('/favourites', {
     method: 'POST',
     body: JSON.stringify({ targetType, targetId }),
   });
 }
 
-export async function removeFavouriteApi(targetType: 'farmer' | 'product', targetId: string): Promise<any> {
+export async function removeFavouriteApi(targetType: 'farmer' | 'product' | 'market', targetId: string): Promise<any> {
   return request<any>(`/favourites/${targetType}/${targetId}`, {
     method: 'DELETE',
   });
@@ -349,7 +349,7 @@ export async function createRestockAlertApi(data: { productId: string; marketId:
 }
 
 export async function createReviewApi(data: {
-  orderId: string;
+  orderId?: string;
   targetType: 'farmer' | 'product';
   targetId: string;
   rating: number;
@@ -579,11 +579,103 @@ export async function fetchAdminReviewsApi(query: { status?: string } = {}): Pro
   return request<any[]>(`/admin/reviews${qs ? '?' + qs : ''}`);
 }
 
-export async function moderateAdminReviewApi(id: string, status: 'published' | 'hidden'): Promise<any> {
+export async function moderateAdminReviewApi(
+  id: string,
+  moderationStatus: 'approved' | 'rejected' | 'hidden' | 'flagged',
+  moderationReason?: string
+): Promise<any> {
   return request<any>(`/admin/reviews/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ moderationStatus, moderationReason }),
+  });
+}
+
+export async function moderateAdminProductApi(id: string, status: 'active' | 'hidden'): Promise<any> {
+  return request<any>(`/admin/products/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+}
+
+export async function deleteAdminMarketApi(id: string): Promise<any> {
+  return request<any>(`/admin/markets/${id}`, { method: 'DELETE' });
+}
+
+export async function deleteAdminCategoryApi(id: string): Promise<any> {
+  return request<any>(`/admin/categories/${id}`, { method: 'DELETE' });
+}
+
+export async function createAnnouncementApi(data: {
+  title: string;
+  message: string;
+  type?: 'general' | 'weather_alert' | 'market_update';
+  priority?: 'normal' | 'urgent';
+  marketId?: string | null;
+  isActive?: boolean;
+}): Promise<any> {
+  return request<any>('/admin/announcements', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateAnnouncementApi(id: string, data: { isActive?: boolean; title?: string; message?: string }): Promise<any> {
+  return request<any>(`/admin/announcements/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+// ─── Live catalogue & role workspace (single source of truth) ───────────────
+export async function fetchCatalogueApi(): Promise<any> {
+  return request<any>('/catalogue');
+}
+
+export async function fetchWorkspaceApi(period = '30d'): Promise<any> {
+  return request<any>(`/workspace?period=${encodeURIComponent(period)}`);
+}
+
+export async function markNotificationReadApi(id: string): Promise<any> {
+  return request<any>(`/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export async function markAllNotificationsReadApi(): Promise<any> {
+  return request<any>('/notifications/read-all', { method: 'PATCH' });
+}
+
+export async function createFarmerProductApi(data: {
+  name: string;
+  description?: string;
+  categoryId: string;
+  unit: string;
+  basePriceMinor: number;
+  imageUrl?: string;
+}): Promise<any> {
+  return request<any>('/farmer/products', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateFarmerProductApi(id: string, data: Partial<{
+  name: string;
+  description: string;
+  categoryId: string;
+  unit: string;
+  basePriceMinor: number;
+  imageUrl: string;
+}>): Promise<any> {
+  return request<any>(`/farmer/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function updateStockOfferStatusApi(id: string, status: 'available' | 'sold_out' | 'unavailable'): Promise<any> {
+  return request<any>(`/farmer/stock-offers/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+}
+
+export async function createPickupWindowApi(data: {
+  marketId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  cutoffAt: string;
+  maxCapacity?: number;
+}): Promise<any> {
+  return request<any>('/farmer/pickup-windows', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function deleteRestockAlertApi(id: string): Promise<any> {
+  return request<any>(`/restock-alerts/${id}`, { method: 'DELETE' });
 }
 
 // ─── AI Copilot Service ─────────────────────────────────────────────────────
@@ -774,3 +866,6 @@ export async function probeServer(): Promise<boolean> {
   }
 }
 
+export async function archiveFarmerProductApi(id: string): Promise<any> {
+  return request<any>(`/farmer/products/${id}`, { method: 'DELETE' });
+}

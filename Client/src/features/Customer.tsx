@@ -28,8 +28,10 @@ import {
   Confirm,
   ProductTile,
   Favourite,
+  DirectionsLink,
 } from "../components/ui";
-import { money, total, time, date, activeOrder } from "../data/market";
+import { money, total, time, date, activeOrder, orderRef } from "../data/market";
+import { gateway } from "../data/gateway";
 import type { Order } from "../data/market";
 import { NotFound } from "./Public";
 export { CustomerInboxWorkspace } from "./CustomerInbox";
@@ -47,7 +49,7 @@ export function OrderRows({
       {orders.map((o) => (
         <Link className="order-row" key={o.id} to={`${prefix}/orders/${o.id}`}>
           <div>
-            <p className="small muted">{o.id}</p>
+            <p className="small muted">{orderRef(o)}</p>
             <h3>{s.farmers.find((f) => f.id === o.farmerId)?.name}</h3>
             <p>{s.markets.find((m) => m.id === o.marketId)?.name}</p>
           </div>
@@ -103,7 +105,7 @@ export function Planner() {
           <strong>
             {money(orders.reduce((n, o) => n + total(o.lines), 0))}
           </strong>{" "}
-          sample order value
+          booked with growers
         </span>
         <span>
           <ShoppingBasket size={22} /> Pay at each stall
@@ -123,7 +125,7 @@ export function Planner() {
                 <div className="timeline-content">
                   <div className="spread">
                     <Status>{o.stage}</Status>
-                    <span className="small">{o.id}</span>
+                    <span className="small">{orderRef(o)}</span>
                   </div>
                   <h2>{s.farmers.find((f) => f.id === o.farmerId)?.name}</h2>
                   <p>
@@ -196,11 +198,11 @@ export function Basket() {
           <Check />
         </span>
         <Heading
-          title="Your sample morning is planned."
-          intro="Simulated reservations have been created, one for each farmer. No backend order has been placed."
+          title="Your market morning is planned."
+          intro="Each grower has your reservation. You will be notified as they accept and pack your order."
         />
         <Link className="button" to="/customer/orders">
-          View sample orders <ArrowRight size={18} />
+          View my orders <ArrowRight size={18} />
         </Link>
       </div>
     );
@@ -258,7 +260,7 @@ export function Basket() {
                             onClick={() =>
                               act(
                                 { type: "basket", id: p.id, quantity: 0 },
-                                "Removed from the sample basket.",
+                                "Removed from your basket.",
                               )
                             }
                           >
@@ -287,7 +289,7 @@ export function Basket() {
                                     id: p.id,
                                     quantity: s.basket[p.id],
                                   },
-                                  "Current sample price accepted.",
+                                  "Current price accepted.",
                                 )
                               }
                             >
@@ -322,42 +324,13 @@ export function Basket() {
                         </select>
                       </Field>
                       <p className="small muted">
-                        Asia/Karachi · Sample cutoff Friday, 2 October at 20:00.
+                        Times in Asia/Karachi. Reservations close at each window’s cutoff.
                       </p>
                     </div>
                   )}
                 </section>
               );
             })}
-            {/* Market Companion Kitchen Insights & Saturday Itinerary */}
-            {Object.keys(s.basket).length > 0 && (
-              <div
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #e2ddd5",
-                  borderLeft: "4px solid #203328",
-                  borderRadius: "6px",
-                  padding: "18px 20px",
-                  margin: "20px 0",
-                  fontSize: "13.5px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
-                  <strong style={{ color: "#203328", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <ShoppingBasket size={15} /> Market Companion · Kitchen Pairings & Saturday Itinerary
-                  </strong>
-                  <span style={{ fontSize: "12px", color: "#6c726d" }}>Based on your selected bag produce</span>
-                </div>
-                <p style={{ margin: "0 0 8px", color: "#203328", lineHeight: "1.5" }}>
-                  {Object.keys(s.basket).some(id => s.products.find(p => p.id === id)?.name.toLowerCase().includes("tomato"))
-                    ? "Kitchen Pairing: Your vine tomatoes pair wonderfully with cold-pressed olive oil, cracked pepper, and fresh field greens for a Saturday lunch salad. Collect near the end of your visit to keep them unbruised."
-                    : "Market Morning Tip: Remember to bring your reusable cloth bags. Stalls reserve your produce in harvest crates for quick handover."}
-                </p>
-                <p style={{ margin: 0, fontSize: "12.5px", color: "#6c726d" }}>
-                  Need recipe guidance or market morning routing? Ask Market Companion in Copilot chat anytime.
-                </p>
-              </div>
-            )}
           </div>
           <aside className="receipt-summary">
             <p className="eyebrow">Your market bag</p>
@@ -397,13 +370,13 @@ export function Basket() {
                   if (
                     act(
                       { type: "checkout", slots },
-                      "Sample reservations created.",
+                      "Reserved. Pay at the stall when you collect.",
                     )
                   )
                     setDone(true);
                 }}
               >
-                Confirm sample reservation <ArrowRight size={18} />
+                Confirm reservation <ArrowRight size={18} />
               </button>
             ) : (
               <Link className="button full" to="/checkout">
@@ -411,8 +384,7 @@ export function Basket() {
               </Link>
             )}
             <p className="small muted">
-              Stock and windows are checked again by the fixture adapter. No
-              MongoDB connection.
+              Stock and pickup windows are confirmed again when you reserve.
             </p>
           </aside>
         </div>
@@ -422,8 +394,7 @@ export function Basket() {
           href="/products"
           action="Browse produce"
         >
-          Your sample basket is empty. Find something good for your next market
-          day.
+          Your basket is empty. Find something good for your next market day.
         </Empty>
       )}
     </div>
@@ -498,7 +469,7 @@ export function OrderDetail() {
       <div className="container narrow section">
         <Heading
           title="A word from your market day."
-          intro={`Review ${o.id} · completed purchases only.`}
+          intro={`Order ${orderRef(o)} · reviews open once an order is collected.`}
         />
         {o.stage !== "Completed" ? (
           <Notice>
@@ -516,7 +487,7 @@ export function OrderDetail() {
                     rating: Number(value(d, "rating")),
                     text: value(d, "text"),
                   },
-                  "Your sample review has been saved.",
+                  "Thank you. Your review is published.",
                 )
               )
                 navigate(`/customer/orders/${o.id}`);
@@ -559,7 +530,7 @@ export function OrderDetail() {
       <div className="container narrow section">
         <Heading
           title="A little change of plan."
-          intro={`${o.id} · Changes are simulated and must be before the sample cutoff.`}
+          intro={`${o.number ?? o.id} · Changes are possible until the pickup window’s cutoff.`}
         />
         {!editable ? (
           <Notice>
@@ -654,10 +625,7 @@ export function OrderDetail() {
               <span>Asia/Karachi</span>
             </div>
             <p>{s.markets.find((m) => m.id === o.marketId)?.address}</p>
-            <Notice>
-              Illustrative pickup only. Live directions require approved
-              coordinates.
-            </Notice>
+            <DirectionsLink market={s.markets.find((m) => m.id === o.marketId)} />
           </div>
           <section className="section">
             <h2>Your reservation, step by step.</h2>
@@ -696,7 +664,7 @@ export function OrderDetail() {
           <p>Pay in person at pickup.</p>
           <p className="small muted">
             <Clock size={14} />
-            Sample cutoff: {date(slot.cutoff)}, {time(slot.cutoff)}
+            Changes close {date(slot.cutoff)}, {time(slot.cutoff)}
           </p>
           {editable && (
             <div className="stack">
@@ -708,14 +676,13 @@ export function OrderDetail() {
               </Link>
               <Confirm
                 label="Cancel reservation"
-                title="Cancel this sample reservation?"
+                title="Cancel this reservation?"
                 danger
                 onConfirm={() =>
                   act({ type: "stage", id: o.id, stage: "Cancelled" })
                 }
               >
-                Reserved sample quantities will be released once. This does not
-                contact a real farmer.
+                The grower is notified and the reserved produce is released for other shoppers.
               </Confirm>
             </div>
           )}
@@ -736,7 +703,7 @@ export function OrderDetail() {
                           id: l.productId,
                           quantity: (s.basket[l.productId] ?? 0) + l.quantity,
                         },
-                        "Available items added at their current sample prices.",
+                        "Available items added at today’s prices.",
                       ) && okay;
                   if (okay) navigate("/basket");
                 }}
@@ -836,10 +803,6 @@ export function Favourites() {
           <Empty title="Your favourites start with a little exploring." />
         )}
       </section>
-      <Notice>
-        Favourites are held in this browser session. Restock preferences are
-        simulated; no real subscription or email is sent.
-      </Notice>
     </div>
   );
 }
@@ -880,7 +843,7 @@ export function Notifications() {
           >
             <div>
               <span className="small muted">
-                {n.read ? "Read" : "Unread"} · Development event
+                {n.read ? "Read" : "New"}{n.at ? ` · ${date(n.at)}` : ""}
               </span>
               <h3>
                 <Link
@@ -925,12 +888,9 @@ export function Profile() {
         setProfile(data);
       })
       .catch(() => {
-        setProfile({
-          name: "Hira Khan",
-          email: "hira.khan@example.com",
-          phone: "+92 300 1234567",
-          address: "House 42, Block G, Model Town, Lahore",
-        });
+        const session = gateway.snapshot().session;
+        if (session)
+          setProfile({ name: session.name, email: session.email, phone: session.phone ?? "", address: session.address ?? "" });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -983,7 +943,7 @@ export function Profile() {
             required
             readOnly
             defaultValue={profile?.email || ""}
-            style={{ background: "#f8f9fa", cursor: "not-allowed" }}
+            style={{ background: "#ffffff", cursor: "not-allowed" }}
           />
         </Field>
         <Field label="Contact Phone (for Pickup Coordination)">

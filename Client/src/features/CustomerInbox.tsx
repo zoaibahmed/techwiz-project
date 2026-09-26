@@ -152,7 +152,7 @@ export function CustomerInboxWorkspace() {
           <div className="farmer-inbox-list-header">
             <div className="farmer-inbox-title-row">
               <h2>My Conversations</h2>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#5a665c' }}>
                 {conversations.length} total
               </span>
             </div>
@@ -170,18 +170,18 @@ export function CustomerInboxWorkspace() {
 
           <div className="farmer-inbox-items">
             {loading ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#6b7280', fontSize: '13.5px' }}>
+              <div style={{ padding: '30px', textAlign: 'center', color: '#5a665c', fontSize: '13.5px' }}>
                 Loading conversations…
               </div>
             ) : conversations.length === 0 ? (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ffffff', color: '#5a665c', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                   <MessageSquare size={18} />
                 </div>
-                <h4 style={{ fontSize: '14.5px', fontWeight: 600, margin: '0 0 6px', color: '#111827' }}>
+                <h4 style={{ fontSize: '14.5px', fontWeight: 600, margin: '0 0 6px', color: '#242b23' }}>
                   No grower conversations yet
                 </h4>
-                <p style={{ fontSize: '12.5px', color: '#6b7280', margin: '0 0 16px', lineHeight: 1.5 }}>
+                <p style={{ fontSize: '12.5px', color: '#5a665c', margin: '0 0 16px', lineHeight: 1.5 }}>
                   Ask questions about produce freshness or market pickups directly from any grower's stall.
                 </p>
                 <Link to="/farmers" className="button secondary compact" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -255,10 +255,10 @@ export function CustomerInboxWorkspace() {
                     {selectedConvo.farmerBusinessName.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#242b23' }}>
                       {selectedConvo.farmerBusinessName}
                     </h3>
-                    <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                    <span style={{ fontSize: '12px', color: '#5a665c' }}>
                       Grower: {selectedConvo.farmerContactPerson || 'Stall Producer'}
                     </span>
                   </div>
@@ -275,7 +275,7 @@ export function CustomerInboxWorkspace() {
 
               <div className="farmer-inbox-conv-messages">
                 {messagesLoading ? (
-                  <div style={{ margin: 'auto', textAlign: 'center', color: '#6b7280', fontSize: '13px' }}>
+                  <div style={{ margin: 'auto', textAlign: 'center', color: '#5a665c', fontSize: '13px' }}>
                     Loading message history…
                   </div>
                 ) : (
@@ -296,7 +296,7 @@ export function CustomerInboxWorkspace() {
                           {isMe && (
                             m.readAt ? (
                               <span title="Read by grower" style={{ display: 'inline-flex' }}>
-                                <CheckCheck size={13} color="#166534" />
+                                <CheckCheck size={13} color="#234e3b" />
                               </span>
                             ) : (
                               <span title="Sent" style={{ display: 'inline-flex' }}>
@@ -345,13 +345,13 @@ export function CustomerInboxWorkspace() {
             </>
           ) : (
             <div style={{ margin: 'auto', textAlign: 'center', padding: '40px', maxWidth: '360px' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f3f4f6', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#ffffff', color: '#5a665c', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <MessageSquare size={22} />
               </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 600, color: '#111827', margin: '0 0 8px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 600, color: '#242b23', margin: '0 0 8px' }}>
                 Select a conversation
               </h3>
-              <p style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.5, margin: 0 }}>
+              <p style={{ fontSize: '13px', color: '#5a665c', lineHeight: 1.5, margin: 0 }}>
                 Choose a conversation to view your message history with that grower.
               </p>
             </div>
@@ -365,10 +365,10 @@ export function CustomerInboxWorkspace() {
               <h4>
                 <Store size={15} /> Farmstead Information
               </h4>
-              <p style={{ fontWeight: 600, color: '#111827' }}>
+              <p style={{ fontWeight: 600, color: '#242b23' }}>
                 {selectedConvo.farmerBusinessName}
               </p>
-              <p style={{ fontSize: '12px', color: '#6b7280' }}>
+              <p style={{ fontSize: '12px', color: '#5a665c' }}>
                 Producer: {selectedConvo.farmerContactPerson || 'Stall Lead'}
               </p>
               <div style={{ marginTop: '12px' }}>
@@ -387,7 +387,7 @@ export function CustomerInboxWorkspace() {
                 <h4>
                   <Package size={15} /> Produce Context
                 </h4>
-                <p style={{ fontWeight: 600, color: '#111827' }}>
+                <p style={{ fontWeight: 600, color: '#242b23' }}>
                   {selectedConvo.productContext.name}
                 </p>
                 <dl style={{ marginTop: '8px' }}>

@@ -287,7 +287,7 @@ export function LocationModal() {
                       <span className="country-name">{name}</span>
                       <span className="country-tag">
                         {hasLocalMarkets ? (
-                          <span className="tag-demo">{s.markets.filter(m => m.countryCode === code).every(m => m.id.startsWith("demo-")) ? "Demo markets" : "Markets listed"}</span>
+                          <span className="tag-demo">{"Markets live"}</span>
                         ) : (
                           <span className="tag-code">{code}</span>
                         )}

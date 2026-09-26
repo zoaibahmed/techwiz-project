@@ -35,7 +35,7 @@ export function HarvestItem({ product }: { product: Product }) {
           onClick={() =>
             act(
               { type: "basket", id: product.id, quantity: quantity + 1 },
-              `${product.name} added to your sample basket.`,
+              `${product.name} added to your market bag.`,
             )
           }
         >

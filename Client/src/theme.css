@@ -1,0 +1,55 @@
+/* Gather & Grow theme: the single source of every colour in the interface.
+   All values derive from the six approved colours (forest, forest-deep, paper,
+   sage, harvest, ink). Stylesheets reference these tokens only; no gradients. */
+:root {
+  /* Forest ramp (approved: forest #183b2b, forest-deep #0f291d) */
+  --forest-950: #0f291d;
+  --forest-900: #183b2b;
+  --forest-800: #234e3b;
+  --forest-700: #2f523f;
+  --forest-600: #4a6b56;
+  --forest-500: #5b7563;
+  --forest-400: #849a86;
+  --forest-300: #a8baa3;
+  /* Sage & paper neutrals (approved: sage-pale #e8ede3, paper #faf8f2) */
+  --sage-400: #c3ccb8;
+  --sage-300: #d6dcd1;
+  --sage-200: #dfe6d8;
+  --sage-100: #e8ede3;
+  --sage-50: #f1f4ec;
+  --paper: #faf8f2;
+  --paper-bright: #fffdf7;
+  --white: #ffffff;
+  /* Ink (approved: ink #242b23) */
+  --ink: #242b23;
+  --ink-soft: #3b4539;
+  --muted: #5a665c;
+  --muted-soft: #6b7869;
+  /* Harvest ramp (approved: harvest #c98646) */
+  --harvest-700: #8f5a2a;
+  --harvest-600: #a86d33;
+  --harvest-500: #c98646;
+  --harvest-300: #dfb582;
+  --harvest-200: #ecd3b2;
+  --harvest-100: #f5e6d3;
+  --harvest-50: #fbf3e8;
+  /* Feedback, kept within the earthy palette */
+  --danger: #a14a3b;
+  --danger-soft: #f6e8e4;
+
+  /* Semantic aliases */
+  --forest: var(--forest-900);
+  --deep: var(--forest-950);
+  --soft: var(--sage-100);
+  --border: var(--sage-300);
+  --harvest: var(--harvest-500);
+  --focus-ring: var(--harvest-500);
+
+  /* Elevation (shadows are tinted forest, never grey-blue) */
+  --shadow-1: 0 1px 2px rgba(15, 41, 29, 0.06);
+  --shadow-2: 0 6px 18px rgba(15, 41, 29, 0.08);
+  --shadow-3: 0 18px 48px rgba(15, 41, 29, 0.14);
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+}

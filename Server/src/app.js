@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { env } from './config/env.js';
 import { corsMiddleware } from './middleware/corsConfig.js';
 import { notFoundHandler } from './middleware/notFoundHandler.js';
@@ -19,6 +20,9 @@ export function createApp() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     })
   );
+
+  // Gzip JSON responses (workspace payloads shrink roughly tenfold)
+  app.use(compression());
 
   // 2. Cross-Origin Resource Sharing
   app.use(corsMiddleware);

@@ -249,7 +249,7 @@ export function CustomerChatModal({
         {(activeConvo?.productContext || productId) && (
           <div className="ml-chat-context-ribbon">
             <div className="ml-chat-context-tag">
-              <Package size={15} color="#166534" />
+              <Package size={15} color="#234e3b" />
               <span>Produce: <strong>{activeConvo?.productContext?.name || productName || 'Selected Harvest'}</strong></span>
             </div>
             <span className="ml-chat-context-badge">Live Context</span>
@@ -259,7 +259,7 @@ export function CustomerChatModal({
         {(activeConvo?.orderContext || orderId) && (
           <div className="ml-chat-context-ribbon">
             <div className="ml-chat-context-tag">
-              <Calendar size={15} color="#166534" />
+              <Calendar size={15} color="#234e3b" />
               <span>Reservation: <strong>#{activeConvo?.orderContext?.orderNumber || orderNumber || 'Pre-order'}</strong></span>
             </div>
             <span className="ml-chat-context-badge">
@@ -303,7 +303,7 @@ export function CustomerChatModal({
                     {isMe && (
                       m.readAt ? (
                         <span title="Read by grower" style={{ display: 'inline-flex' }}>
-                          <CheckCheck size={13} color="#166534" />
+                          <CheckCheck size={13} color="#234e3b" />
                         </span>
                       ) : (
                         <span title="Sent" style={{ display: 'inline-flex' }}>
@@ -318,7 +318,7 @@ export function CustomerChatModal({
           )}
 
           {sendError && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b91c1c', fontSize: '12.5px', padding: '6px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#a14a3b', fontSize: '12.5px', padding: '6px 0' }}>
               <AlertCircle size={15} />
               <span>{sendError}</span>
               {lastFailedMessage && (

@@ -23,6 +23,7 @@ import {
 } from "../components/ui";
 import { Notifications } from "./Customer";
 import { NotFound } from "./Public";
+import { money, date, time, total, activeOrder } from "../data/market";
 import {
   AdminCommandOperationalStats,
   AdminAnalyticsWorkspace,
@@ -53,209 +54,220 @@ export function AdminPage() {
    ========================================================================= */
 function AdminOverviewCockpit() {
   const s = useMarket();
-
+  const m = s.metrics;
   const pendingFarmers = s.farmers.filter((f) => f.state === "Pending");
+  const flagged = s.reviews.filter((r) => r.status === "flagged");
+  const pendingReviews = s.reviews.filter((r) => r.status === "pending");
+  const hiddenProducts = s.products.filter((p) => !p.visible && !p.archived);
+  const openInquiries = s.inquiries.filter((i) => i.status !== "resolved");
+  const activeMarkets = s.markets.filter((x) => x.active);
+
+  // The busiest upcoming market day, from real reservations.
+  const nextDate = m?.open.nextMarketDate ?? null;
+  const focus = nextDate
+    ? activeMarkets
+        .filter((x) => x.day === nextDate)
+        .map((x) => ({
+          market: x,
+          orders: s.orders.filter((o) => o.marketId === x.id && o.marketDate === nextDate && activeOrder(o)),
+        }))
+        .sort((a, b) => b.orders.length - a.orders.length)[0]
+    : undefined;
+  const focusCutoff = focus
+    ? s.orders.find((o) => o.marketId === focus.market.id && o.marketDate === nextDate && o.cutoff)?.cutoff
+    : undefined;
+
+  const queue = [
+    {
+      to: "/admin/farmers",
+      icon: <Users size={20} />,
+      title: "Grower applications",
+      body: pendingFarmers.length
+        ? `${pendingFarmers.map((f) => f.name).join(", ")} waiting for a decision.`
+        : "No applications waiting.",
+      count: pendingFarmers.length,
+    },
+    {
+      to: "/admin/moderation",
+      icon: <Flag size={20} />,
+      title: "Moderation queue",
+      body: flagged.length || hiddenProducts.length
+        ? `${flagged.length} flagged review${flagged.length === 1 ? "" : "s"} · ${hiddenProducts.length} hidden listing${hiddenProducts.length === 1 ? "" : "s"}`
+        : "Nothing flagged.",
+      count: flagged.length,
+    },
+    {
+      to: "/admin/markets",
+      icon: <Store size={20} />,
+      title: "Markets",
+      body: `${activeMarkets.length} active · ${m?.open.total ?? 0} open reservations across all markets`,
+      count: 0,
+    },
+  ];
 
   return (
     <div className="farmer-workbench container">
-      {/* Executive Header */}
       <div className="fw-header">
         <div className="fw-header-info">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px", flexWrap: "wrap" }}>
             <span className="fw-status-chip accepted">
-              <ShieldCheck size={13} /> Administrator Command
+              <ShieldCheck size={13} /> Administrator
             </span>
             <span style={{ fontSize: "13px", color: "var(--fw-muted)" }}>
-              Platform Operations · Pakistan (Lahore Pilot)
+              {activeMarkets.length} markets · {m?.platform?.farmers.approved ?? 0} growers · {m?.platform?.customers.active ?? 0} customers
             </span>
           </div>
-          <h1>Market Operations Command Centre</h1>
+          <h1>Command centre</h1>
           <p className="fw-header-sub">
-            Coordinate multi-market schedules, verify producer credentials, manage catalog taxonomy, and monitor live trading.
+            {nextDate
+              ? `Next market day ${date(nextDate)}: ${m?.open.nextMarketDayOrders ?? 0} reservations, ${m?.open.nextMarketDayUnits ?? 0} units to be collected.`
+              : "No upcoming market days have reservations yet."}
           </p>
         </div>
         <div className="fw-header-actions">
           <Link className="button secondary" to="/admin/announcements">
-            <Megaphone size={16} /> Broadcast Notice
+            <Megaphone size={16} /> New announcement
           </Link>
           <Link className="button" to="/admin/markets/new">
-            <Plus size={16} /> Add Market Location
+            <Plus size={16} /> Add market
           </Link>
         </div>
       </div>
 
-      {/* Market Intelligence Operational Briefing */}
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid var(--fw-border-subtle)",
-          borderLeft: "4px solid var(--fw-forest)",
-          borderRadius: "6px",
-          padding: "20px 24px",
-          margin: "24px 0",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ background: "var(--fw-sage)", color: "var(--fw-forest)", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Market Intelligence
-            </span>
-            <strong style={{ fontSize: "15px", color: "var(--fw-ink)" }}>Daily Platform Briefing & Moderation Tasks</strong>
-          </div>
-          <span style={{ fontSize: "12px", color: "var(--fw-muted)" }}>Pakistan (Lahore Pilot) · Live Operations</span>
+      <div className="fw-briefing">
+        <div className="fw-briefing-head">
+          <span className="fw-briefing-badge">Today</span>
+          <strong>What needs a decision</strong>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", fontSize: "14px", lineHeight: "1.5" }}>
-          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
-            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
-              Producer Onboarding:
-            </strong>
+        <div className="fw-briefing-grid">
+          <div>
+            <strong>Growers</strong>
             <span>
-              {pendingFarmers.length > 0
-                ? `${pendingFarmers.length} grower application(s) pending review (${pendingFarmers.map(f => f.name).join(", ")}). Direct verification required before stall catalogue publication.`
-                : "All registered stallholders are approved and active for current weekend market schedules."}
+              {pendingFarmers.length
+                ? `${pendingFarmers.length} application${pendingFarmers.length === 1 ? "" : "s"} to review.`
+                : "Every registered grower has a decision."}
             </span>
           </div>
-          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
-            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
-              Community Moderation:
-            </strong>
+          <div>
+            <strong>Community</strong>
             <span>
-              {s.reviews.filter(r => !r.visible).length > 0
-                ? `${s.reviews.filter(r => !r.visible).length} review(s) flagged or awaiting moderation in the quality queue.`
-                : `${s.reviews.length} customer review(s) published across Lahore markets with an aggregate 5.0 rating.`}
+              {pendingReviews.length
+                ? `${pendingReviews.length} review${pendingReviews.length === 1 ? "" : "s"} waiting for approval.`
+                : flagged.length
+                ? `${flagged.length} review${flagged.length === 1 ? "" : "s"} flagged for abuse or spam.`
+                : `No flagged reviews. Average rating ${m?.reviews.average?.toFixed(1) ?? "—"} from ${m?.reviews.count ?? 0} reviews.`}
+            </span>
+          </div>
+          <div>
+            <strong>Inbox</strong>
+            <span>
+              {openInquiries.length
+                ? `${openInquiries.length} contact message${openInquiries.length === 1 ? "" : "s"} open.`
+                : "No open contact messages."}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Multi-Country Operational Command & Executive KPI Area */}
       <AdminCommandOperationalStats />
 
-      {/* Action Queues & Snapshot Grid */}
       <div className="adm-overview-grid">
         <div>
-          <h2 style={{ fontSize: "20px", margin: "0 0 16px" }}>Priority Operational Actions</h2>
-
-          <Link className="adm-action-card" to="/admin/farmers">
-            <div className="adm-action-left">
-              <div className="adm-action-icon">
-                <Users size={20} />
+          <h2 style={{ fontSize: "20px", margin: "0 0 16px" }}>Action queues</h2>
+          {queue.map((q) => (
+            <Link key={q.to} className="adm-action-card" to={q.to}>
+              <div className="adm-action-left">
+                <div className="adm-action-icon">{q.icon}</div>
+                <div>
+                  <h3 style={{ margin: "0 0 2px", fontSize: "16px" }}>{q.title}</h3>
+                  <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>{q.body}</p>
+                </div>
               </div>
-              <div>
-                <h3 style={{ margin: "0 0 2px", fontSize: "16px" }}>Producer Verification Queue</h3>
-                <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>
-                  Review farm stories, contact details, and stall assignments.
-                </p>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {q.count > 0 && <span className="fw-status-chip placed">{q.count} to review</span>}
+                <ArrowUpRight size={17} color="var(--fw-muted)" />
               </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span className={`fw-status-chip ${pendingFarmers.length > 0 ? "placed" : "accepted"}`}>
-                {pendingFarmers.length} Pending
-              </span>
-              <ArrowUpRight size={17} color="var(--fw-muted)" />
-            </div>
-          </Link>
-
-          <Link className="adm-action-card" to="/admin/moderation">
-            <div className="adm-action-left">
-              <div className="adm-action-icon">
-                <Flag size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: "0 0 2px", fontSize: "16px" }}>Content Stewardship & Reviews</h3>
-                <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>
-                  Review produce descriptions and customer feedback safety.
-                </p>
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span className="fw-status-chip accepted">
-                {s.reviews.length} Reviews
-              </span>
-              <ArrowUpRight size={17} color="var(--fw-muted)" />
-            </div>
-          </Link>
-
-          <Link className="adm-action-card" to="/admin/markets">
-            <div className="adm-action-left">
-              <div className="adm-action-icon">
-                <Store size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: "0 0 2px", fontSize: "16px" }}>Saturday Market Readiness</h3>
-                <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>
-                  Check operating hours, stall counts, and cutoff rules for Lahore.
-                </p>
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span className="fw-status-chip accepted">3 Active</span>
-              <ArrowUpRight size={17} color="var(--fw-muted)" />
-            </div>
-          </Link>
+            </Link>
+          ))}
         </div>
 
-        {/* Saturday Operator Snapshot Card */}
         <aside className="adm-sidebar-card">
-          <span className="fw-nm-badge" style={{ color: "#dce3ce" }}>Saturday Market Day Focus</span>
-          <h2 style={{ fontSize: "24px", color: "var(--fw-paper)", margin: "6px 0 4px" }}>
-            The Orchard Market
-          </h2>
-          <p style={{ fontSize: "13px", color: "#c5d3c1", margin: "0 0 16px" }}>
-            Model Town Park · Sat, 3 Oct · 08:00–13:00
-          </p>
-
-          <div style={{ borderTop: "1px solid #2f523f", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13.5px" }}>
-              <span style={{ color: "#a8baa3" }}>Approved Attending Stalls</span>
-              <strong>{s.farmers.filter((f) => f.state === "Approved").length}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13.5px" }}>
-              <span style={{ color: "#a8baa3" }}>Visible Produce Listings</span>
-              <strong>{s.products.filter((p) => p.visible).length} items</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13.5px" }}>
-              <span style={{ color: "#a8baa3" }}>Pre-order Cutoff</span>
-              <strong>Friday 20:00 PKT</strong>
-            </div>
-          </div>
-
+          {focus ? (
+            <>
+              <span className="fw-nm-badge" style={{ color: "#dfe6d8" }}>Busiest market · {date(nextDate!)}</span>
+              <h2 style={{ fontSize: "24px", color: "var(--fw-paper)", margin: "6px 0 4px" }}>{focus.market.name}</h2>
+              <p style={{ fontSize: "13px", color: "#c3ccb8", margin: "0 0 16px" }}>
+                {focus.market.area} · {focus.market.hours}
+              </p>
+              <div className="adm-focus-rows">
+                <div>
+                  <span>Attending growers</span>
+                  <strong>{focus.market.attendingFarmerCount ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Reservations</span>
+                  <strong>{focus.orders.length}</strong>
+                </div>
+                <div>
+                  <span>Reserved value</span>
+                  <strong>{money(focus.orders.reduce((n, o) => n + (o.total ?? total(o.lines)), 0))}</strong>
+                </div>
+                {focusCutoff && (
+                  <div>
+                    <span>Changes close</span>
+                    <strong>{date(focusCutoff)} {time(focusCutoff)}</strong>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="fw-nm-badge" style={{ color: "#dfe6d8" }}>Markets</span>
+              <h2 style={{ fontSize: "24px", color: "var(--fw-paper)", margin: "6px 0 16px" }}>No reservations yet</h2>
+            </>
+          )}
           <div style={{ marginTop: "20px" }}>
             <Link
               className="button"
               to="/admin/markets"
-              style={{ background: "var(--fw-paper)", color: "var(--fw-forest)", border: "none", width: "100%", textAlign: "center", display: "block" }}
+              style={{ background: "var(--fw-paper)", color: "var(--fw-forest)", border: "none", width: "100%", justifyContent: "center" }}
             >
-              Manage Market Venues <ArrowUpRight size={15} />
+              Manage markets <ArrowUpRight size={15} />
             </Link>
           </div>
         </aside>
       </div>
 
-      {/* Live Noticeboard Section */}
       <section className="fw-prep-card">
         <div className="fw-prep-header">
           <div>
-            <h2 style={{ fontSize: "20px", margin: "0 0 4px" }}>Active Platform Noticeboard</h2>
+            <h2 style={{ fontSize: "20px", margin: "0 0 4px" }}>Announcements</h2>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>
-              Official broadcast announcements visible to all customers and producers.
+              Shown to every customer and grower while published.
             </p>
           </div>
           <Link className="button secondary compact" to="/admin/announcements">
-            Manage Announcements <ArrowUpRight size={15} />
+            Manage <ArrowUpRight size={15} />
           </Link>
         </div>
-        {s.announcements.map((a) => (
-          <div key={a.id} className="record-row" style={{ padding: "14px 18px", marginBottom: "8px" }}>
-            <div style={{ flexGrow: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span className="fw-status-chip accepted" style={{ fontSize: "11px" }}>Published</span>
-                <strong style={{ fontSize: "15px" }}>{a.title}</strong>
+        {s.announcements.length ? (
+          s.announcements.map((a) => (
+            <div key={a.id} className="record-row" style={{ padding: "14px 18px", marginBottom: "8px" }}>
+              <div style={{ flexGrow: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
+                  <span className={`fw-status-chip ${a.published ? "accepted" : "declined"}`} style={{ fontSize: "11px" }}>
+                    {a.published ? "Published" : "Archived"}
+                  </span>
+                  <strong style={{ fontSize: "15px" }}>{a.title}</strong>
+                  {a.at && <span className="small muted">{date(a.at)}</span>}
+                </div>
+                <p style={{ margin: 0, fontSize: "13.5px", color: "var(--fw-muted)" }}>{a.body}</p>
               </div>
-              <p style={{ margin: 0, fontSize: "13.5px", color: "var(--fw-muted)" }}>{a.body}</p>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="muted">No announcements yet.</p>
+        )}
       </section>
     </div>
   );
@@ -364,7 +376,7 @@ function AdminFarmersHub() {
                 {f.state === "Approved" && (
                   <button
                     className="button secondary compact"
-                    style={{ color: "var(--fw-danger)", borderColor: "#f8c8c8" }}
+                    style={{ color: "var(--fw-danger)", borderColor: "#f6e8e4" }}
                     onClick={() => act({ type: "farmer", value: { ...f, state: "Suspended" } }, `${f.name} suspended.`)}
                   >
                     Suspend
@@ -570,7 +582,7 @@ function MarketEditor() {
             act({
               type: "market",
               value: {
-                id: m?.id ?? `demo-m-${crypto.randomUUID().slice(0, 8)}`,
+                id: m?.id ?? `new-market-${crypto.randomUUID().slice(0, 8)}`,
                 name: value(d, "name"),
                 area: value(d, "area"),
                 address: value(d, "address"),
@@ -629,6 +641,15 @@ function AdminModerationHub() {
   const s = useMarket();
   const act = useAction();
   const [tab, setTab] = useState<"all" | "products" | "reviews">("all");
+  const reviewGroups = {
+    pending: s.reviews.filter((r) => r.status === "pending"),
+    approved: s.reviews.filter((r) => r.visible),
+    hidden: s.reviews.filter((r) => !r.visible && r.status !== "pending"),
+  };
+  // Open on the queue when something is waiting.
+  const [reviewTab, setReviewTab] = useState<"pending" | "approved" | "hidden">(
+    reviewGroups.pending.length ? "pending" : "approved",
+  );
 
   return (
     <div className="farmer-workbench container">
@@ -690,27 +711,89 @@ function AdminModerationHub() {
 
       {(tab === "all" || tab === "reviews") && (
         <section style={{ marginTop: "32px" }}>
-          <h2 style={{ fontSize: "20px", marginBottom: "14px" }}>Customer Reviews Moderation</h2>
-          <div className="record-list">
-            {s.reviews.map((r) => (
-              <div key={r.id} className="record-row" style={{ padding: "14px 18px" }}>
-                <div className="grow">
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                    <span className={`fw-status-chip ${r.visible ? "accepted" : "declined"}`}>
-                      {r.visible ? "Published" : "Flagged/Hidden"}
-                    </span>
-                    <strong>{r.rating} / 5 Stars · Order: {r.orderId}</strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: "13.5px" }}>"{r.text}"</p>
-                </div>
-                <Confirm
-                  label={r.visible ? "Hide Review" : "Restore Review"}
-                  title="Moderate customer review visibility?"
-                  danger={r.visible}
-                  onConfirm={() => act({ type: "moderate", kind: "review", id: r.id })}
-                />
-              </div>
+          <h2 style={{ fontSize: "20px", marginBottom: "6px" }}>Customer reviews</h2>
+          <p style={{ margin: "0 0 14px", fontSize: "13.5px", color: "var(--fw-muted)" }}>
+            New reviews stay hidden until you approve them. Approved reviews appear on the grower’s stall and count
+            towards their stars.
+          </p>
+          <div className="fw-filter-pills" style={{ marginBottom: "14px" }}>
+            {(["pending", "approved", "hidden"] as const).map((k) => (
+              <button key={k} className={`fw-pill ${reviewTab === k ? "active" : ""}`} onClick={() => setReviewTab(k)}>
+                {k === "pending" ? "Waiting for approval" : k === "approved" ? "Published" : "Rejected / hidden"} (
+                {reviewGroups[k].length})
+              </button>
             ))}
+          </div>
+          <div className="record-list">
+            {reviewGroups[reviewTab].slice(0, 60).map((r) => {
+              const subject =
+                r.targetType === "product"
+                  ? s.products.find((p) => p.id === r.target)?.name
+                  : s.farmers.find((f) => f.id === r.target)?.name;
+              return (
+                <div key={r.id} className="record-row" style={{ padding: "14px 18px", alignItems: "flex-start" }}>
+                  <div className="grow">
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <span
+                        className={`fw-status-chip ${r.status === "pending" ? "placed" : r.visible ? "accepted" : "declined"}`}
+                      >
+                        {r.status === "pending" ? "Waiting" : r.visible ? "Published" : r.status === "rejected" ? "Rejected" : "Hidden"}
+                      </span>
+                      <strong>
+                        {"★".repeat(r.rating)}
+                        <span style={{ color: "var(--fw-muted)" }}>{"★".repeat(5 - r.rating)}</span> · {subject ?? "Unknown"}
+                      </strong>
+                      {r.verified && <span className="fw-status-chip accepted">Verified pickup</span>}
+                    </div>
+                    <p style={{ margin: "0 0 4px", fontSize: "14px" }}>“{r.text}”</p>
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--fw-muted)" }}>
+                      {r.author ?? "Customer"}
+                      {r.at ? ` · ${date(r.at.slice(0, 10))}` : ""}
+                      {r.reason ? ` · Reason: ${r.reason}` : ""}
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {!r.visible && (
+                      <button
+                        className="button compact"
+                        onClick={() =>
+                          act({ type: "review-status", id: r.id, status: "approved" }, "Review approved and published.")
+                        }
+                      >
+                        Approve
+                      </button>
+                    )}
+                    {r.status === "pending" && (
+                      <Confirm
+                        label="Reject"
+                        title="Reject this review?"
+                        danger
+                        onConfirm={() =>
+                          act({ type: "review-status", id: r.id, status: "rejected" }, "Review rejected. The customer has been told.")
+                        }
+                      >
+                        It will not be published and will not count towards the grower’s stars.
+                      </Confirm>
+                    )}
+                    {r.visible && (
+                      <Confirm
+                        label="Hide"
+                        title="Hide this published review?"
+                        danger
+                        onConfirm={() => act({ type: "review-status", id: r.id, status: "hidden" }, "Review hidden.")}
+                      >
+                        It will be removed from the stall and the grower’s stars will be recalculated.
+                      </Confirm>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {!reviewGroups[reviewTab].length && (
+              <p style={{ padding: "18px", color: "var(--fw-muted)" }}>
+                {reviewTab === "pending" ? "No reviews are waiting. You are all caught up." : "Nothing here."}
+              </p>
+            )}
           </div>
         </section>
       )}
@@ -820,7 +903,7 @@ function AdminAnnouncementsHub() {
                       type: "announcement",
                       value: {
                         ...draft,
-                        id: `demo-a-${crypto.randomUUID().slice(0, 8)}`,
+                        id: `new-announcement-${crypto.randomUUID().slice(0, 8)}`,
                         published: true,
                       },
                     },
@@ -857,40 +940,101 @@ function AdminAnnouncementsHub() {
 function AdminCustomersHub() {
   const s = useMarket();
   const act = useAction();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "paused">("all");
+  const q = query.trim().toLowerCase();
+  const list = s.customers.filter(
+    (c) =>
+      (filter === "all" || (filter === "active" ? c.active : !c.active)) &&
+      (!q || `${c.name} ${c.email} ${c.address}`.toLowerCase().includes(q)),
+  );
+  const activeCount = s.customers.filter((c) => c.active).length;
 
   return (
     <div className="farmer-workbench container">
       <div className="fw-header">
         <div>
-          <span className="fw-status-chip accepted">Customer Accounts</span>
-          <h1>Market Community Customers</h1>
+          <span className="fw-status-chip accepted">Customer accounts</span>
+          <h1>Customers</h1>
           <p className="fw-header-sub">
-            Manage customer accounts and access permissions across market locations.
+            {s.customers.length} registered · {activeCount} active ·{" "}
+            {s.customers.filter((c) => c.openOrders > 0).length} with open pickups
           </p>
         </div>
       </div>
 
-      <div className="record-row" style={{ padding: "18px 20px" }}>
-        <span className="avatar" style={{ background: "var(--fw-sage)", color: "var(--fw-forest)", fontWeight: "600" }}>
-          D
-        </span>
-        <div className="grow">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <h3 style={{ margin: 0, fontSize: "17px" }}>Demo Customer (Lahore Pilot)</h3>
-            <span className={`fw-status-chip ${s.customerActive ? "accepted" : "declined"}`}>
-              {s.customerActive ? "Active" : "Suspended"}
+      <div className="fw-toolbar">
+        <div className="fw-filter-group" role="group" aria-label="Filter customers">
+          {(["all", "active", "paused"] as const).map((f) => (
+            <button
+              key={f}
+              className={`fw-filter-btn ${filter === f ? "active" : ""}`}
+              aria-pressed={filter === f}
+              onClick={() => setFilter(f)}
+            >
+              {f === "all" ? `All (${s.customers.length})` : f === "active" ? `Active (${activeCount})` : `Paused (${s.customers.length - activeCount})`}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          className="fw-search"
+          placeholder="Search name, email or area"
+          aria-label="Search customers"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      <div className="data-table" role="table" aria-label="Customers">
+        <div className="data-row data-head" role="row">
+          <span role="columnheader">Customer</span>
+          <span role="columnheader">Orders</span>
+          <span role="columnheader">Booked value</span>
+          <span role="columnheader">Last market day</span>
+          <span role="columnheader">Status</span>
+          <span role="columnheader"><span className="visually-hidden">Actions</span></span>
+        </div>
+        {list.map((c) => (
+          <div className="data-row" role="row" key={c.id}>
+            <span role="cell" className="data-primary">
+              <span className="avatar small" aria-hidden="true">{c.name[0]}</span>
+              <span>
+                <strong>{c.name}</strong>
+                <small>{c.email} · {c.address}</small>
+              </span>
+            </span>
+            <span role="cell">
+              {c.orders}
+              {c.openOrders > 0 && <small> · {c.openOrders} open</small>}
+            </span>
+            <span role="cell">{money(c.valueMinor)}</span>
+            <span role="cell">{c.lastOrderDate ? date(c.lastOrderDate) : "—"}</span>
+            <span role="cell">
+              <span className={`fw-status-chip ${c.active ? "accepted" : "declined"}`}>
+                {c.active ? "Active" : "Paused"}
+              </span>
+            </span>
+            <span role="cell">
+              <Confirm
+                label={c.active ? "Pause" : "Reactivate"}
+                title={`${c.active ? "Pause" : "Reactivate"} ${c.name}?`}
+                danger={c.active}
+                onConfirm={() =>
+                  act(
+                    { type: "customer-active", id: c.id, value: !c.active },
+                    c.active ? `${c.name} can no longer sign in.` : `${c.name} can sign in again.`,
+                  )
+                }
+              >
+                {c.active
+                  ? "They will be signed out and cannot place new reservations. Their order history is kept."
+                  : "They will be able to sign in and reserve again."}
+              </Confirm>
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: "13px", color: "var(--fw-muted)" }}>customer@marketlink.test · {s.orders.length} lifetime reservations</p>
-        </div>
-        <Confirm
-          label={s.customerActive ? "Suspend Customer" : "Reactivate Customer"}
-          title={`${s.customerActive ? "Suspend" : "Reactivate"} customer?`}
-          danger={s.customerActive}
-          onConfirm={() => act({ type: "customer-active", value: !s.customerActive })}
-        >
-          Changes access status while preserving all historical order receipts.
-        </Confirm>
+        ))}
+        {!list.length && <p className="data-empty">No customers match this search.</p>}
       </div>
     </div>
   );

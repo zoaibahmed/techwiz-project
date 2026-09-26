@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { SELLING_UNITS } from './units.js';
 
 export const createProductSchema = z.object({
   name: z.string().min(2).max(100),
   description: z.string().max(1000).optional().default(''),
   categoryId: z.string().min(1, 'Category is required'),
-  unit: z.enum(['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item']),
+  unit: z.enum(SELLING_UNITS),
   basePriceMinor: z.number().int().positive('Base price must be a positive integer in minor units'),
   currency: z.string().default('PKR'),
   imageUrl: z.string().optional().default(''),

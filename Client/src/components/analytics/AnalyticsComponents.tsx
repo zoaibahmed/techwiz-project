@@ -24,14 +24,11 @@ export interface PeriodSelectorProps {
 }
 
 export const PERIOD_OPTIONS = [
-  { id: "today", label: "Today" },
-  { id: "7d", label: "Last 7 Days" },
-  { id: "30d", label: "Last 30 Days" },
-  { id: "this_week", label: "This Week" },
-  { id: "last_week", label: "Last Week" },
-  { id: "this_month", label: "This Month" },
-  { id: "last_month", label: "Last Month" },
-  { id: "custom", label: "Custom" },
+  { id: "7d", label: "Last 7 days" },
+  { id: "30d", label: "Last 30 days" },
+  { id: "90d", label: "Last 90 days" },
+  { id: "this_month", label: "This month" },
+  { id: "last_month", label: "Last month" },
 ];
 
 export function PeriodSelector({
@@ -140,7 +137,7 @@ export function MetricBlock({
   const isNeutral = hasComparison && comparison!.diffPct! === 0;
 
   return (
-    <div className={`an-kpi-card ${hero ? "hero" : ""}`}>
+    <div className={`an-kpi-card ${hero ? "an-kpi-hero" : ""}`}>
       <div className="an-kpi-card-top">
         <span className="an-kpi-label">{label}</span>
         {icon && <div className="an-kpi-icon">{icon}</div>}
@@ -514,12 +511,12 @@ export function TrendLineChart({
               top: `${(getY(visibleSeries[0] ? Number(hoveredData[visibleSeries[0].key]) || 0 : 0) / chartHeight) * 100}%`,
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: "4px", borderBottom: "1px solid #374151", paddingBottom: "2px" }}>
-              {hoveredData.date}
+            <div style={{ fontWeight: 600, marginBottom: "4px", borderBottom: "1px solid rgba(250, 248, 242, 0.25)", paddingBottom: "2px" }}>
+              {hoveredData.label || hoveredData.date}
             </div>
             {visibleSeries.map((s) => (
               <div key={s.key} style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                <span style={{ color: s.color, fontWeight: 500 }}>{s.label}:</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontWeight: 500 }}><i aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: s.color, display: "inline-block" }} />{s.label}</span>
                 <span>
                   {valuePrefix}{hoveredData[s.key] ?? 0}
                 </span>
@@ -665,7 +662,7 @@ export function StockHealthVisual({
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--an-muted)", marginTop: "4px" }}>
-        <span>Reserved: <strong style={{ color: "var(--an-harvest)" }}>{totalReservedStock}</strong> ({reservedPct}%)</span>
+        <span>Reserved: <strong style={{ color: "var(--harvest-700)" }}>{totalReservedStock}</strong> ({reservedPct}%)</span>
         <span>Available: <strong style={{ color: "var(--an-forest)" }}>{totalAvailableStock}</strong> ({availablePct}%)</span>
       </div>
 
@@ -880,7 +877,7 @@ export function AttentionCentrePanel({
           <AlertTriangle size={16} />
           <span>{title}</span>
         </div>
-        <span style={{ fontSize: "12px", color: "#9a3412", fontWeight: 500 }}>
+        <span style={{ fontSize: "12px", color: "#a14a3b", fontWeight: 500 }}>
           {activeItems.length} operational queue{activeItems.length === 1 ? "" : "s"} require administrator action
         </span>
       </div>

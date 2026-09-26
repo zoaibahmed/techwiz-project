@@ -6,7 +6,7 @@ import {
   formatMarketMoney,
   getAvailableDays,
 } from "./visitor";
-import { seed } from "./market";
+import { seed } from "./fixtures";
 
 describe("global discovery preferences", () => {
   it("searches the comprehensive ISO registry in English and Urdu", () => {

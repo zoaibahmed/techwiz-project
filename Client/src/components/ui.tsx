@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { ArrowUpRight, Heart, X, MapPin, ArrowRight } from "lucide-react";
 import { gateway } from "../data/gateway";
 import type { Command } from "../data/gateway";
-import type { Product, DemoState } from "../data/market";
+import type { Product, MarketState } from "../data/market";
 import { money, date } from "../data/market";
 
 export const useMarket = () =>
@@ -19,6 +19,8 @@ export const useMarket = () =>
 const ToastContext = createContext<(message: string) => void>(() => {});
 export function Feedback({ children }: { children: ReactNode }) {
   const [message, set] = useState("");
+  // Changes appear instantly; if the server later rejects one, say so here.
+  useEffect(() => gateway.onError((m) => set(m)), []);
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(() => set(""), 5500);
@@ -42,7 +44,7 @@ export function Feedback({ children }: { children: ReactNode }) {
 }
 export function useAction() {
   const toast = useContext(ToastContext);
-  return (command: Command, success = "Development preview updated.") => {
+  return (command: Command, success = "Saved.") => {
     try {
       gateway.dispatch(command);
       toast(success);
@@ -122,8 +124,8 @@ export function Favourite({ id }: { id: string }) {
         act(
           { type: "favourite", id },
           selected
-            ? "Removed from sample favourites."
-            : "Saved to sample favourites.",
+            ? "Removed from favourites."
+            : "Saved to favourites.",
         )
       }
     >
@@ -274,7 +276,7 @@ export function Confirm({
         <Modal title={title} onClose={() => set(false)}>
           <div className="confirmation-copy">
             {children ??
-              "This changes the development fixture only. Review the action before continuing."}
+              "Review the change before continuing."}
           </div>
           <div className="actions">
             <button
@@ -344,7 +346,7 @@ export function SchematicMap({
 }: {
   selected: string;
   onSelect: (id: string) => void;
-  markets: DemoState["markets"];
+  markets: MarketState["markets"];
 }) {
   return (
     <div className="map-panel">
@@ -353,18 +355,18 @@ export function SchematicMap({
         aria-hidden="true"
         preserveAspectRatio="xMidYMid slice"
       >
-        <rect width="700" height="600" fill="#EBEFE5" />
+        <rect width="700" height="600" fill="#e8ede3" />
         <path
           d="M500 -50 C280 140 670 270 440 400 S400 650 500 650"
-          stroke="#C6DDE0"
+          stroke="#d6dcd1"
           strokeWidth="65"
           fill="none"
         />
-        <g stroke="#FAF8F2" strokeWidth="22" fill="none">
+        <g stroke="#faf8f2" strokeWidth="22" fill="none">
           <path d="M-10 130 L700 430 M90 -20 L260 620 M-10 420 L750 160 M380 -20 L500 620" />
           <path d="M-10 280 L720 540 M-10 550 L600 -10" strokeWidth="10" />
         </g>
-        <g fill="#D6E1CC">
+        <g fill="#dfe6d8">
           <rect x="60" y="45" width="100" height="70" rx="20" />
           <rect x="285" y="345" width="80" height="100" rx="20" />
           <rect x="550" y="80" width="100" height="70" rx="20" />
@@ -402,5 +404,19 @@ export function MarketDate({ day }: { day: string }) {
       <strong>{new Date(`${day}T12:00:00`).getDate()}</strong>
       <span>{date(day).split(" ")[0]} · Oct</span>
     </span>
+  );
+}
+
+/** Opens turn-by-turn directions to a market's pickup location. */
+export function DirectionsLink({ market }: { market?: MarketState["markets"][number] }) {
+  if (!market) return null;
+  const c = market.coordinates;
+  const href = c
+    ? `https://www.google.com/maps/dir/?api=1&destination=${c.latitude},${c.longitude}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(market.address)}`;
+  return (
+    <a className="button secondary directions-link" href={href} target="_blank" rel="noreferrer">
+      <MapPin size={16} /> Directions to {market.name}
+    </a>
   );
 }

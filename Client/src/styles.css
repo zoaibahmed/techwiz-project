@@ -5,17 +5,14 @@
 @import "@fontsource/public-sans/latin-600.css";
 :root {
   font-family: "Public Sans", sans-serif;
-  color: #242b23;
-  background: #faf8f2;
+  color: var(--ink);
+  background: var(--paper);
   font-synthesis: none;
-  --forest: #183b2b;
-  --deep: #0f291d;
-  --paper: #faf8f2;
-  --ink: #242b23;
-  --muted: #5a665c;
-  --soft: #e8ede3;
-  --harvest: #c98646;
-  --border: #d6dcd1;
+  --forest: var(--forest-900);
+  --deep: var(--forest-950);
+  --soft: var(--sage-100);
+  --harvest: var(--harvest-500);
+  --border: var(--sage-300);
   line-height: 1.55;
   font-size: 16px;
 }
@@ -92,7 +89,7 @@ hr {
   margin: 24px 0;
 }
 :focus-visible {
-  outline: 3px solid #245ba8;
+  outline: 3px solid var(--muted);
   outline-offset: 4px;
 }
 h1:focus {
@@ -194,7 +191,7 @@ small {
 .button.secondary {
   background: transparent;
   color: var(--forest);
-  border-color: #82907e;
+  border-color: var(--muted-soft);
 }
 .button.secondary:hover {
   background: var(--soft);
@@ -205,9 +202,9 @@ small {
   border-color: transparent;
 }
 .button.danger {
-  background: #faeae6;
-  border-color: #a1352b;
-  color: #a1352b;
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 .button.inverse {
   background: var(--paper);
@@ -283,7 +280,7 @@ small {
   font-size: 12px;
 }
 .demo-controls button {
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   border-radius: 4px;
   padding: 6px 10px;
 }
@@ -557,7 +554,7 @@ small {
 .steps > div > span {
   font-family: "Newsreader";
   font-size: 28px;
-  border-bottom: 1px solid #82907e;
+  border-bottom: 1px solid var(--muted-soft);
   display: block;
   padding-bottom: 18px;
   margin-bottom: 22px;
@@ -634,11 +631,11 @@ small {
 }
 .footer-bottom {
   grid-column: 1/-1;
-  border-top: 1px solid #46614e;
+  border-top: 1px solid var(--forest-600);
   padding-top: 24px;
   display: flex;
   justify-content: space-between;
-  color: #c5d0be;
+  color: var(--sage-400);
   margin: 0;
 }
 .page-heading {
@@ -667,7 +664,7 @@ small {
   align-items: center;
   gap: 10px;
   background: white;
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   border-radius: 6px;
   padding: 0 14px;
   max-width: 560px;
@@ -690,8 +687,8 @@ small {
 input:not([type="checkbox"], [type="radio"], [type="range"]),
 select,
 textarea {
-  background: #fff;
-  border: 1px solid #82907e;
+  background: var(--white);
+  border: 1px solid var(--muted-soft);
   border-radius: 5px;
   min-height: 48px;
   color: var(--ink);
@@ -756,12 +753,12 @@ input[type="radio"] {
   margin-bottom: 0;
 }
 .error {
-  color: #a1352b;
+  color: var(--danger);
 }
 .empty {
   padding: 60px 28px;
   text-align: center;
-  border: 1px dashed #a5b89a;
+  border: 1px dashed var(--forest-300);
   border-radius: 8px;
   margin: 24px 0;
 }
@@ -949,7 +946,7 @@ input[type="radio"] {
 }
 .quantity {
   display: flex;
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   border-radius: 6px;
   background: white;
   width: 140px;
@@ -1021,7 +1018,7 @@ input[type="radio"] {
 }
 .password-field {
   display: flex;
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   background: white;
   border-radius: 5px;
   padding-right: 12px;
@@ -1032,7 +1029,7 @@ input[type="radio"] {
   width: 100%;
 }
 .choice {
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   border-radius: 8px;
   padding: 24px;
   display: block;
@@ -1075,7 +1072,7 @@ details p {
 }
 .sidebar-label {
   font-size: 12px;
-  color: #c6d6c0;
+  color: var(--sage-400);
   padding: 0 16px;
 }
 .sidebar nav {
@@ -1090,7 +1087,7 @@ details p {
 }
 .sidebar nav a:hover {
   color: white;
-  background: #244c37;
+  background: var(--forest-800);
 }
 .sidebar nav a.active {
   background: var(--paper);
@@ -1193,7 +1190,7 @@ details p {
   margin-top: 8px;
 }
 .timeline-content {
-  border-left: 1px solid #a5b89a;
+  border-left: 1px solid var(--forest-300);
   padding: 0 0 40px 30px;
   position: relative;
 }
@@ -1219,7 +1216,7 @@ details p {
   font-size: 11px;
   font-weight: 500;
   padding: 5px 10px;
-  border: 1px solid #98a491;
+  border: 1px solid var(--forest-400);
   background: var(--paper);
   color: var(--forest);
   display: inline-block;
@@ -1385,7 +1382,7 @@ details p {
   border-radius: 12px;
 }
 .passport .eyebrow {
-  color: #ccd9c4;
+  color: var(--sage-400);
 }
 .passport h2 {
   font-size: 38px;
@@ -1397,7 +1394,7 @@ details p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-block: 1px solid #53705b;
+  border-block: 1px solid var(--forest-600);
   padding: 22px 0;
   margin: 24px 0;
 }
@@ -1817,7 +1814,7 @@ fieldset {
   margin: 20px 0;
 }
 .suggestions button {
-  border: 1px solid #82907e;
+  border: 1px solid var(--muted-soft);
   border-radius: 6px;
   padding: 12px;
   text-align: left;

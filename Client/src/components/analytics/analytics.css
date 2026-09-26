@@ -3,29 +3,29 @@
    Solid color palette, editorial typography, purposeful SVG micro-interactions. */
 
 :root {
-  --an-forest: #183b2b;
-  --an-deep: #0f291d;
-  --an-sage: #e8ede3;
-  --an-sage-subtle: #f4f7f2;
-  --an-paper: #faf8f2;
-  --an-card: #ffffff;
-  --an-ink: #242b23;
-  --an-muted: #5a665c;
-  --an-border: #d6dcd1;
-  --an-border-light: #eaeee6;
+  --an-forest: var(--forest-900);
+  --an-deep: var(--forest-950);
+  --an-sage: var(--sage-100);
+  --an-sage-subtle: var(--sage-50);
+  --an-paper: var(--paper);
+  --an-card: var(--white);
+  --an-ink: var(--ink);
+  --an-muted: var(--muted);
+  --an-border: var(--sage-300);
+  --an-border-light: var(--sage-100);
   
-  --an-placed: #3b82f6;
-  --an-placed-bg: #eff6ff;
-  --an-accepted: #10b981;
-  --an-accepted-bg: #ecfdf5;
-  --an-ready: #8b5cf6;
-  --an-ready-bg: #f5f3ff;
-  --an-completed: #183b2b;
-  --an-completed-bg: #e8ede3;
-  --an-cancelled: #dc2626;
-  --an-cancelled-bg: #fef2f2;
-  --an-harvest: #c98646;
-  --an-harvest-bg: #fef5ea;
+  --an-placed: var(--muted);
+  --an-placed-bg: var(--white);
+  --an-accepted: var(--forest-400);
+  --an-accepted-bg: var(--sage-50);
+  --an-ready: var(--muted);
+  --an-ready-bg: var(--white);
+  --an-completed: var(--forest-900);
+  --an-completed-bg: var(--sage-100);
+  --an-cancelled: var(--danger);
+  --an-cancelled-bg: var(--danger-soft);
+  --an-harvest: var(--harvest-500);
+  --an-harvest-bg: var(--harvest-50);
 }
 
 /* Period Selector Bar */
@@ -69,7 +69,7 @@
 
 .an-period-btn.active {
   background: var(--an-forest);
-  color: #ffffff;
+  color: var(--white);
   border-color: var(--an-forest);
 }
 
@@ -96,14 +96,14 @@
   font-size: 12px;
   border: 1px solid var(--an-border);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--white);
   color: var(--an-ink);
 }
 
 /* Operational Attention Panel */
 .an-attention-panel {
-  background: #ffffff;
-  border: 1px solid #fed7aa;
+  background: var(--white);
+  border: 1px solid var(--harvest-200);
   border-left: 4px solid var(--an-harvest);
   border-radius: 8px;
   padding: 18px 20px;
@@ -123,7 +123,7 @@
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #9a3412;
+  color: var(--danger);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -140,9 +140,9 @@
   justify-content: space-between;
   padding: 10px 14px;
   background: var(--an-harvest-bg);
-  border: 1px solid #ffedd5;
+  border: 1px solid var(--harvest-100);
   border-radius: 6px;
-  color: #7c2d12;
+  color: var(--danger);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
@@ -150,13 +150,13 @@
 }
 
 .an-attention-item:hover {
-  background: #fed7aa;
+  background: var(--harvest-200);
   transform: translateY(-1px);
 }
 
 .an-attention-count {
-  background: #ea580c;
-  color: #ffffff;
+  background: var(--harvest-500);
+  color: var(--white);
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
@@ -184,7 +184,7 @@
   border-color: var(--an-forest);
 }
 
-.an-kpi-card.hero {
+.an-kpi-card.an-kpi-hero {
   border-top: 3px solid var(--an-forest);
 }
 
@@ -244,12 +244,12 @@
 
 .an-change-pill.positive {
   background: var(--an-accepted-bg);
-  color: #065f46;
+  color: var(--forest-800);
 }
 
 .an-change-pill.negative {
   background: var(--an-cancelled-bg);
-  color: #991b1b;
+  color: var(--danger);
 }
 
 .an-change-pill.neutral {
@@ -260,7 +260,7 @@
 /* Secondary Compact Indicators Bar */
 .an-secondary-stats-bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 12px;
   background: var(--an-sage-subtle);
   border: 1px solid var(--an-border-light);
@@ -435,8 +435,8 @@
 .an-chart-tooltip {
   position: absolute;
   pointer-events: none;
-  background: #111827;
-  color: #f9fafb;
+  background: var(--ink);
+  color: var(--white);
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 12px;
@@ -527,8 +527,8 @@
 
 .an-stock-callout-pill.alert {
   background: var(--an-cancelled-bg);
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  color: var(--danger);
+  border: 1px solid var(--danger-soft);
 }
 
 .an-stock-callout-pill.info {
@@ -539,8 +539,8 @@
 
 .an-stock-callout-pill.warning {
   background: var(--an-harvest-bg);
-  color: #9a3412;
-  border: 1px solid #fed7aa;
+  color: var(--danger);
+  border: 1px solid var(--harvest-200);
 }
 
 /* Pickup Workload Histogram */
@@ -617,7 +617,7 @@
 
 .an-ranked-tab.active {
   background: var(--an-forest);
-  color: #ffffff;
+  color: var(--white);
 }
 
 .an-table {

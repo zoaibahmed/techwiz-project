@@ -1,33 +1,33 @@
 /* ANTIGRAVITY | MARKETLINK PUBLIC EXPERIENCE STYLING
    STRICT ADHERENCE: NO GRADIENTS.
    Solid color palette:
-   --pe-forest: #183b2b (deep forest green)
-   --pe-deep: #0f291d (rich dark green)
-   --pe-paper: #faf8f2 (warm ivory)
-   --pe-cream: #f4f0e6 (soft parchment)
-   --pe-sage: #e8ede3 (delicate sage)
-   --pe-sage-dark: #65806e (muted sage)
-   --pe-ink: #242b23 (editorial dark charcoal)
-   --pe-muted: #5a665c (soft muted text)
-   --pe-harvest: #c98646 (warm harvest amber)
-   --pe-harvest-light: #fef5ea (soft amber cream)
-   --pe-border: #d6dcd1 (fine structural line)
-   --pe-border-subtle: #e8ede3 (subtle separator)
+   --pe-forest: var(--forest-900) (deep forest green)
+   --pe-deep: var(--forest-950) (rich dark green)
+   --pe-paper: var(--paper) (warm ivory)
+   --pe-cream: var(--harvest-50) (soft parchment)
+   --pe-sage: var(--sage-100) (delicate sage)
+   --pe-sage-dark: var(--forest-500) (muted sage)
+   --pe-ink: var(--ink) (editorial dark charcoal)
+   --pe-muted: var(--muted) (soft muted text)
+   --pe-harvest: var(--harvest-500) (warm harvest amber)
+   --pe-harvest-light: var(--harvest-50) (soft amber cream)
+   --pe-border: var(--sage-300) (fine structural line)
+   --pe-border-subtle: var(--sage-100) (subtle separator)
 */
 
 .public-experience {
-  --pe-forest: #183b2b;
-  --pe-deep: #0f291d;
-  --pe-paper: #faf8f2;
-  --pe-cream: #f4f0e6;
-  --pe-sage: #e8ede3;
-  --pe-sage-dark: #65806e;
-  --pe-ink: #242b23;
-  --pe-muted: #5a665c;
-  --pe-harvest: #c98646;
-  --pe-harvest-light: #fef5ea;
-  --pe-border: #d6dcd1;
-  --pe-border-subtle: #e8ede3;
+  --pe-forest: var(--forest-900);
+  --pe-deep: var(--forest-950);
+  --pe-paper: var(--paper);
+  --pe-cream: var(--harvest-50);
+  --pe-sage: var(--sage-100);
+  --pe-sage-dark: var(--forest-500);
+  --pe-ink: var(--ink);
+  --pe-muted: var(--muted);
+  --pe-harvest: var(--harvest-500);
+  --pe-harvest-light: var(--harvest-50);
+  --pe-border: var(--sage-300);
+  --pe-border-subtle: var(--sage-100);
   --pe-radius: 6px;
   color: var(--pe-ink);
 }
@@ -105,7 +105,7 @@
   display: inline-block;
   background: var(--pe-harvest-light);
   color: var(--pe-harvest);
-  border: 1px solid #f3d4b0;
+  border: 1px solid var(--harvest-200);
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
@@ -188,7 +188,7 @@
 }
 
 .pe-market-card {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   padding: 24px;
@@ -205,7 +205,7 @@
 .pe-market-card.selected {
   border-color: var(--pe-forest);
   border-left: 5px solid var(--pe-forest);
-  background: #fdfcf9;
+  background: var(--paper-bright);
 }
 
 .pe-market-card-top {
@@ -266,7 +266,7 @@
 }
 
 .pe-grower-card {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   overflow: hidden;
@@ -397,7 +397,7 @@
 }
 
 .pe-produce-card {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   overflow: hidden;
@@ -435,7 +435,7 @@
   bottom: 8px;
   left: 8px;
   background: rgba(24, 59, 43, 0.9);
-  color: #ffffff;
+  color: var(--white);
   font-size: 10.5px;
   font-weight: 600;
   padding: 3px 8px;
@@ -547,7 +547,7 @@
 .pe-journey-banner p {
   font-size: 16px;
   line-height: 1.6;
-  color: #c5d3c1;
+  color: var(--sage-400);
   margin: 0 0 24px;
 }
 
@@ -561,8 +561,8 @@
   display: flex;
   align-items: start;
   gap: 14px;
-  background: #122e22;
-  border: 1px solid #234735;
+  background: var(--forest-950);
+  border: 1px solid var(--forest-800);
   padding: 16px 20px;
   border-radius: 4px;
 }
@@ -576,7 +576,7 @@
 
 .pe-journey-feat-item span {
   font-size: 13px;
-  color: #a8baa3;
+  color: var(--forest-300);
 }
 
 /* 7. FOUR EDITORIAL STEPS WALKTHROUGH */
@@ -588,7 +588,7 @@
 }
 
 .pe-step-card {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   padding: 28px 24px;
@@ -637,7 +637,7 @@
 }
 
 .pe-faq-item {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   padding: 20px 24px;
@@ -680,7 +680,7 @@
 }
 
 .pe-detail-panel {
-  background: #ffffff;
+  background: var(--white);
   border: 1px solid var(--pe-border);
   border-radius: var(--pe-radius);
   padding: 36px;

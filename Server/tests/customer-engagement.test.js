@@ -24,6 +24,7 @@ describe('MarketLink Phase 4 Customer Engagement, Favourites, Reviews & Alerts T
   let completedOrderId = '';
   let placedOrderId = '';
   let createdReviewFarmerId = '';
+  let createdReviewProductId = '';
   let createdRestockAlertId = '';
 
   beforeAll(async () => {
@@ -383,6 +384,9 @@ describe('MarketLink Phase 4 Customer Engagement, Favourites, Reviews & Alerts T
       expect(res.status).toBe(201);
       expect(res.body.data.rating).toBe(5);
       expect(res.body.data.targetType).toBe('farmer');
+      // New reviews wait for an administrator before they are published.
+      expect(res.body.data.moderationStatus).toBe('pending');
+      expect(res.body.data.verified).toBe(true);
       createdReviewFarmerId = res.body.data.id;
     });
 
@@ -419,6 +423,52 @@ describe('MarketLink Phase 4 Customer Engagement, Favourites, Reviews & Alerts T
       expect(res.status).toBe(201);
       expect(res.body.data.targetType).toBe('product');
       expect(res.body.data.rating).toBe(5);
+      createdReviewProductId = res.body.data.id;
+    });
+
+    it('POST /api/v1/reviews requires sign-in', async () => {
+      const res = await request(app)
+        .post('/api/v1/reviews')
+        .send({ targetType: 'farmer', targetId: farmerProfile._id.toString(), rating: 5, comment: 'Lovely stall.' });
+      // Refused before it reaches the review service (CSRF or auth).
+      expect([401, 403]).toContain(res.status);
+    });
+
+    it('A signed-in customer can review a stall without an order; it waits for approval', async () => {
+      const send = () =>
+        request(app)
+          .post('/api/v1/reviews')
+          .set('Cookie', [`token=${customerToken}`, `marketlink_csrf=${csrfToken}`])
+          .set('x-csrf-token', csrfToken)
+          .send({ targetType: 'farmer', targetId: farmerProfile._id.toString(), rating: 4, comment: 'Friendly stall and honest weights.' });
+      const res = await send();
+      expect(res.status).toBe(201);
+      expect(res.body.data.moderationStatus).toBe('pending');
+      expect(res.body.data.orderId).toBeNull();
+      expect(res.body.data.targetId).toBe(farmerProfile._id.toString());
+
+      const again = await send();
+      expect(again.status).toBe(409);
+      expect(again.body.error.message).toMatch(/waiting for approval/);
+    });
+
+    it('Pending reviews stay off the public feed until an admin approves them', async () => {
+      const before = await request(app).get(`/api/v1/reviews/farmer/${farmerUser._id}`);
+      expect(before.status).toBe(200);
+      expect(before.body.data.reviews.some((r) => r.id === createdReviewFarmerId)).toBe(false);
+
+      for (const id of [createdReviewFarmerId, createdReviewProductId]) {
+        const res = await request(app)
+          .patch(`/api/v1/admin/reviews/${id}/status`)
+          .set('Cookie', [`token=${adminToken}`, `marketlink_csrf=${csrfToken}`])
+          .set('x-csrf-token', csrfToken)
+          .send({ moderationStatus: 'approved' });
+        expect(res.status).toBe(200);
+        expect(res.body.data.moderationStatus).toBe('approved');
+      }
+
+      const after = await request(app).get(`/api/v1/reviews/farmer/${farmerUser._id}`);
+      expect(after.body.data.reviews.some((r) => r.id === createdReviewFarmerId)).toBe(true);
     });
 
     it('GET /api/v1/reviews/farmer/:id provides public review feed and average rating', async () => {

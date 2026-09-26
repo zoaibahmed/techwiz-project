@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SELLING_UNITS } from './units.js';
 
 export const createStockOfferSchema = z.object({
   marketId: z.string().min(1, 'Market ID is required'),
@@ -6,7 +7,7 @@ export const createStockOfferSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   priceMinor: z.number().int().positive('Price must be a positive integer in minor units'),
   totalQuantity: z.number().positive('Total quantity must be greater than 0'),
-  unit: z.enum(['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item']),
+  unit: z.enum(SELLING_UNITS),
   currency: z.string().default('PKR'),
 });
 
@@ -22,7 +23,7 @@ export const updateWeeklyTemplateSchema = z.object({
       productId: z.string().min(1),
       defaultQuantity: z.number().positive(),
       defaultPriceMinor: z.number().int().positive(),
-      unit: z.enum(['kg', 'g', 'bunch', 'box', 'dozen', 'litre', 'item']),
+      unit: z.enum(SELLING_UNITS),
     })
   ),
 });

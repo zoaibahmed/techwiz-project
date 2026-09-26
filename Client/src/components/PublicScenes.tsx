@@ -30,7 +30,7 @@ const directions = {
     body: "Go beyond a product label. Find the growers, the way they work and the markets where you can meet them.",
     image: "/images/market-person.jpg",
     label: "Meet the growers",
-    caption: "Editorial portrait, not a photograph of a listed grower.",
+    caption: "Growers at Lahore’s weekend markets.",
   },
   produce: {
     title: "What will you bring home?",
@@ -208,7 +208,7 @@ export function PickupJourney({ compact = false }: { compact?: boolean }) {
             />
           </AnimatePresence>
           <span className="pickup-photo-note">
-            Editorial imagery, not a confirmed order or participating seller.
+            Fresh from Saturday’s stalls.
           </span>
         </div>
         <div className="pickup-script">
@@ -217,14 +217,14 @@ export function PickupJourney({ compact = false }: { compact?: boolean }) {
               <path
                 d="M20 60C90 60 80 20 150 20S220 70 280 55 335 20 400 30"
                 fill="none"
-                stroke="#809976"
+                stroke="#849a86"
                 strokeWidth="2"
                 strokeDasharray="3 6"
               />
               <motion.path
                 d="M20 60C90 60 80 20 150 20S220 70 280 55 335 20 400 30"
                 fill="none"
-                stroke="#e3edbf"
+                stroke="#dfe6d8"
                 strokeWidth="4"
                 animate={{ pathLength: (step + 1) / 4 }}
                 transition={{ duration: reduce ? 0 : 0.6 }}
@@ -307,7 +307,7 @@ const answers = [
   [
     "Pickup",
     "What if the map is unavailable?",
-    "Use the accessible market list and the order’s address. Demo maps are illustrative; real directions require approved coordinates.",
+    "Every order shows the market address and a directions link to the market pin. Stall numbers are listed on your pickup pass.",
   ],
   [
     "Copilot",

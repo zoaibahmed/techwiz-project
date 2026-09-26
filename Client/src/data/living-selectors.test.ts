@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { seed } from "./market";
+import { seed } from "./fixtures";
 import { marketDayView } from "./living-selectors";
 
 describe("market day workspace", () => {

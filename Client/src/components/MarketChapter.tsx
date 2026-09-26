@@ -43,7 +43,7 @@ export function MarketChapter({kind}:{kind:keyof typeof chapters}){
     <figure className="chapter-picture chapter-picture-detail"><img src={chapter.detail} alt="" loading="lazy"/></figure>
     <h2 className="chapter-statement">{chapter.title}</h2>
    </div>
-   <div className="chapter-foot"><p>{chapter.note}</p><small>Editorial photography · browse the actual listings below</small><span className="chapter-line"/></div>
+   <div className="chapter-foot"><p>{chapter.note}</p><span className="chapter-line"/></div>
   </div>
  </div>;
 }

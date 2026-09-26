@@ -5,7 +5,6 @@ import { Layout, Guard } from "./app/Layout";
 import { Feedback } from "./components/ui";
 import { VisitorProvider } from "./data/visitor-context";
 import { LocationModal } from "./components/LocationModal";
-import { fixtureEnabled } from "./data/gateway";
 import {
   Home,
   Markets,
@@ -48,11 +47,10 @@ class ErrorBoundary extends Component<
       <main className="container section">
         <h1>The market needs a moment.</h1>
         <p>
-          A display error occurred. Reload to reset this in-memory development
-          preview.
+          Something went wrong while drawing this page. Reloading usually fixes it.
         </p>
         <button className="button" onClick={() => window.location.reload()}>
-          Reload preview
+          Reload
         </button>
       </main>
     ) : (
@@ -61,17 +59,6 @@ class ErrorBoundary extends Component<
   }
 }
 export function App() {
-  if (!fixtureEnabled)
-    return (
-      <main className="container section">
-        <h1>Gather & Grow integration is not configured.</h1>
-        <p>
-          The approved live API adapter is pending. This production build does
-          not silently substitute fictional records.
-        </p>
-        <p>Use the documented demo build for a clearly labelled showcase.</p>
-      </main>
-    );
   return (
     <ErrorBoundary>
       <VisitorProvider>

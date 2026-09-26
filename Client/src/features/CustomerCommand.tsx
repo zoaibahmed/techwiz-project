@@ -17,7 +17,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useMarket, useAction, Status } from "../components/ui";
 import { MarketMap } from "../components/MarketMap";
 import { marketDayView } from "../data/living-selectors";
-import { date, time, money, total, demoDate } from "../data/market";
+import { date, time, money, total, orderRef } from "../data/market";
 import { localization } from "../data/localization";
 import { useCompanion } from "../app/companion-context";
 import { HarvestItem } from "../components/HarvestItem";
@@ -27,7 +27,17 @@ export function CustomerCommand() {
   const act = useAction();
   const openCompanion = useCompanion();
   const reduce = useReducedMotion();
-  const [day, setDay] = useState(demoDate);
+  const [dayChoice, setDay] = useState("");
+  // Default to the day of the customer's next pickup, else the next market day.
+  const today = s.now.slice(0, 10);
+  const day =
+    dayChoice ||
+    s.orders
+      .filter((o) => ["Placed", "Accepted", "Ready for pickup"].includes(o.stage) && (o.marketDate ?? "") >= today)
+      .map((o) => o.marketDate as string)
+      .sort()[0] ||
+    [...s.markets].filter((m) => m.active && m.day).map((m) => m.day).sort()[0] ||
+    "";
   const [selected, setSelected] = useState(s.markets[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [orderFilter, setOrderFilter] = useState("all");
@@ -160,7 +170,7 @@ export function CustomerCommand() {
                 <br />
                 {localization.city}, {localization.country}
                 <br />
-                <span>Fictional markets. Real map pending.</span>
+                <span>{s.markets.filter((m) => m.active && m.day === day).length} markets open this day</span>
               </div>
             </div>
           </div>
@@ -268,7 +278,7 @@ export function CustomerCommand() {
             <button onClick={openCompanion}>
               Ask your companion <ArrowUpRight size={15} />
             </button>
-            <small>Scripted preview · no live AI connection</small>
+            <small>Answers from your live orders and today’s market</small>
           </section>
           <section className="command-checklist">
             <div className="command-panel-heading">
@@ -296,7 +306,7 @@ export function CustomerCommand() {
                   onChange={() =>
                     act(
                       { type: "check", id },
-                      "Sample market-day checklist updated.",
+                      "Checklist updated.",
                     )
                   }
                 />
@@ -330,7 +340,7 @@ export function CustomerCommand() {
               <tbody>
                 {history.map((o) => (
                   <tr key={o.id}>
-                    <td>{o.id}</td>
+                    <td>{orderRef(o)}</td>
                     <td>{s.farmers.find((f) => f.id === o.farmerId)?.name}</td>
                     <td>
                       {date(
@@ -392,8 +402,7 @@ export function CustomerCommand() {
         </aside>
       </div>
       <p className="command-footnote">
-        Development fixtures · {localization.timeZone} · payments happen
-        physically at pickup · refresh resets simulated changes
+        Times in {localization.timeZone} · payment is made at the stall when you collect
       </p>
     </div>
   );

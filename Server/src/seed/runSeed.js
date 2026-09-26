@@ -1,66 +1,49 @@
 import { connectDB, closeDB, getDB } from '../config/db.js';
 import { setupDatabaseIndexes } from '../config/indexes.js';
+import { env } from '../config/env.js';
 import { generateSeedData } from './seedData.js';
 
+const COLLECTIONS = [
+  'users',
+  'farmerProfiles',
+  'markets',
+  'categories',
+  'products',
+  'pickupWindows',
+  'stockOffers',
+  'orders',
+  'reviews',
+  'favourites',
+  'restockAlerts',
+  'weeklyStockTemplates',
+  'notifications',
+  'announcements',
+  'contactInquiries',
+];
+const CLEARED_ONLY = ['auditLogs', 'aiActionDrafts'];
+
+/** Replace every MarketLink collection in the active database with the seed dataset. */
+export async function seedDatabase(db, options = {}) {
+  await setupDatabaseIndexes(db);
+  const seed = await generateSeedData(options);
+  for (const name of [...COLLECTIONS, ...CLEARED_ONLY]) {
+    await db.collection(name).deleteMany({});
+  }
+  for (const name of COLLECTIONS) {
+    if (seed[name]?.length) await db.collection(name).insertMany(seed[name]);
+  }
+  return seed;
+}
+
 export async function runSeed() {
-  console.log('--- SEEDING MARKETLINK DEMONSTRATION DATA (LAHORE) ---');
+  console.log(`--- SEEDING MARKETLINK (${env.MONGODB_DB_NAME}) ---`);
   try {
     await connectDB();
-    const db = getDB();
-
-    // 1. Establish indexes
-    await setupDatabaseIndexes(db);
-
-    // 2. Generate seed data
-    const seed = await generateSeedData();
-
-    // 3. Clear existing development collections safely
-    const collectionNames = [
-      'users',
-      'farmerProfiles',
-      'markets',
-      'categories',
-      'products',
-      'pickupWindows',
-      'stockOffers',
-      'orders',
-      'reviews',
-      'favourites',
-      'notifications',
-      'auditLogs',
-      'aiActionDrafts',
-    ];
-
-    for (const name of collectionNames) {
-      await db.collection(name).deleteMany({});
+    const seed = await seedDatabase(getDB());
+    for (const name of COLLECTIONS) {
+      console.log(` - ${name.padEnd(22)} ${seed[name]?.length ?? 0}`);
     }
-    console.log('[Seed] Cleared existing development records.');
-
-    // 4. Insert seed collections
-    await db.collection('users').insertMany(seed.users);
-    await db.collection('farmerProfiles').insertMany(seed.farmerProfiles);
-    await db.collection('markets').insertMany(seed.markets);
-    await db.collection('categories').insertMany(seed.categories);
-    await db.collection('products').insertMany(seed.products);
-    await db.collection('pickupWindows').insertMany(seed.pickupWindows);
-    await db.collection('stockOffers').insertMany(seed.stockOffers);
-    await db.collection('orders').insertMany(seed.orders);
-    await db.collection('reviews').insertMany(seed.reviews);
-    await db.collection('favourites').insertMany(seed.favourites);
-    await db.collection('notifications').insertMany(seed.notifications);
-
-    console.log('[Seed] Successfully populated demonstration dataset:');
-    console.log(` - Users: ${seed.users.length}`);
-    console.log(` - Farmer Profiles: ${seed.farmerProfiles.length}`);
-    console.log(` - Markets: ${seed.markets.length}`);
-    console.log(` - Categories: ${seed.categories.length}`);
-    console.log(` - Products: ${seed.products.length}`);
-    console.log(` - Stock Offers: ${seed.stockOffers.length}`);
-    console.log(` - Orders: ${seed.orders.length}`);
-    console.log(` - Reviews: ${seed.reviews.length}`);
-    console.log(` - Favourites: ${seed.favourites.length}`);
     console.log('--- SEED COMPLETE ---');
-
     return seed;
   } catch (err) {
     console.error('[Seed Error]:', err.message);

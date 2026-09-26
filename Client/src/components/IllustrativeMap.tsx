@@ -25,8 +25,8 @@ export function IllustrativeMap({
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <rect width="800" height="480" fill="#e9eadc" />
-          <g fill="#d8e0c7" stroke="#cbd6b9" strokeWidth="1">
+          <rect width="800" height="480" fill="#e8ede3" />
+          <g fill="#dfe6d8" stroke="#c3ccb8" strokeWidth="1">
             <path d="M32 24H180V137H48Z" />
             <path d="M315 32H434L474 131H332Z" />
             <path d="M100 322H260L239 455H63Z" />
@@ -36,16 +36,16 @@ export function IllustrativeMap({
           <path
             d="M470 -30C384 90 592 175 476 263S489 410 548 510"
             fill="none"
-            stroke="#afc9ca"
+            stroke="#d6dcd1"
             strokeWidth="57"
           />
           <path
             d="M470 -30C384 90 592 175 476 263S489 410 548 510"
             fill="none"
-            stroke="#c4dad8"
+            stroke="#d6dcd1"
             strokeWidth="45"
           />
-          <g stroke="#faf8ef" fill="none" strokeWidth="19">
+          <g stroke="#faf8f2" fill="none" strokeWidth="19">
             <path d="M-30 175L820 123M-20 323L820 259M237 -30L172 510M635 -20L676 510" />
             <path d="M-30 432L817 352M66 -10L382 490" strokeWidth="10" />
             <path
@@ -53,7 +53,7 @@ export function IllustrativeMap({
               strokeWidth="8"
             />
           </g>
-          <g fill="#d0d1c2">
+          <g fill="#d6dcd1">
             <path d="M254 190H299V245H249Z" />
             <path d="M317 181H356V239H328Z" />
             <path d="M81 203H130V253H92Z" />
@@ -61,7 +61,7 @@ export function IllustrativeMap({
             <path d="M285 365H347V401H280Z" />
             <path d="M710 286H765V321H708Z" />
           </g>
-          <g fill="#9baa84">
+          <g fill="#a8baa3">
             <circle cx="108" cy="62" r="8" />
             <circle cx="136" cy="87" r="6" />
             <circle cx="98" cy="105" r="7" />
@@ -72,7 +72,7 @@ export function IllustrativeMap({
             <circle cx="696" cy="403" r="9" />
           </g>
           <g
-            fill="#68725b"
+            fill="#65806e"
             fontSize="12"
             fontFamily="Public Sans, sans-serif"
             letterSpacing="2"
@@ -133,7 +133,7 @@ export function IllustrativeMap({
         <div className="living-map-selection" aria-live="polite">
           <span>
             <strong>{current.name}</strong>
-            <small>{current.hours} · sample market</small>
+            <small>{current.hours} · weekly market</small>
           </span>
           <Link
             to={`/markets/${current.id}`}

@@ -216,6 +216,8 @@ export async function updateMarketService(adminId, marketId, data) {
   const updateFields = { updatedAt: new Date() };
 
   if (data.name) updateFields.name = data.name.trim();
+  if (typeof data.isActive === 'boolean') updateFields.isActive = data.isActive;
+  if (data.description !== undefined) updateFields.description = data.description.trim();
   if (data.countryCode) updateFields.countryCode = data.countryCode.toUpperCase().trim();
   if (data.countryName) updateFields.countryName = data.countryName.trim();
   if (data.region) updateFields.region = data.region.trim();

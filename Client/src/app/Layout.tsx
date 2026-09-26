@@ -1,9 +1,10 @@
 import { BrandMark } from "../components/BrandMark";
 import { ScrollChoreography } from "../components/ScrollChoreography";
 import { MarketPreloader } from "../components/MarketPreloader";
+import { SmoothScroll } from "../motion/SmoothScroll";
 import { CoverageBoundary } from "../components/CoverageBoundary";
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, Navigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, Navigate, useNavigate } from "react-router-dom";
 import {
   ShoppingBasket,
   Menu,
@@ -22,11 +23,11 @@ import {
   Globe,
   MessageSquare,
 } from "lucide-react";
-import { useMarket, useAction, Notice } from "../components/ui";
+import { useMarket } from "../components/ui";
 import { useVisitor } from "../data/visitor-context";
 import { countryName } from "../data/visitor";
 import { gateway } from "../data/gateway";
-import { fetchMeApi, logoutApi, fetchUnreadChatCountApi } from "../data/api";
+import { fetchUnreadChatCountApi } from "../data/api";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
 import { CompanionContext } from "./companion-context";
@@ -71,13 +72,12 @@ export const nav: Record<Role, [string, string][]> = {
 };
 export function Layout() {
   const s = useMarket();
-  const act = useAction();
+  const navigate = useNavigate();
   const { visitor, openModal, t } = useVisitor();
   const { pathname } = useLocation();
   const reduceMotion = useReducedMotion();
   const [menu, setMenu] = useState(false);
   const [assistant, setAssistant] = useState(false);
-  const [controls, setControls] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const role: Role | null =
     pathname.startsWith("/farmer/") || pathname === "/farmer"
@@ -89,23 +89,7 @@ export function Layout() {
           : null;
   const workspace = role === "farmer" || role === "admin";
 
-  useEffect(() => {
-    let isMounted = true;
-    fetchMeApi()
-      .then((user) => {
-        if (isMounted && user?.role) {
-          gateway.dispatch({ type: "role", role: user.role });
-          gateway.syncFromBackend(user.role);
-        }
-      })
-      .catch(() => {
-        // Session not active, stay unauthenticated
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
+  // Unread message badge for the signed-in workspace.
   useEffect(() => {
     if (!role) return;
     let isMounted = true;
@@ -125,10 +109,8 @@ export function Layout() {
   }, [role, pathname]);
 
   const handleSignOut = async () => {
-    try {
-      await logoutApi();
-    } catch {}
-    act({ type: "role", role: null }, "Signed out successfully.");
+    await gateway.signOut();
+    navigate("/");
   };
 
   useEffect(() => {
@@ -144,45 +126,10 @@ export function Layout() {
   return (
     <CompanionContext.Provider value={() => setAssistant(true)}>
       <MarketPreloader />
+      <SmoothScroll enabled={!role} />
       <a className="skip-link" href="#main">
         {t('skipContent')}
       </a>
-      <div className="demo-banner">
-        <span>{t('demoBanner')}</span>
-        <button onClick={() => setControls(!controls)} aria-expanded={controls}>
-          {t('demoControls')}
-        </button>
-      </div>
-      {controls && (
-        <div className="demo-controls">
-          <span>Sample clock: {s.now.slice(0, 10)} · Asia/Karachi</span>
-          {(["customer", "farmer", "admin"] as Role[]).map((r) => (
-            <button
-              key={r}
-              onClick={() =>
-                act({ type: "role", role: r }, `Demo ${r} account selected.`)
-              }
-            >
-              {r}
-            </button>
-          ))}
-          <button
-            onClick={() =>
-              act({ type: "clock", late: !s.now.startsWith("2026-10-03") })
-            }
-          >
-            Toggle cutoff scenario
-          </button>
-          <button
-            onClick={() => {
-              gateway.reset();
-              setControls(false);
-            }}
-          >
-            Reset all fixtures
-          </button>
-        </div>
-      )}
       <header
         className={`header ${role === "customer" ? "customer-header" : ""}`}
       >
@@ -394,7 +341,7 @@ export function Layout() {
                 {role === "customer"
                   ? "Your market, your rhythm"
                   : role === "farmer"
-                    ? "Good Earth Growers · sample stall"
+                    ? [s.farmers.find((f) => f.id === s.farmerId)?.name, "Your stall"].filter(Boolean).join(" · ")
                     : "Gather & Grow operations"}
               </span>
               <div className="actions">
@@ -457,7 +404,7 @@ export function Layout() {
           </div>
           <p className="footer-bottom">
             The Living Market · eGreen Basket{" "}
-            <span>{t('demoBanner')}</span>
+            <span>Pre-order online · Pay at the stall</span>
           </p>
         </footer>
       )}
@@ -468,6 +415,20 @@ export function Layout() {
 export function Guard({ role }: { role: Role }) {
   const s = useMarket();
   const loc = useLocation();
+  if (s.status === "loading")
+    return (
+      <div className="workspace-loading" role="status" aria-live="polite">
+        <span className="skeleton-line wide" />
+        <span className="skeleton-line" />
+        <div className="skeleton-grid">
+          <span className="skeleton-card" />
+          <span className="skeleton-card" />
+          <span className="skeleton-card" />
+          <span className="skeleton-card" />
+        </div>
+        <span className="visually-hidden">Opening your workspace…</span>
+      </div>
+    );
   if (!s.role)
     return (
       <Navigate
@@ -482,11 +443,8 @@ export function Guard({ role }: { role: Role }) {
   if (s.role !== role)
     return (
       <div className="container">
-        <h1>That workspace belongs to another role.</h1>
-        <Notice>
-          Demo guards illustrate navigation only. Real authorisation requires
-          the approved backend.
-        </Notice>
+        <h1>That workspace belongs to another account.</h1>
+        <p>You are signed in as a {s.role}. Open your own workspace, or sign out to switch accounts.</p>
         <Link className="button" to={`/${s.role}`}>
           Open my workspace
         </Link>
@@ -495,7 +453,8 @@ export function Guard({ role }: { role: Role }) {
   if (role === "customer" && !s.customerActive)
     return (
       <div className="container">
-        <h1>This sample account is inactive.</h1>
+        <h1>This account is paused.</h1>
+        <p>The market team has deactivated this account. Contact us to restore access.</p>
         <Link to="/help">Get help</Link>
       </div>
     );

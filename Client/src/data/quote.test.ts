@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { execute } from "./gateway";
-import { seed } from "./market";
+import { seed } from "./fixtures";
 
 it("requires explicit acceptance of a changed basket price", () => {
   let s = seed();
@@ -15,20 +15,15 @@ it("requires explicit acceptance of a changed basket price", () => {
     execute(s, { type: "checkout", slots: { "demo-f1": "demo-s1" } }).basket,
   ).toEqual({});
 });
-it("emits one restock notice on unavailable-to-available transition only", () => {
+it("restocking keeps the watch and never fabricates a notice on the client", () => {
+  // Restock notifications are created by the server when an offer becomes available again.
   let s = seed();
   s.role = "customer";
   s = execute(s, { type: "restock", id: "demo-p5" });
+  expect(s.restock).toContain("demo-p5");
   s.role = "farmer";
+  const before = s.notices.length;
   s = execute(s, { type: "product", value: { ...s.products[4], stock: 5 } });
-  expect(
-    s.notices.filter((n) => n.title === "Sample restock update"),
-  ).toHaveLength(1);
-  s = execute(s, {
-    type: "product",
-    value: { ...s.products.find((p) => p.id === "demo-p5")!, stock: 6 },
-  });
-  expect(
-    s.notices.filter((n) => n.title === "Sample restock update"),
-  ).toHaveLength(1);
+  expect(s.products.find((p) => p.id === "demo-p5")?.stock).toBe(5);
+  expect(s.notices).toHaveLength(before);
 });

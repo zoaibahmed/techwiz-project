@@ -1,8 +1,8 @@
 import { activeOrder } from "./market";
-import type { DemoState } from "./market";
+import type { MarketState } from "./market";
 
 // View selectors over isolated fixtures; these are not backend response types.
-export function marketDayView(s: DemoState, day: string) {
+export function marketDayView(s: MarketState, day: string) {
   const markets = s.markets.filter((m) => m.active && m.day === day);
   const marketIds = new Set(markets.map((m) => m.id));
   const growers = s.farmers.filter(

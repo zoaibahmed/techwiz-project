@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { execute } from "./gateway";
-import { seed } from "./market";
+import { seed } from "./fixtures";
 
-describe("isolated development repository", () => {
+describe("market rules", () => {
   it("atomically reserves two farmer groups and keeps the input immutable", () => {
     let s = execute(seed(), { type: "role", role: "customer" });
     s = execute(s, { type: "basket", id: "demo-p1", quantity: 2 });
@@ -36,7 +36,7 @@ describe("isolated development repository", () => {
     expect(s.products[0].reserved).toBe(0);
     expect(() =>
       execute(s, { type: "stage", id: "DEMO-1042", stage: "Cancelled" }),
-    ).toThrow(/cannot be cancelled/);
+    ).toThrow(/can no longer be cancelled/);
     expect(s.products[0].stock).toBe(24);
   });
   it("rejects cutoff at exact boundary and preserves reservations", () => {
@@ -86,14 +86,14 @@ describe("isolated development repository", () => {
     s.role = "farmer";
     expect(() =>
       execute(s, { type: "stage", id: "DEMO-1042", stage: "Completed" }),
-    ).toThrow(/transition/);
+    ).toThrow(/status change is not available/);
     for (const stage of ["Accepted", "Ready for pickup", "Completed"] as const)
       s = execute(s, { type: "stage", id: "DEMO-1042", stage });
     expect(s.products[0].reserved).toBe(0);
     expect(s.products[0].stock).toBe(21);
     expect(() =>
       execute(s, { type: "stage", id: "DEMO-1042", stage: "Completed" }),
-    ).toThrow(/transition/);
+    ).toThrow(/status change is not available/);
   });
   it("allows only eligible purchased review targets once", () => {
     let s = seed();
@@ -106,7 +106,7 @@ describe("isolated development repository", () => {
         rating: 5,
         text: "A useful review",
       }),
-    ).toThrow(/completion/);
+    ).toThrow(/once an order is collected/);
     expect(() =>
       execute(s, {
         type: "review",
@@ -115,7 +115,7 @@ describe("isolated development repository", () => {
         rating: 5,
         text: "A useful review",
       }),
-    ).toThrow(/target/);
+    ).toThrow(/grower or product from this order/);
     s = execute(s, {
       type: "review",
       orderId: "DEMO-1030",
@@ -145,7 +145,7 @@ describe("isolated development repository", () => {
     ).toThrow(/used by/);
     expect(() =>
       execute(s, { type: "market", value: { ...s.markets[0], active: false } }),
-    ).toThrow(/active reservations/);
+    ).toThrow(/open reservations/);
   });
   it("templates do not reserve stock and cannot violate reservations", () => {
     let s = seed();
@@ -158,6 +158,6 @@ describe("isolated development repository", () => {
     expect(s.products[0].reserved).toBe(3);
     expect(() =>
       execute(s, { type: "apply-template", id: s.templates[1].id }),
-    ).toThrow(/invalidate reservations/);
+    ).toThrow(/below existing reservations/);
   });
 });

@@ -27,8 +27,8 @@ L.Icon.Default.mergeOptions({
 const defaultPin = L.divIcon({
   className: 'ml-map-marker',
   html: `<svg width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#1b3a2d"/>
-    <circle cx="14" cy="13" r="5.5" fill="#faf8ef"/>
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#183b2b"/>
+    <circle cx="14" cy="13" r="5.5" fill="#faf8f2"/>
   </svg>`,
   iconSize: [28, 40],
   iconAnchor: [14, 40],
@@ -38,8 +38,8 @@ const defaultPin = L.divIcon({
 const selectedPin = L.divIcon({
   className: 'ml-map-marker ml-map-marker--active',
   html: `<svg width="34" height="48" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#d4a853"/>
-    <circle cx="14" cy="13" r="5.5" fill="#1b3a2d"/>
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.268 21.732 0 14 0z" fill="#c98646"/>
+    <circle cx="14" cy="13" r="5.5" fill="#183b2b"/>
   </svg>`,
   iconSize: [34, 48],
   iconAnchor: [17, 48],
@@ -67,10 +67,13 @@ export function InteractiveMap({
   markets,
   selected,
   onSelect,
+  occludeRight = 0,
 }: {
   markets: Market[];
   selected: string;
   onSelect: (id: string) => void;
+  /** Width in px of a panel floating over the map's right edge; fits and pans keep pins clear of it. */
+  occludeRight?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -110,9 +113,16 @@ export function InteractiveMap({
       scrollWheelZoom: true,
     });
 
-    // OpenStreetMap tiles — free, no API key required
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+    // Esri Light Gray Canvas: a quiet, keyless basemap with English labels that
+    // sits under the brand palette; tinted warmer in CSS.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      className: 'brand-tiles',
+    }).addTo(map);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16,
+      className: 'brand-tile-labels',
+      pane: 'overlayPane',
     }).addTo(map);
 
     // Attribution in bottom-right, subtle
@@ -120,7 +130,7 @@ export function InteractiveMap({
       position: 'bottomright',
       prefix: false,
     }).addTo(map).addAttribution(
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Tiles &copy; Esri'
     );
 
     // Zoom control on right side
@@ -168,11 +178,11 @@ export function InteractiveMap({
     // Fit bounds if multiple markets
     if (mapMarkets.length > 1) {
       const bounds = L.latLngBounds(mapMarkets.map((m) => m.coords));
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+      map.fitBounds(bounds, { paddingTopLeft: [50, 50], paddingBottomRight: [50 + occludeRight, 50], maxZoom: 14 });
     } else if (mapMarkets.length === 1) {
       map.setView(mapMarkets[0].coords, 14);
     }
-  }, [mapMarkets, selected, onSelect]);
+  }, [mapMarkets, selected, onSelect, occludeRight]);
 
   // Pan to selected market
   useEffect(() => {
@@ -181,7 +191,10 @@ export function InteractiveMap({
 
     const entry = mapMarkets.find((m) => m.market.id === selected);
     if (entry) {
-      map.panTo(entry.coords, { animate: !reduce, duration: 0.4 });
+      const target = occludeRight
+        ? map.unproject(map.project(entry.coords).add([occludeRight / 2, 0]))
+        : entry.coords;
+      map.panTo(target, { animate: !reduce, duration: 0.4 });
     }
 
     // Update marker icons for selection state
@@ -189,7 +202,7 @@ export function InteractiveMap({
       marker.setIcon(id === selected ? selectedPin : defaultPin);
       marker.setZIndexOffset(id === selected ? 1000 : 0);
     });
-  }, [selected, mapMarkets, reduce]);
+  }, [selected, mapMarkets, reduce, occludeRight]);
 
   const hasCoords = mapMarkets.length > 0;
 
@@ -234,7 +247,7 @@ export function InteractiveMap({
 
       <small className="living-map-disclaimer">
         {hasCoords
-          ? 'Map tiles © OpenStreetMap contributors'
+          ? 'Map data © OpenStreetMap contributors · Tiles © Esri'
           : 'Awaiting real market coordinates'}
       </small>
     </div>

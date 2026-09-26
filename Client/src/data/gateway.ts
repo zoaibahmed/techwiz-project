@@ -1,38 +1,60 @@
-import { seed, activeOrder } from "./market";
+import { emptyState, activeOrder } from "./market";
 import type {
-  DemoState,
+  Review,
+  MarketState,
   Role,
-  DemoStage,
+  OrderStage,
   Product,
   Market,
   Slot,
   Farmer,
   Announcement,
+  Order,
 } from "./market";
 import {
-  loginApi,
+  fetchMeApi,
+  logoutApi,
+  fetchCatalogueApi,
+  fetchWorkspaceApi,
   checkoutApi,
   cancelCustomerOrderApi,
+  modifyCustomerOrderItemsApi,
   updateFarmerOrderStatusApi,
   createReviewApi,
   replyToReviewApi,
   addFavouriteApi,
   removeFavouriteApi,
+  createRestockAlertApi,
+  deleteRestockAlertApi,
+  markNotificationReadApi,
+  markAllNotificationsReadApi,
+  createFarmerProductApi,
+  updateFarmerProductApi,
+  archiveFarmerProductApi,
+  saveFarmerStockOfferApi,
+  updateStockOfferStatusApi,
+  createPickupWindowApi,
+  updateWeeklyTemplateApi,
   updateFarmerApprovalStatusApi,
   updateCustomerStatusApi,
+  createAdminMarketApi,
+  updateAdminMarketApi,
+  deleteAdminMarketApi,
+  createAdminCategoryApi,
+  deleteAdminCategoryApi,
+  createAnnouncementApi,
+  updateAnnouncementApi,
+  moderateAdminProductApi,
   moderateAdminReviewApi,
-  fetchCustomerOrdersApi,
-  fetchFarmerOrdersApi,
-  fetchFarmerProductsApi,
-  fetchMeApi,
 } from "./api";
+import { productPhoto } from "./photos";
 
 export type Command =
   | { type: "role"; role: Role | null }
   | { type: "basket"; id: string; quantity: number }
   | { type: "favourite" | "check" | "restock"; id: string }
   | { type: "checkout"; slots: Record<string, string> }
-  | { type: "stage"; id: string; stage: DemoStage }
+  | { type: "stage"; id: string; stage: OrderStage }
   | { type: "edit-order"; id: string; quantities: Record<string, number> }
   | {
       type: "review";
@@ -41,6 +63,8 @@ export type Command =
       rating: number;
       text: string;
     }
+  | { type: "stall-review"; farmerId: string; rating: number; text: string }
+  | { type: "review-status"; id: string; status: "approved" | "rejected" | "hidden"; reason?: string }
   | { type: "reply"; id: string; text: string }
   | { type: "read"; id: string }
   | { type: "product"; value: Product; expected?: Product; expiresAt?: number }
@@ -49,56 +73,47 @@ export type Command =
   | { type: "farmer"; value: Farmer }
   | { type: "announcement"; value: Announcement }
   | { type: "category"; name: string; remove?: boolean }
-  | { type: "customer-active"; value: boolean }
+  | { type: "customer-active"; id?: string; value: boolean }
   | { type: "moderate"; kind: "product" | "review"; id: string }
   | { type: "template"; name: string; quantities: Record<string, number> }
-  | { type: "apply-template"; id: string }
-  | { type: "clock"; late: boolean };
+  | { type: "apply-template"; id: string };
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 const unique = (prefix: string) =>
   `${prefix}-${globalThis.crypto.randomUUID().slice(0, 8)}`;
-function requireRole(s: DemoState, ...roles: Role[]) {
+function requireRole(s: MarketState, ...roles: Role[]) {
   assert(
     s.role && roles.includes(s.role),
-    "Choose the appropriate development account for this action.",
+    "Sign in with the right account for this action.",
   );
 }
-export function execute(previous: DemoState, command: Command): DemoState {
+
+/**
+ * Applies a command to the state and enforces the market rules (stock,
+ * cutoffs, allowed status changes). The result is shown immediately; the
+ * server then re-validates the same rules when the change is saved.
+ */
+export function execute(previous: MarketState, command: Command): MarketState {
   const s = structuredClone(previous);
-  const notify = (role: Role, title: string, text: string, href: string) =>
-    s.notices.unshift({
-      id: unique("demo-n"),
-      role,
-      title,
-      text,
-      href,
-      read: false,
-    });
   const approved = () =>
     assert(
       s.farmers.find((f) => f.id === s.farmerId)?.state === "Approved",
-      "This demo stall is not approved to publish.",
+      "Your stall must be approved before you can publish.",
     );
   const open = (slotId: string) => {
     const slot = s.slots.find((x) => x.id === slotId);
     assert(slot, "Choose a valid pickup window.");
     assert(
       new Date(s.now) < new Date(slot.cutoff),
-      "The sample cutoff has passed. Choose another market day.",
+      "The cutoff for this pickup window has passed. Choose another market day.",
     );
     return slot;
   };
   switch (command.type) {
     case "role":
       s.role = command.role;
-      break;
-    case "clock":
-      s.now = command.late
-        ? "2026-10-03T08:00:00+05:00"
-        : "2026-10-02T09:00:00+05:00";
       break;
     case "basket": {
       const p = s.products.find((p) => p.id === command.id);
@@ -141,7 +156,7 @@ export function execute(previous: DemoState, command: Command): DemoState {
     }
     case "checkout": {
       requireRole(s, "customer");
-      assert(s.customerActive, "This development customer is inactive.");
+      assert(s.customerActive, "Your account is inactive. Contact the market team.");
       assert(Object.keys(s.basket).length, "Your basket is empty.");
       const groups = new Map<string, Product[]>();
       for (const [id, q] of Object.entries(s.basket)) {
@@ -156,7 +171,7 @@ export function execute(previous: DemoState, command: Command): DemoState {
         );
         assert(
           s.basketPrices[id] === p.price,
-          "A sample price changed. Review and accept the current price in your basket.",
+          "A price changed. Review and accept the current price in your basket.",
         );
         groups.set(p.farmerId, [...(groups.get(p.farmerId) ?? []), p]);
       }
@@ -164,13 +179,12 @@ export function execute(previous: DemoState, command: Command): DemoState {
         const slot = open(command.slots[farmerId] ?? "");
         assert(
           slot.farmerId === farmerId,
-          "Pickup window does not belong to this farmer.",
+          "Pickup window does not belong to this grower.",
         );
         assert(
           s.markets.find((m) => m.id === slot.marketId)?.active,
           "The selected market is closed.",
         );
-        const id = unique("DEMO");
         const lines = products.map((p) => {
           const quantity = s.basket[p.id];
           p.reserved += quantity;
@@ -183,26 +197,16 @@ export function execute(previous: DemoState, command: Command): DemoState {
           };
         });
         s.orders.unshift({
-          id,
+          id: unique("pending"),
+          number: "Reserving…",
           farmerId,
           marketId: slot.marketId,
           slotId: slot.id,
           stage: "Placed",
           lines,
           events: [{ label: "Placed", at: s.now }],
+          marketDate: slot.date ?? slot.start.slice(0, 10),
         });
-        notify(
-          "customer",
-          "Sample reservation placed",
-          "Your simulated pickup is awaiting a farmer response.",
-          `/customer/orders/${id}`,
-        );
-        notify(
-          "farmer",
-          "New sample reservation",
-          "A simulated order needs a response.",
-          `/farmer/orders/${id}`,
-        );
       }
       s.basket = {};
       s.basketPrices = {};
@@ -216,43 +220,31 @@ export function execute(previous: DemoState, command: Command): DemoState {
         open(o.slotId);
         assert(
           ["Placed", "Accepted"].includes(o.stage),
-          "This sample order cannot be cancelled in its current state.",
+          "This order can no longer be cancelled.",
         );
       } else {
         requireRole(s, "farmer");
         approved();
-        assert(
-          o.farmerId === s.farmerId,
-          "Only your stall orders are available.",
-        );
-        const next: Partial<Record<DemoStage, DemoStage[]>> = {
+        assert(o.farmerId === s.farmerId, "Only your stall’s orders are available.");
+        const next: Partial<Record<OrderStage, OrderStage[]>> = {
           Placed: ["Accepted", "Declined"],
           Accepted: ["Ready for pickup"],
           "Ready for pickup": ["Completed"],
         };
         assert(
           next[o.stage]?.includes(command.stage),
-          "This order transition is not available.",
+          "This order status change is not available.",
         );
       }
       if (["Cancelled", "Declined", "Completed"].includes(command.stage))
         for (const l of o.lines) {
           const p = s.products.find((p) => p.id === l.productId);
-          assert(
-            p && p.reserved >= l.quantity,
-            "Reservation quantities are inconsistent.",
-          );
-          p.reserved -= l.quantity;
-          if (command.stage === "Completed") p.stock -= l.quantity;
+          if (!p) continue;
+          p.reserved = Math.max(0, p.reserved - l.quantity);
+          if (command.stage === "Completed") p.stock = Math.max(0, p.stock - l.quantity);
         }
       o.stage = command.stage;
       o.events.push({ label: command.stage, at: s.now });
-      notify(
-        "customer",
-        `Sample order ${command.stage.toLowerCase()}`,
-        `${o.id} has a new simulated status.`,
-        `/customer/orders/${o.id}`,
-      );
       break;
     }
     case "edit-order": {
@@ -260,7 +252,7 @@ export function execute(previous: DemoState, command: Command): DemoState {
       const o = s.orders.find((o) => o.id === command.id);
       assert(
         o && ["Placed", "Accepted"].includes(o.stage),
-        "This reservation cannot be edited.",
+        "This reservation can no longer be edited.",
       );
       open(o.slotId);
       for (const line of o.lines) {
@@ -269,11 +261,10 @@ export function execute(previous: DemoState, command: Command): DemoState {
         assert(
           Number.isInteger(q) &&
             q > 0 &&
-            p &&
-            p.stock - p.reserved >= q - line.quantity,
+            (!p || p.stock - p.reserved >= q - line.quantity),
           "The requested quantity is unavailable.",
         );
-        p.reserved += q - line.quantity;
+        if (p) p.reserved += q - line.quantity;
         line.quantity = q;
       }
       o.events.push({ label: "Quantities updated", at: s.now });
@@ -282,14 +273,11 @@ export function execute(previous: DemoState, command: Command): DemoState {
     case "review": {
       requireRole(s, "customer");
       const o = s.orders.find((o) => o.id === command.orderId);
-      assert(
-        o?.stage === "Completed",
-        "Reviews are available after completion.",
-      );
+      assert(o?.stage === "Completed", "Reviews open once an order is collected.");
       assert(
         command.target === o.farmerId ||
           o.lines.some((l) => l.productId === command.target),
-        "Choose a target from your completed order.",
+        "Choose a grower or product from this order.",
       );
       assert(
         command.rating >= 1 &&
@@ -301,26 +289,71 @@ export function execute(previous: DemoState, command: Command): DemoState {
         !s.reviews.some(
           (r) => r.orderId === o.id && r.target === command.target,
         ),
-        "You have already reviewed this target.",
+        "You have already reviewed this.",
       );
       s.reviews.unshift({
-        id: unique("demo-r"),
+        id: unique("pending-r"),
         orderId: o.id,
         target: command.target,
+        targetType: command.target === o.farmerId ? "farmer" : "product",
         rating: command.rating,
         text: command.text.trim(),
         reply: "",
-        visible: true,
+        // Published only after an administrator approves it.
+        visible: false,
+        status: "pending",
+        verified: true,
+        author: s.session?.name ?? "You",
+        at: s.now,
       });
+      break;
+    }
+    case "stall-review": {
+      requireRole(s, "customer");
+      const f = s.farmers.find((f) => f.id === command.farmerId && f.state === "Approved");
+      assert(f, "This grower is not accepting reviews.");
+      assert(
+        command.rating >= 1 && command.rating <= 5 && command.text.trim().length >= 8,
+        "Choose a star rating and write at least eight characters.",
+      );
+      const open = s.reviews.find(
+        (r) =>
+          r.mine &&
+          !r.orderId &&
+          r.target === f.id &&
+          (r.status === "pending" || r.status === "approved"),
+      );
+      assert(!open, open?.status === "pending" ? "Your review is waiting for approval." : "You have already reviewed this grower.");
+      s.reviews.unshift({
+        id: unique("pending-r"),
+        orderId: "",
+        target: f.id,
+        targetType: "farmer",
+        rating: command.rating,
+        text: command.text.trim(),
+        reply: "",
+        visible: false,
+        status: "pending",
+        mine: true,
+        verified: s.orders.some((o) => o.farmerId === f.id && o.stage === "Completed"),
+        author: s.session?.name ?? "You",
+        at: s.now,
+      });
+      break;
+    }
+    case "review-status": {
+      requireRole(s, "admin");
+      const r = s.reviews.find((r) => r.id === command.id);
+      assert(r, "Review not found.");
+      r.status = command.status;
+      r.visible = command.status === "approved";
+      r.reason = command.reason ?? "";
       break;
     }
     case "reply": {
       requireRole(s, "farmer");
       const r = s.reviews.find((r) => r.id === command.id);
-      assert(
-        r && s.orders.find((o) => o.id === r.orderId)?.farmerId === s.farmerId,
-        "This review is not for your stall.",
-      );
+      assert(r, "This review is not for your stall.");
       r.reply = command.text.trim();
       break;
     }
@@ -337,11 +370,11 @@ export function execute(previous: DemoState, command: Command): DemoState {
       if (command.expected) {
         assert(
           old && JSON.stringify(old) === JSON.stringify(command.expected),
-          "The sample stock changed since this draft. Request a fresh preview.",
+          "Stock changed since this draft. Request a fresh preview.",
         );
         assert(
           command.expiresAt && Date.now() < command.expiresAt,
-          "This sample action draft expired. Request a fresh preview.",
+          "This draft expired. Request a fresh preview.",
         );
       }
       assert(
@@ -358,19 +391,6 @@ export function execute(previous: DemoState, command: Command): DemoState {
         "Check name, category, price and stock. Stock cannot be below reservations.",
       );
       p.reserved = old?.reserved ?? 0;
-      if (
-        old &&
-        (!old.available || old.stock <= old.reserved) &&
-        p.available &&
-        p.stock > p.reserved &&
-        s.restock.includes(p.id)
-      )
-        notify(
-          "customer",
-          "Sample restock update",
-          `${p.name} is available again in the sample records.`,
-          `/products/${p.id}`,
-        );
       s.products = [...s.products.filter((x) => x.id !== p.id), p];
       break;
     }
@@ -385,7 +405,7 @@ export function execute(previous: DemoState, command: Command): DemoState {
           !s.orders.some(
             (o) => o.marketId === command.value.id && activeOrder(o),
           ),
-          "Resolve active reservations before closing this sample market.",
+          "Resolve open reservations before closing this market.",
         );
       s.markets = [
         ...s.markets.filter((m) => m.id !== command.value.id),
@@ -406,11 +426,11 @@ export function execute(previous: DemoState, command: Command): DemoState {
         x.farmerId === s.farmerId &&
           new Date(x.start) < new Date(x.end) &&
           new Date(x.cutoff) < new Date(x.start),
-        "Window must end after it starts, with cutoff before pickup.",
+        "A window must end after it starts, with the cutoff before pickup.",
       );
       assert(
         !s.orders.some((o) => o.slotId === x.id && activeOrder(o)),
-        "This slot has reservations; use a new slot for this demo.",
+        "This window already has reservations. Create a new window instead.",
       );
       s.slots = [...s.slots.filter((y) => y.id !== x.id), x];
       break;
@@ -425,16 +445,12 @@ export function execute(previous: DemoState, command: Command): DemoState {
         ...s.announcements.filter((a) => a.id !== command.value.id),
         command.value,
       ];
-      if (command.value.published) {
-        for (const role of ["customer", "farmer"] as Role[])
-          notify(role, command.value.title, command.value.body, "/");
-      }
       break;
     case "category":
       requireRole(s, "admin");
       if (command.remove) {
         assert(
-          !s.products.some((p) => p.category === command.name),
+          !s.products.some((p) => p.category === command.name && !p.archived),
           "This category is used by products.",
         );
         s.categories = s.categories.filter((c) => c !== command.name);
@@ -451,7 +467,9 @@ export function execute(previous: DemoState, command: Command): DemoState {
       break;
     case "customer-active":
       requireRole(s, "admin");
-      s.customerActive = command.value;
+      s.customers = s.customers.map((c) =>
+        c.id === command.id ? { ...c, active: command.value } : c,
+      );
       break;
     case "moderate":
       requireRole(s, "admin");
@@ -463,13 +481,14 @@ export function execute(previous: DemoState, command: Command): DemoState {
         const r = s.reviews.find((r) => r.id === command.id);
         assert(r, "Review not found.");
         r.visible = !r.visible;
+        r.status = r.visible ? "approved" : "hidden";
       }
       break;
     case "template":
       requireRole(s, "farmer");
       assert(command.name.trim(), "Name your template.");
       s.templates.push({
-        id: unique("demo-t"),
+        id: unique("pending-t"),
         name: command.name,
         quantities: command.quantities,
       });
@@ -483,7 +502,7 @@ export function execute(previous: DemoState, command: Command): DemoState {
         const p = s.products.find(
           (p) => p.id === id && p.farmerId === s.farmerId,
         );
-        assert(p && q >= p.reserved, "Template would invalidate reservations.");
+        assert(p && q >= p.reserved, "This template would go below existing reservations.");
         p.stock = q;
       }
       break;
@@ -492,8 +511,11 @@ export function execute(previous: DemoState, command: Command): DemoState {
   return s;
 }
 
-// ─── Live Backend Atlas Persistence Sync ────────────────────────────────────
-const stageMapToBackend: Record<DemoStage, string> = {
+// ─── Live data: catalogue + role workspace ───────────────────────────────────
+
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+const isSaved = (id: string) => OBJECT_ID.test(id);
+const STAGE_TO_STATUS: Record<OrderStage, string> = {
   Placed: "placed",
   Accepted: "accepted",
   "Ready for pickup": "ready_for_pickup",
@@ -501,168 +523,392 @@ const stageMapToBackend: Record<DemoStage, string> = {
   Cancelled: "cancelled",
   Declined: "declined",
 };
+const BASKET_KEY = "gather-grow.basket.v1";
 
-const stageMapToDemo: Record<string, DemoStage> = {
-  placed: "Placed",
-  accepted: "Accepted",
-  ready_for_pickup: "Ready for pickup",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  declined: "Declined",
-};
-
-async function ensureSession(role: Role) {
+function readBasket(): Pick<MarketState, "basket" | "basketPrices"> {
   try {
-    const me = await fetchMeApi();
-    if (me?.role === role) return;
-  } catch {}
-  const credentials: Record<string, { email: string; password: string }> = {
-    customer: { email: "customer.sarah@marketlink.com", password: "Customer123!" },
-    farmer: { email: "farmer.greenfield@marketlink.com", password: "Farmer123!" },
-    admin: { email: "admin@marketlink.com", password: "Admin123!" },
-  };
-  try {
-    const cred = credentials[role];
-    if (cred) await loginApi(cred.email, cred.password);
-  } catch {}
-}
-
-async function syncBackendMutation(command: Command) {
-  try {
-    switch (command.type) {
-      case "role":
-        if (command.role) {
-          await ensureSession(command.role);
-          await gateway.syncFromBackend(command.role);
-        }
-        break;
-
-      case "checkout": {
-        await ensureSession("customer");
-        const marketDate = "2026-09-26";
-        const pickupWindowId = "66f500000000000000000001";
-        const marketId = "66f200000000000000000001";
-
-        const items = Object.entries(state.basket).map(([productId, quantity]) => ({
-          productId: productId.startsWith("66f4") ? productId : "66f400000000000000000001",
-          quantity,
-        }));
-
-        if (items.length > 0) {
-          const res: any = await checkoutApi({
-            marketId,
-            marketDate,
-            pickupWindowId,
-            items,
-            customerNotes: "Online pre-order reserved for in-person pickup and payment.",
-          });
-          const createdOrders = res?.orders || res?.data?.orders || [];
-          if (createdOrders.length > 0) {
-            const real = createdOrders[0];
-            if (state.orders[0]) {
-              state.orders[0].id = real.orderNumber || real.id || real._id;
-              listeners.forEach((l) => l());
-            }
-          }
-        }
-        break;
-      }
-
-      case "stage": {
-        const order = state.orders.find((o) => o.id === command.id);
-        if (!order) break;
-        if (command.stage === "Cancelled") {
-          await ensureSession("customer");
-          await cancelCustomerOrderApi(
-            order.id.startsWith("6") ? order.id : "6ab53db4223e8a12c2e053a8",
-            "Cancelled by customer"
-          );
-        } else {
-          await ensureSession("farmer");
-          const backendStatus = stageMapToBackend[command.stage];
-          if (backendStatus) {
-            await updateFarmerOrderStatusApi(
-              order.id.startsWith("6") ? order.id : "6ab53db4223e8a12c2e053a8",
-              backendStatus as any
-            );
-          }
-        }
-        break;
-      }
-
-      case "review": {
-        await ensureSession("customer");
-        await createReviewApi({
-          orderId: command.orderId.startsWith("6") ? command.orderId : "6ab53db4223e8a12c2e053a8",
-          targetType: "farmer",
-          targetId: "66f000000000000000000002",
-          rating: command.rating,
-          comment: command.text,
-        });
-        break;
-      }
-
-      case "reply": {
-        await ensureSession("farmer");
-        await replyToReviewApi(
-          command.id.startsWith("6") ? command.id : "6ab53dd2223e8a12c2e053ae",
-          command.text
-        );
-        break;
-      }
-
-      case "favourite": {
-        await ensureSession("customer");
-        const isFav = state.favourites.includes(command.id);
-        const targetId = command.id.startsWith("6") ? command.id : "66f000000000000000000002";
-        if (isFav) {
-          await addFavouriteApi("farmer", targetId);
-        } else {
-          await removeFavouriteApi("farmer", targetId);
-        }
-        break;
-      }
-
-      case "farmer": {
-        await ensureSession("admin");
-        const statusMap: Record<string, 'approved' | 'rejected' | 'suspended'> = {
-          Approved: "approved",
-          Suspended: "suspended",
-          Pending: "rejected",
-        };
-        const status = statusMap[command.value.state];
-        if (status) {
-          const fid = command.value.id.startsWith("6") ? command.value.id : "66f100000000000000000001";
-          await updateFarmerApprovalStatusApi(fid, status);
-        }
-        break;
-      }
-
-      case "customer-active": {
-        await ensureSession("admin");
-        await updateCustomerStatusApi("66f000000000000000000005", command.value);
-        break;
-      }
-
-      case "moderate": {
-        await ensureSession("admin");
-        const review = state.reviews.find((r) => r.id === command.id);
-        if (review) {
-          const rid = command.id.startsWith("6") ? command.id : "6ab53dd2223e8a12c2e053ae";
-          await moderateAdminReviewApi(rid, review.visible ? "published" : "hidden");
-        }
-        break;
-      }
+    const raw = localStorage.getItem(BASKET_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { basket: parsed.basket ?? {}, basketPrices: parsed.basketPrices ?? {} };
     }
-  } catch (err) {
-    console.warn("[Backend Atlas Sync Notice]", err);
+  } catch {
+    /* storage unavailable */
+  }
+  return { basket: {}, basketPrices: {} };
+}
+function writeBasket(s: MarketState) {
+  try {
+    localStorage.setItem(BASKET_KEY, JSON.stringify({ basket: s.basket, basketPrices: s.basketPrices }));
+  } catch {
+    /* storage unavailable */
   }
 }
 
-export const fixtureEnabled =
-  import.meta.env.DEV || import.meta.env.MODE === "demo";
-let state = seed();
+const withPhoto = (p: Product): Product => ({ ...p, image: productPhoto(p) });
+function mergeById<T extends { id: string }>(...lists: (T[] | undefined)[]): T[] {
+  const map = new Map<string, T>();
+  for (const list of lists) for (const item of list ?? []) map.set(item.id, item);
+  return [...map.values()];
+}
+
+/** Builds UI state from the two server payloads, keeping client-only choices. */
+function toState(catalogue: any, ws: any | null, prev: MarketState): MarketState {
+  const role: Role | null = ws?.session?.role ?? null;
+  const catalogueCategories: any[] = catalogue.categories ?? [];
+  const categories: any[] = role === "admin" && ws?.categories ? ws.categories : catalogueCategories;
+
+  let products: Product[] = catalogue.products ?? [];
+  let farmers: Farmer[] = catalogue.farmers ?? [];
+  let markets: Market[] = catalogue.markets ?? [];
+  let slots: Slot[] = catalogue.slots ?? [];
+  let reviews = catalogue.reviews ?? [];
+  let announcements: Announcement[] = catalogue.announcements ?? [];
+
+  if (role === "farmer" && ws) {
+    const own = new Set((ws.products ?? []).map((p: Product) => p.id));
+    products = [...products.filter((p) => !own.has(p.id)), ...(ws.products ?? [])];
+    if (ws.profile) farmers = mergeById(farmers, [ws.profile]);
+    slots = mergeById(slots, ws.slots);
+    reviews = mergeById(reviews, ws.reviews);
+  } else if (role === "admin" && ws) {
+    products = ws.products ?? products;
+    farmers = ws.farmers ?? farmers;
+    markets = ws.markets ?? markets;
+    reviews = mergeById(reviews, ws.reviews);
+    announcements = ws.announcements ?? announcements;
+  } else if (role === "customer" && ws) {
+    reviews = mergeById(reviews, (ws.myReviews ?? []).map((r: Review) => ({ ...r, mine: true })));
+  }
+
+  // Past orders reference pickup windows that are no longer listed; rebuild
+  // them from the order's own snapshot so every order has its window.
+  const orders: Order[] = ws?.orders ?? [];
+  const knownSlots = new Set(slots.map((x) => x.id));
+  for (const o of orders) {
+    if (!o.slotId || knownSlots.has(o.slotId) || !o.marketDate) continue;
+    knownSlots.add(o.slotId);
+    slots = [
+      ...slots,
+      {
+        id: o.slotId,
+        farmerId: o.farmerId,
+        marketId: o.marketId,
+        date: o.marketDate,
+        start: `${o.marketDate}T${o.window?.start || "08:00"}:00+05:00`,
+        end: `${o.marketDate}T${o.window?.end || "10:00"}:00+05:00`,
+        cutoff: o.cutoff ?? `${o.marketDate}T06:00:00+05:00`,
+      },
+    ];
+  }
+
+  const available = new Set(products.map((p) => p.id));
+  const basket = Object.fromEntries(Object.entries(prev.basket).filter(([id]) => available.has(id)));
+
+  return {
+    ...prev,
+    role,
+    status: "ready",
+    session: ws?.session ?? null,
+    farmerId: ws?.profile?.id ?? "",
+    now: new Date().toISOString(),
+    markets,
+    farmers,
+    products: products.map(withPhoto),
+    slots,
+    orders,
+    basket,
+    basketPrices: Object.fromEntries(Object.entries(prev.basketPrices).filter(([id]) => id in basket)),
+    favourites: (ws?.favourites ?? []).map((f: { id: string }) => f.id),
+    restock: (ws?.restockAlerts ?? []).map((a: { productId: string }) => a.productId),
+    restockAlerts: ws?.restockAlerts ?? [],
+    reviews,
+    notices: ws?.notices ?? [],
+    templates: ws?.templates ?? [],
+    announcements,
+    categories: categories.map((c) => c.name),
+    categoryIds: Object.fromEntries(categories.map((c) => [c.name, c.id])),
+    categoryCounts: Object.fromEntries(catalogueCategories.map((c) => [c.name, c.productCount ?? 0])),
+    customerActive: ws?.session?.active ?? true,
+    metrics: ws?.metrics ?? null,
+    customers: ws?.customers ?? [],
+    inquiries: ws?.inquiries ?? [],
+  };
+}
+
+const slug = (name: string) =>
+  name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/** HH:MM of an ISO instant in Pakistan time. */
+const pkClock = (value: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+const pkDate = (value: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date(value));
+
+function hoursOf(m: Market) {
+  const [open, close] = (m.hours || "").split(/[–-]/).map((x) => x.trim());
+  return { open: m.open || open || "08:00", close: m.close || close || "13:00" };
+}
+
+/** Where a farmer's new stock is offered: an existing offer, else their next market day. */
+function stockTarget(s: MarketState, p: Product) {
+  if (p.marketId && p.date) return { marketId: p.marketId, date: p.date };
+  const farmer = s.farmers.find((f) => f.id === s.farmerId);
+  const ids = farmer?.marketIds?.length ? farmer.marketIds : [farmer?.marketId ?? ""];
+  const options = s.markets
+    .filter((m) => ids.includes(m.id) && m.day)
+    .sort((a, b) => a.day.localeCompare(b.day));
+  const m = options[0];
+  return m ? { marketId: m.id, date: m.day } : null;
+}
+
+/** Saves one command through the API. `before` and `after` bracket the local change. */
+async function persist(command: Command, before: MarketState, after: MarketState) {
+  switch (command.type) {
+    case "role":
+      if (command.role === null) await logoutApi();
+      return;
+    case "favourite": {
+      const type = before.products.some((p) => p.id === command.id)
+        ? "product"
+        : before.farmers.some((f) => f.id === command.id)
+          ? "farmer"
+          : "market";
+      if (after.favourites.includes(command.id)) await addFavouriteApi(type, command.id);
+      else await removeFavouriteApi(type, command.id);
+      return;
+    }
+    case "restock": {
+      if (after.restock.includes(command.id)) {
+        const p = before.products.find((x) => x.id === command.id);
+        const marketId = p?.marketId || p?.offers?.[0]?.marketId;
+        if (!marketId) throw new Error("This product has no upcoming market to watch.");
+        await createRestockAlertApi({ productId: command.id, marketId });
+      } else {
+        const alert = before.restockAlerts.find((a) => a.productId === command.id);
+        if (alert) await deleteRestockAlertApi(alert.id);
+      }
+      return;
+    }
+    case "checkout": {
+      const groups = new Map<string, { productId: string; quantity: number }[]>();
+      for (const [productId, quantity] of Object.entries(before.basket)) {
+        const p = before.products.find((x) => x.id === productId);
+        if (!p) continue;
+        groups.set(p.farmerId, [...(groups.get(p.farmerId) ?? []), { productId, quantity }]);
+      }
+      for (const [farmerId, items] of groups) {
+        const slot = before.slots.find((x) => x.id === command.slots[farmerId]);
+        if (!slot) throw new Error("Choose a pickup window for every grower.");
+        await checkoutApi({
+          marketId: slot.marketId,
+          marketDate: slot.date ?? pkDate(slot.start),
+          pickupWindowId: slot.id,
+          items,
+          customerNotes: "Reserved online. Payment at the stall.",
+          idempotencyKey: `web-${globalThis.crypto.randomUUID()}`,
+        });
+      }
+      return;
+    }
+    case "stage":
+      if (command.stage === "Cancelled") await cancelCustomerOrderApi(command.id, "Cancelled by customer");
+      else await updateFarmerOrderStatusApi(command.id, STAGE_TO_STATUS[command.stage] as any);
+      return;
+    case "edit-order":
+      await modifyCustomerOrderItemsApi(
+        command.id,
+        Object.entries(command.quantities).map(([productId, quantity]) => ({ productId, quantity })),
+      );
+      return;
+    case "review": {
+      const order = before.orders.find((o) => o.id === command.orderId);
+      await createReviewApi({
+        orderId: command.orderId,
+        targetType: order?.farmerId === command.target ? "farmer" : "product",
+        targetId: command.target,
+        rating: command.rating,
+        comment: command.text.trim(),
+      } as any);
+      return;
+    }
+    case "stall-review":
+      await createReviewApi({
+        targetType: "farmer",
+        targetId: command.farmerId,
+        rating: command.rating,
+        comment: command.text.trim(),
+      });
+      return;
+    case "review-status":
+      await moderateAdminReviewApi(command.id, command.status, command.reason);
+      return;
+    case "reply":
+      await replyToReviewApi(command.id, command.text.trim());
+      return;
+    case "read":
+      if (command.id === "all") await markAllNotificationsReadApi();
+      else if (isSaved(command.id)) await markNotificationReadApi(command.id);
+      return;
+    case "product": {
+      const p = command.value;
+      const old = before.products.find((x) => x.id === p.id && isSaved(x.id));
+      const categoryId = before.categoryIds[p.category];
+      const details = {
+        name: p.name.trim(),
+        description: p.description,
+        categoryId,
+        unit: p.unit,
+        basePriceMinor: p.price,
+      };
+      let productId = p.id;
+      if (old) {
+        await updateFarmerProductApi(p.id, details);
+        if (old.visible && !p.visible) {
+          await archiveFarmerProductApi(p.id);
+          return;
+        }
+      } else {
+        const created = await createFarmerProductApi(details);
+        productId = created.id;
+      }
+      const target = stockTarget(before, p);
+      if (target && (!old || old.stock !== p.stock || old.price !== p.price)) {
+        await saveFarmerStockOfferApi({
+          ...target,
+          productId,
+          totalQuantity: p.stock,
+          priceMinor: p.price,
+          unit: p.unit,
+        });
+      }
+      if (old?.offerId && old.available !== p.available)
+        await updateStockOfferStatusApi(old.offerId, p.available ? "available" : "unavailable");
+      return;
+    }
+    case "market": {
+      const m = command.value;
+      const existing = before.markets.find((x) => x.id === m.id && isSaved(x.id));
+      if (existing && !m.active) {
+        await deleteAdminMarketApi(m.id);
+        return;
+      }
+      const day = m.day ? new Date(`${m.day}T12:00:00+05:00`).getDay() : 6;
+      const payload = {
+        name: m.name.trim(),
+        locality: m.area?.trim() ?? "",
+        address: m.address.trim(),
+        coordinates: m.coordinates ?? { latitude: 31.5204, longitude: 74.3587 },
+        operatingDays: m.operatingDays?.length ? m.operatingDays : [day],
+        operatingHours: hoursOf(m),
+        ...(m.description !== undefined ? { description: m.description } : {}),
+      };
+      if (existing) await updateAdminMarketApi(m.id, { ...payload, isActive: true });
+      else await createAdminMarketApi(payload);
+      return;
+    }
+    case "slot": {
+      const x = command.value;
+      await createPickupWindowApi({
+        marketId: x.marketId,
+        date: pkDate(x.start),
+        startTime: pkClock(x.start),
+        endTime: pkClock(x.end),
+        cutoffAt: new Date(x.cutoff).toISOString(),
+        maxCapacity: x.capacity ?? 20,
+      });
+      return;
+    }
+    case "farmer": {
+      const status = { Approved: "approved", Suspended: "suspended", Pending: "rejected" } as const;
+      await updateFarmerApprovalStatusApi(command.value.id, status[command.value.state]);
+      return;
+    }
+    case "announcement": {
+      const a = command.value;
+      if (isSaved(a.id)) await updateAnnouncementApi(a.id, { isActive: a.published, title: a.title, message: a.body });
+      else await createAnnouncementApi({ title: a.title.trim(), message: a.body.trim(), isActive: a.published });
+      return;
+    }
+    case "category":
+      if (command.remove) {
+        const id = before.categoryIds[command.name];
+        if (id) await deleteAdminCategoryApi(id);
+      } else {
+        await createAdminCategoryApi({ name: command.name.trim(), slug: slug(command.name) });
+      }
+      return;
+    case "customer-active":
+      if (command.id) await updateCustomerStatusApi(command.id, command.value);
+      return;
+    case "moderate":
+      if (command.kind === "product") {
+        const p = after.products.find((x) => x.id === command.id);
+        await moderateAdminProductApi(command.id, p?.visible ? "active" : "hidden");
+      } else {
+        const r = after.reviews.find((x) => x.id === command.id);
+        await moderateAdminReviewApi(command.id, r?.visible ? "approved" : "hidden");
+      }
+      return;
+    case "template": {
+      const farmer = before.farmers.find((f) => f.id === before.farmerId);
+      const market = before.markets.find((m) => m.id === (farmer?.marketIds?.[0] ?? farmer?.marketId));
+      if (!market) throw new Error("Join a market before saving a weekly template.");
+      await updateWeeklyTemplateApi({
+        marketId: market.id,
+        dayOfWeek: market.operatingDays?.[0] ?? 6,
+        items: Object.entries(command.quantities)
+          .filter(([, q]) => q > 0)
+          .map(([productId, defaultQuantity]) => {
+            const p = before.products.find((x) => x.id === productId)!;
+            return { productId, defaultQuantity, defaultPriceMinor: p.price, unit: p.unit };
+          }),
+      } as any);
+      return;
+    }
+    case "apply-template": {
+      const t = before.templates.find((x) => x.id === command.id);
+      if (!t) return;
+      const market = before.markets.find((m) => m.id === t.marketId);
+      for (const [productId, quantity] of Object.entries(t.quantities)) {
+        const p = before.products.find((x) => x.id === productId);
+        if (!p) continue;
+        const target = market?.day ? { marketId: market.id, date: market.day } : stockTarget(before, p);
+        if (!target) continue;
+        await saveFarmerStockOfferApi({ ...target, productId, totalQuantity: quantity, priceMinor: p.price, unit: p.unit });
+      }
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+const LOCAL_ONLY = new Set<Command["type"]>(["basket", "check"]);
+
+let state: MarketState = { ...emptyState(), ...readBasket() };
 const listeners = new Set<() => void>();
+const errorListeners = new Set<(message: string) => void>();
+const emit = () => listeners.forEach((l) => l());
+const reportError = (message: string) => errorListeners.forEach((l) => l(message));
+
+let queue: Promise<void> = Promise.resolve();
+let refreshing: Promise<void> | null = null;
+let refreshAgain = false;
+
+async function load(): Promise<void> {
+  try {
+    const hasSession = await fetchMeApi().then((u) => !!u?.role).catch(() => false);
+    const [catalogue, ws] = await Promise.all([
+      fetchCatalogueApi(),
+      hasSession ? fetchWorkspaceApi(state.period).catch(() => null) : Promise.resolve(null),
+    ]);
+    state = toState(catalogue, ws, state);
+  } catch {
+    state = { ...state, status: state.markets.length ? "ready" : "offline" };
+  }
+  emit();
+}
 
 export const gateway = {
   snapshot: () => state,
@@ -672,128 +918,74 @@ export const gateway = {
       listeners.delete(listener);
     };
   },
+  /** Notified when a saved change is rejected by the server. */
+  onError: (listener: (message: string) => void) => {
+    errorListeners.add(listener);
+    return () => {
+      errorListeners.delete(listener);
+    };
+  },
+  /** Applies the change on screen immediately, then saves it (throws on rule violations). */
   dispatch(command: Command) {
-    state = execute(state, command);
-    listeners.forEach((l) => l());
-    // Asynchronously synchronize mutation with live MongoDB Atlas backend
-    syncBackendMutation(command);
-  },
-  async syncFromBackend(role?: Role) {
-    try {
-      const activeRole = role || state.role;
-      if (activeRole === "customer") {
-        await ensureSession("customer");
-        const orders = await fetchCustomerOrdersApi();
-        if (Array.isArray(orders) && orders.length > 0) {
-          for (const o of orders) {
-            const mappedId = o.orderNumber || o.id || o._id;
-            if (!state.orders.some((existing) => existing.id === mappedId)) {
-              state.orders.unshift({
-                id: mappedId,
-                farmerId: "demo-f1",
-                marketId: "demo-m1",
-                slotId: "demo-s1",
-                stage: stageMapToDemo[o.status] || "Placed",
-                lines: (o.items || []).map((it: any) => ({
-                  productId: it.productId || "demo-p1",
-                  name: it.name || "Bedian Heirloom Tomatoes",
-                  unit: it.unit || "kg",
-                  price: it.unitPriceMinor || 35000,
-                  quantity: it.quantity || 1,
-                })),
-                events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
-              });
-            }
-          }
-          listeners.forEach((l) => l());
-        }
-      } else if (activeRole === "farmer") {
-        await ensureSession("farmer");
-
-        // Sync farmer catalogue products from Atlas
-        try {
-          const prods = await fetchFarmerProductsApi();
-          if (Array.isArray(prods) && prods.length > 0) {
-            for (const p of prods) {
-              const mappedId = p.id || p._id;
-              const existingIdx = state.products.findIndex(
-                (e) => e.id === mappedId || e.name.toLowerCase() === (p.name || "").toLowerCase()
-              );
-              const prodObj: Product = {
-                id: mappedId,
-                farmerId: state.farmerId,
-                name: p.name,
-                category:
-                  typeof p.category === "object"
-                    ? p.category?.name
-                    : p.category || "Fresh Vegetables",
-                unit: p.unit || "kg",
-                price: p.basePriceMinor || p.priceMinor || 15000,
-                stock: p.availableQuantity ?? 50,
-                reserved: p.reservedQuantity ?? 0,
-                description: p.description || "",
-                image: p.imageUrl || "/images/tomatoes.jpg",
-                visible: !p.isArchived,
-                available: p.status !== "inactive",
-              };
-              if (existingIdx >= 0) {
-                state.products[existingIdx] = prodObj;
-              } else {
-                state.products.push(prodObj);
-              }
-            }
-            listeners.forEach((l) => l());
-          }
-        } catch (err) {
-          console.warn("[Farmer products sync notice]", err);
-        }
-
-        // Sync farmer orders
-        try {
-          const orders = await fetchFarmerOrdersApi();
-          if (Array.isArray(orders) && orders.length > 0) {
-            for (const o of orders) {
-              const mappedId = o.orderNumber || o.id || o._id;
-              const existing = state.orders.find((e) => e.id === mappedId);
-              if (existing) {
-                existing.stage = stageMapToDemo[o.status] || existing.stage;
-              } else {
-                state.orders.unshift({
-                  id: mappedId,
-                  farmerId: state.farmerId,
-                  marketId: "demo-m1",
-                  slotId: "demo-s1",
-                  stage: stageMapToDemo[o.status] || "Placed",
-                  lines: (o.items || []).map((it: any) => ({
-                    productId: it.productId || "demo-p1",
-                    name: it.name || "Bedian Heirloom Tomatoes",
-                    unit: it.unit || "kg",
-                    price: it.unitPriceMinor || 35000,
-                    quantity: it.quantity || 1,
-                  })),
-                  events: [{ label: stageMapToDemo[o.status] || "Placed", at: o.createdAt || state.now }],
-                });
-              }
-            }
-            listeners.forEach((l) => l());
-          }
-        } catch (err) {
-          console.warn("[Farmer orders sync notice]", err);
-        }
+    const before = state;
+    const after = execute(state, command);
+    state = after;
+    emit();
+    if (command.type === "basket") writeBasket(state);
+    if (LOCAL_ONLY.has(command.type)) return;
+    queue = queue.then(async () => {
+      try {
+        await persist(command, before, after);
+        if (command.type === "checkout") writeBasket(state);
+      } catch (e) {
+        reportError(e instanceof Error ? e.message : "The change could not be saved.");
       }
-    } catch (e) {
-      console.warn("[Gateway sync error]", e);
+      await gateway.refresh();
+    });
+  },
+  /** Reloads the catalogue and workspace from the server (coalesces concurrent calls). */
+  refresh(): Promise<void> {
+    if (refreshing) {
+      refreshAgain = true;
+      return refreshing;
     }
+    refreshing = (async () => {
+      do {
+        refreshAgain = false;
+        await load();
+      } while (refreshAgain);
+      refreshing = null;
+    })();
+    return refreshing;
   },
-  reset() {
-    state = seed();
-    listeners.forEach((l) => l());
+  /** Called after a successful sign-in. */
+  async signIn() {
+    state = { ...state, status: "loading" };
+    emit();
+    await gateway.refresh();
   },
+  async signOut() {
+    try {
+      await logoutApi();
+    } catch {
+      /* already signed out */
+    }
+    state = { ...state, role: null, session: null, orders: [], notices: [], metrics: null };
+    emit();
+    await gateway.refresh();
+  },
+  /** Changes the dashboard reporting period and reloads metrics. */
+  async setPeriod(period: string) {
+    state = { ...state, period };
+    emit();
+    await gateway.refresh();
+  },
+  /** Resolves once in-flight saves have reached the server. */
+  settled: () => queue,
 };
 
-// Initial background sync with backend
-if (typeof window !== "undefined") {
-  setTimeout(() => {
-    gateway.syncFromBackend();
-  }, 400);
-}
+// Kept for existing callers (Copilot, layout) that re-sync after server-side changes.
+export const syncFromBackend = () => gateway.refresh();
+
+if (typeof window !== "undefined" && typeof fetch !== "undefined" && !import.meta.env.VITEST)
+  void gateway.refresh();

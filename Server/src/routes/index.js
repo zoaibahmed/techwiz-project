@@ -18,6 +18,7 @@ import { announcementRouter } from './announcement.routes.js';
 import { inquiryRouter } from './inquiry.routes.js';
 import { uploadRouter } from './upload.routes.js';
 import { chatRouter } from './chat.routes.js';
+import { workspaceRouter } from './workspace.routes.js';
 
 const apiRouter = Router();
 
@@ -27,6 +28,7 @@ apiRouter.use('/health', healthRoutes);
 // Version 1 Sub-Router
 const v1Router = Router();
 v1Router.use('/health', healthRoutes);
+v1Router.use('/', workspaceRouter);
 v1Router.use('/auth', authRoutes);
 v1Router.use('/admin', adminRoutes);
 v1Router.use('/markets', marketRoutes);
@@ -51,6 +53,7 @@ v1Router.use('/', chatRouter);
 apiRouter.use('/v1', v1Router);
 
 // Fallback convenience aliases directly at /api
+apiRouter.use('/', workspaceRouter);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/markets', marketRoutes);

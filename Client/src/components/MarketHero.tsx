@@ -44,7 +44,7 @@ export function MarketHero({headline, lead, children}:{headline:string;lead:stri
         <p className="market-cinema-intro">{lead}</p>
       </div>
       <div className="market-cinema-next" aria-hidden="true"><span>From the people who grow it.</span><span>To the morning you make of it.</span></div>
-      <div className="market-cinema-bottom"><div className="market-cinema-finder">{children}</div><div className="market-cinema-footnote"><span>Editorial market photography · not a live market feed</span><span>Scroll into the market <ArrowDown size={15}/></span></div></div>
+      <div className="market-cinema-bottom"><div className="market-cinema-finder">{children}</div><div className="market-cinema-footnote"><span>Lahore · weekend markets</span><span>Scroll into the market <ArrowDown size={15}/></span></div></div>
     </div>
   </section>;
 }

@@ -1,8 +1,8 @@
 import { SceneHeader, HelpExperience } from "../components/PublicScenes";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useVisitor } from "../data/visitor-context";
 import { MarketMap as InteractiveMap } from "../components/MarketMap";
-import { lazy, useEffect, useState } from "react";
+import { lazy, useState } from "react";
 import {
   Link,
   useParams,
@@ -26,6 +26,10 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { CustomerChatModal } from "../components/CustomerChatModal";
+import { GrowerDirectory } from "../components/public/GrowerDirectory";
+import { ProduceShelf } from "../components/public/ProduceShelf";
+import { StallReviews, Stars } from "../components/public/StallReviews";
+import type { ShelfFilters } from "../components/public/ProduceShelf";
 import {
   useMarket,
   useAction,
@@ -38,7 +42,9 @@ import {
   Form,
   value,
 } from "../components/ui";
-import { date, money, images } from "../data/market";
+import { date, money } from "../data/market";
+import { gateway } from "../data/gateway";
+import { growerPhoto, marketPhoto } from "../data/photos";
 import type { Role } from "../data/market";
 import { loginApi, registerCustomerApi, registerFarmerApi } from "../data/api";
 
@@ -52,7 +58,8 @@ function useDiscoveryState() {
       (!visitor.city || m.city?.toLowerCase() === visitor.city.toLowerCase()),
   );
   const ids = new Set(markets.map((m) => m.id));
-  const farmers = state.farmers.filter((f) => ids.has(f.marketId));
+  // Growers can attend several markets; include anyone attending one here.
+  const farmers = state.farmers.filter((f) => ids.has(f.marketId) || (f.marketIds ?? []).some((id) => ids.has(id)));
   const farmerIds = new Set(farmers.map((f) => f.id));
   return {
     ...state,
@@ -158,7 +165,7 @@ export function Markets() {
                 <motion.article
                   layout={!reduceMotion}
                   animate={{
-                    backgroundColor: isSelected ? "#e0e8c9" : "#faf9f2",
+                    backgroundColor: isSelected ? "#dfe6d8" : "#faf8f2",
                   }}
                   transition={{ duration: reduceMotion ? 0 : 0.3 }}
                   className={`market-result ${isSelected ? "selected" : ""}`}
@@ -272,7 +279,7 @@ export function MarketDetail() {
 
       <div className="pe-detail-hero">
         <div className="pe-detail-gallery">
-          <img src={images.market} alt={m.name} />
+          <img src={marketPhoto(m)} alt={m.name} />
         </div>
         <div className="pe-detail-panel">
           <div
@@ -400,10 +407,10 @@ export function MarketDetail() {
                 >
                   <div className="pe-grower-img-box">
                     <img
-                      src={i % 2 === 0 ? images.carrots : images.tomatoes}
+                      src={growerPhoto(f, i)}
                       alt={f.name}
                     />
-                    <span className="pe-grower-badge">Stall #1{i + 1}</span>
+                    {f.stall && <span className="pe-grower-badge">Stall {f.stall}</span>}
                   </div>
                   <div className="pe-grower-body">
                     <div>
@@ -453,127 +460,15 @@ export function MarketDetail() {
 
 export function Farmers() {
   const s = useDiscoveryState();
-  const [q, set] = useState("");
-  const [selectedMarket, setSelectedMarket] = useState("");
-  const reduce = useReducedMotion();
-  const fs = s.farmers.filter(
-    (f) =>
-      f.state === "Approved" &&
-      `${f.name} ${f.person}`.toLowerCase().includes(q.toLowerCase()) &&
-      (!selectedMarket || f.marketId === selectedMarket),
-  );
   return (
     <div className="grower-editorial-page">
       <SceneHeader kind="growers" target="grower-directory" />
-      <div className="grower-directory-heading" id="grower-directory">
-        <div>
-          <span>The people behind the produce</span>
-          <h2>Meet the growers.</h2>
-        </div>
-        <p>
-          Profiles in this preview are labelled records. The photographs are
-          editorial imagery, not portraits of these growers.
-        </p>
-      </div>
-      <div className="filter-bar">
-        <label className="search">
-          <Search size={18} />
-          <input
-            aria-label="Search growers"
-            placeholder="A farm, a person, a familiar name"
-            value={q}
-            onChange={(e) => set(e.target.value)}
-          />
-        </label>
-        <label className="inline-field">
-          Market venue
-          <select
-            value={selectedMarket}
-            onChange={(e) => setSelectedMarket(e.target.value)}
-          >
-            <option value="">All market venues</option>
-            {s.markets.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span>{fs.length} growers</span>
-      </div>
-      <div className="grower-editorial-list">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {fs.map((f, i) => {
-            const m = s.markets.find((m) => m.id === f.marketId);
-            const count = s.products.filter(
-              (p) => p.farmerId === f.id && p.visible,
-            ).length;
-            return (
-              <motion.article
-                className="grower-editorial-row"
-                key={f.id}
-                layout={!reduce}
-                initial={{
-                  clipPath: reduce ? "inset(0%)" : "inset(0 0 100% 0)",
-                }}
-                whileInView={{ clipPath: "inset(0%)" }}
-                viewport={{ once: true, amount: 0.15 }}
-                exit={{ opacity: 0, scale: reduce ? 1 : 0.96 }}
-                transition={{
-                  duration: reduce ? 0 : 0.65,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-              >
-                <figure>
-                  <img
-                    loading="lazy"
-                    src={
-                      i % 2 === 0
-                        ? "/images/grower.jpg"
-                        : "/images/market-person.jpg"
-                    }
-                    alt="Editorial agricultural photograph, not the listed grower"
-                  />
-                  <figcaption>
-                    Editorial photograph /{" "}
-                    {i % 2 === 0 ? "Heather Gill" : "Ravi Sharma"}
-                  </figcaption>
-                </figure>
-                <div className="grower-editorial-story">
-                  <span>
-                    0{i + 1} /{" "}
-                    {f.id.startsWith("demo-")
-                      ? "Sample grower"
-                      : "Grower profile"}
-                  </span>
-                  <h2>{f.name}</h2>
-                  <p className="grower-person">{f.person}</p>
-                  <p>{f.story}</p>
-                  <dl>
-                    <div>
-                      <dt>Meet at</dt>
-                      <dd>{m?.name ?? "Market to be confirmed"}</dd>
-                    </div>
-                    <div>
-                      <dt>On the stall</dt>
-                      <dd>{count} listed products</dd>
-                    </div>
-                    <div>
-                      <dt>Market day</dt>
-                      <dd>{m ? date(m.day) : "To be confirmed"}</dd>
-                    </div>
-                  </dl>
-                  <Link to={`/farmers/${f.id}`}>
-                    Step into their story
-                    <ArrowUpRight size={21} />
-                  </Link>
-                </div>
-              </motion.article>
-            );
-          })}
-        </AnimatePresence>
-        {!fs.length && <Empty title="No growers match this search." />}
-      </div>
+      <GrowerDirectory
+        farmers={s.farmers}
+        markets={s.markets.filter((m) => m.active)}
+        products={s.products}
+        today={s.now.slice(0, 10)}
+      />
     </div>
   );
 }
@@ -589,7 +484,6 @@ export function FarmerDetail() {
   const ownProducts = s.products.filter(
     (p) => p.farmerId === f.id && p.visible,
   );
-  const farmerReviews = s.reviews.filter((r) => r.visible && r.target === f.id);
 
   return (
     <div className="container section">
@@ -599,7 +493,7 @@ export function FarmerDetail() {
 
       <div className="pe-detail-hero" style={{ marginTop: "16px" }}>
         <div className="pe-detail-gallery">
-          <img src={images.carrots} alt={f.name} />
+          <img src={growerPhoto(f)} alt={f.name} />
         </div>
         <div className="pe-detail-panel">
           <div
@@ -630,9 +524,23 @@ export function FarmerDetail() {
               margin: "0 0 16px",
             }}
           >
-            Lead Grower: {f.person} · Lahore Pilot Region
+            Lead grower: {f.person}
+            {f.location ? ` · ${f.location}` : ""}
           </p>
 
+          <a className="fd-rating" href="#reviews">
+            {f.rating ? (
+              <>
+                <Stars value={f.rating} size={16} />
+                <strong>{f.rating.toFixed(1)}</strong>
+                <span>
+                  {f.reviewCount ?? 0} review{f.reviewCount === 1 ? "" : "s"}
+                </span>
+              </>
+            ) : (
+              <span>No reviews yet · be the first</span>
+            )}
+          </a>
           <p
             style={{
               fontSize: "15px",
@@ -652,12 +560,6 @@ export function FarmerDetail() {
               marginBottom: "20px",
             }}
           >
-            <span
-              className="pe-cat-btn"
-              style={{ fontSize: "12px", background: "var(--pe-sage)" }}
-            >
-              ✓ 100% Organically Grown
-            </span>
             <span
               className="pe-cat-btn"
               style={{ fontSize: "12px", background: "var(--pe-sage)" }}
@@ -687,7 +589,7 @@ export function FarmerDetail() {
                   marginRight: "6px",
                 }}
               />
-              <strong>Stall Location:</strong> Stall #14, near South Gate
+              <strong>Stall:</strong> {f.stall ? `Stall ${f.stall}` : "Shown on your pickup confirmation"}
             </p>
             <p style={{ fontSize: "14px", margin: "0 0 16px" }}>
               <CalendarDays
@@ -751,297 +653,79 @@ export function FarmerDetail() {
         </div>
       </section>
 
-      {/* Community Reviews Section */}
-      <section className="section">
-        <div className="pe-section-header">
-          <span className="pe-eyebrow">
-            <Star size={14} /> Verified Buyer Feedback
-          </span>
-          <h2 className="pe-section-title">Words from the market community.</h2>
-        </div>
-
-        {farmerReviews.length > 0 ? (
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-          >
-            {farmerReviews.map((r) => (
-              <blockquote
-                className="review"
-                key={r.id}
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid var(--pe-border)",
-                  borderRadius: "6px",
-                  padding: "20px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    marginBottom: "8px",
-                    color: "var(--pe-harvest)",
-                  }}
-                >
-                  {[...Array(r.rating)].map((_, idx) => (
-                    <Star key={idx} size={14} fill="currentColor" />
-                  ))}
-                  <strong
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--pe-ink)",
-                      marginLeft: "4px",
-                    }}
-                  >
-                    Verified Pickup · Order {r.orderId}
-                  </strong>
-                </div>
-                <p
-                  style={{
-                    fontSize: "15px",
-                    lineHeight: "1.55",
-                    margin: "0 0 10px",
-                  }}
-                >
-                  “{r.text}”
-                </p>
-                {r.reply && (
-                  <div
-                    style={{
-                      borderLeft: "3px solid var(--pe-forest)",
-                      paddingLeft: "12px",
-                      marginTop: "10px",
-                      color: "var(--pe-forest)",
-                      fontSize: "13.5px",
-                    }}
-                  >
-                    <strong>Farmer Reply:</strong> {r.reply}
-                  </div>
-                )}
-              </blockquote>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: "var(--pe-muted)", fontStyle: "italic" }}>
-            No customer reviews have been submitted for this stall yet.
-          </p>
-        )}
-      </section>
+      <StallReviews farmer={f} />
     </div>
   );
 }
 
 export function Products() {
   const s = useDiscoveryState();
-  const reduce = useReducedMotion();
   const [params, set] = useSearchParams();
-  const q = params.get("q") ?? "";
-  const category = params.get("category") ?? "";
-  const farmer = params.get("farmer") ?? "";
-  const market = params.get("market") ?? "";
+  const filters: ShelfFilters = {
+    q: params.get("q") ?? "",
+    category: params.get("category") ?? "",
+    farmer: params.get("farmer") ?? "",
+    market: params.get("market") ?? "",
+    sort: params.get("sort") ?? "name",
+    available: params.get("available") === "true",
+  };
   const day = params.get("day") ?? "";
-  const [available, setAvailable] = useState(
-    params.get("available") === "true",
-  );
-
-  useEffect(() => setAvailable(params.get("available") === "true"), [params]);
-
-  const sort = params.get("sort") ?? "name";
-  const max = Number(params.get("max") ?? 1000);
+  const max = Number(params.get("max") ?? 0);
 
   const update = (key: string, v: string) => {
     const n = new URLSearchParams(params);
     if (v) n.set(key, v);
     else n.delete(key);
-    set(n);
+    set(n, { replace: key === "q" });
   };
 
-  const products = s.products
+  const approved = s.farmers.filter((f) => f.state === "Approved");
+  const approvedIds = new Set(approved.map((f) => f.id));
+  const shelf = s.products.filter((p) => p.visible && approvedIds.has(p.farmerId));
+  const attends = (farmerId: string, marketId: string) => {
+    const f = approved.find((x) => x.id === farmerId);
+    return !!f && (f.marketId === marketId || (f.marketIds ?? []).includes(marketId));
+  };
+  const left = (p: (typeof shelf)[number]) => p.stock - p.reserved;
+  const q = filters.q.trim().toLowerCase();
+  const products = shelf
     .filter(
       (p) =>
-        p.visible &&
-        s.farmers.find((f) => f.id === p.farmerId)?.state === "Approved" &&
-        p.name.toLowerCase().includes(q.toLowerCase()) &&
-        (!category || p.category === category) &&
-        (!farmer || p.farmerId === farmer) &&
-        (!market ||
-          s.farmers.find((f) => f.id === p.farmerId)?.marketId === market) &&
-        (!day ||
-          s.slots.some(
-            (slot) =>
-              slot.farmerId === p.farmerId && slot.start.startsWith(day),
-          )) &&
-        (!available || (p.available && p.stock > p.reserved)) &&
-        p.price <= max * 100,
+        `${p.name} ${p.category} ${p.description}`.toLowerCase().includes(q) &&
+        (!filters.category || p.category === filters.category) &&
+        (!filters.farmer || p.farmerId === filters.farmer) &&
+        (!filters.market || attends(p.farmerId, filters.market)) &&
+        (!day || (p.offers ?? []).some((o) => o.date === day) || s.slots.some((slot) => slot.farmerId === p.farmerId && slot.start.startsWith(day))) &&
+        (!filters.available || (p.available && left(p) > 0)) &&
+        (!max || p.price <= max * 100),
     )
     .sort((a, b) =>
-      sort === "low"
+      filters.sort === "low"
         ? a.price - b.price
-        : sort === "high"
+        : filters.sort === "high"
           ? b.price - a.price
-          : a.name.localeCompare(b.name),
+          : filters.sort === "left"
+            ? left(a) / Math.max(1, a.stock) - left(b) / Math.max(1, b.stock)
+            : a.name.localeCompare(b.name),
     );
+  // Never offer a category filter that leads nowhere.
+  const categories = s.categories
+    .map((name) => ({ name, count: shelf.filter((p) => p.category === name).length }))
+    .filter((c) => c.count > 0);
 
   return (
     <div className="produce-gallery-page">
       <SceneHeader kind="produce" target="harvest-filters" />
-      {/* Category Pills Strip */}
-      <div className="pe-categories-tabs" id="harvest-filters">
-        <button
-          className={`pe-cat-btn ${!category ? "active" : ""}`}
-          onClick={() => update("category", "")}
-        >
-          All Produce ({s.products.filter((p) => p.visible).length})
-        </button>
-        {s.categories.map((c) => {
-          const count = s.products.filter(
-            (p) => p.visible && p.category === c,
-          ).length;
-          return (
-            <button
-              key={c}
-              className={`pe-cat-btn ${category === c ? "active" : ""}`}
-              onClick={() => update("category", c)}
-            >
-              {c} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="filter-bar">
-        <label className="search">
-          <Search size={18} />
-          <input
-            value={q}
-            onChange={(e) => update("q", e.target.value)}
-            placeholder="Search produce name, category or description..."
-            aria-label="Search produce"
-          />
-        </label>
-        <select
-          aria-label="Sort produce"
-          value={sort}
-          onChange={(e) => update("sort", e.target.value)}
-        >
-          <option value="name">Sort by Name</option>
-          <option value="low">Price: Low to High</option>
-          <option value="high">Price: High to Low</option>
-        </select>
-      </div>
-
-      <div className="catalogue">
-        <aside className="filter-rail">
-          <h3>Filter Options</h3>
-          <Field label="Market Venue">
-            <select
-              value={market}
-              onChange={(e) => update("market", e.target.value)}
-            >
-              <option value="">All Market Locations</option>
-              {s.markets
-                .filter((m) => m.active)
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-
-          <Field label="Grower / Stall">
-            <select
-              value={farmer}
-              onChange={(e) => update("farmer", e.target.value)}
-            >
-              <option value="">All Verified Growers</option>
-              {s.farmers
-                .filter((f) => f.state === "Approved")
-                .map((f) => (
-                  <option value={f.id} key={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-
-          <Field label={`Max Price: ${money(max * 100)}`}>
-            <input
-              type="range"
-              min={100}
-              max={1000}
-              step={50}
-              value={max}
-              onChange={(e) => update("max", e.target.value)}
-            />
-          </Field>
-
-          <label
-            className="checkbox"
-            style={{
-              marginTop: "12px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={available}
-              onChange={(e) => {
-                setAvailable(e.target.checked);
-                update("available", String(e.target.checked));
-              }}
-            />
-            <span>In-stock items only</span>
-          </label>
-
-          <button
-            className="button quiet"
-            onClick={() => set({})}
-            style={{ marginTop: "16px" }}
-          >
-            Reset Filters
-          </button>
-        </aside>
-
-        <div>
-          <p className="small muted" style={{ marginBottom: "16px" }}>
-            {products.length} matching offers · review dates and pickup details
-            on each listing.
-          </p>
-
-          <div className="pe-produce-grid three">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {products.map((p) => (
-                <motion.div
-                  key={p.id}
-                  layout={!reduce}
-                  initial={{
-                    opacity: 0,
-                    clipPath: reduce ? "inset(0%)" : "inset(0 100% 0 0)",
-                  }}
-                  animate={{ opacity: 1, clipPath: "inset(0%)" }}
-                  exit={{ opacity: 0, scale: reduce ? 1 : 0.9 }}
-                  transition={{
-                    duration: reduce ? 0 : 0.36,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                >
-                  <ProductTile product={p} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          {!products.length && (
-            <Empty title="No produce matches your active filter.">
-              Try adjusting the price slider or select "All Produce".
-            </Empty>
-          )}
-        </div>
-      </div>
+      <ProduceShelf
+        products={products}
+        allCount={shelf.length}
+        categories={categories}
+        farmers={approved}
+        markets={s.markets.filter((m) => m.active)}
+        filters={filters}
+        onChange={update}
+        onReset={() => set({})}
+      />
     </div>
   );
 }
@@ -1382,11 +1066,30 @@ export function ProductDetail() {
   );
 }
 
+/** Seeded accounts for evaluation (see Server/src/seed/seedData.js). */
+const EVALUATOR_ACCOUNTS: { role: Role; label: string; name: string; email: string; password: string }[] = [
+  { role: "customer", label: "Customer", name: "Sarah Ahmed", email: "customer.sarah@marketlink.com", password: "Customer123!" },
+  { role: "farmer", label: "Grower", name: "Greenfield Farm", email: "farmer.greenfield@marketlink.com", password: "Farmer123!" },
+  { role: "admin", label: "Administrator", name: "Market operations", email: "admin@marketlink.com", password: "Admin123!" },
+];
+
+/**
+ * Where to go after signing in: the requested page when it is a same-site path
+ * the role may open (its own workspace, or a public stall/product/market page
+ * for customers), otherwise the role's workspace.
+ */
+function afterSignIn(next: string | null, role: Role) {
+  const safe = !!next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\");
+  const allowed =
+    safe &&
+    (next!.startsWith(`/${role}`) || (role === "customer" && /^\/(farmers|products|markets)\//.test(next!)));
+  return allowed ? next! : `/${role}`;
+}
+
 export function Auth() {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const act = useAction();
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -1401,41 +1104,16 @@ export function Auth() {
   const [loginRole, setRole] = useState<Role>(role);
   const [error, setError] = useState("");
 
-  const enter = async (r: Role, creds?: { email: string; pass: string }) => {
+  const enter = async (email: string, pass: string) => {
     setError("");
     setLoading(true);
     try {
-      const email =
-        creds?.email ||
-        (r === "admin"
-          ? "admin@marketlink.pk"
-          : r === "farmer"
-            ? "tariq@goodearthgrowers.pk"
-            : "hira.khan@example.com");
-      const pass =
-        creds?.pass ||
-        (r === "admin"
-          ? "AdminPass123!"
-          : r === "farmer"
-            ? "FarmerPass123!"
-            : "CustomerPass123!");
       const session = await loginApi(email, pass);
-      act(
-        { type: "role", role: session.role || r },
-        `Authenticated as ${session.name || session.email}.`,
-      );
+      await gateway.signIn();
       const next = params.get("next");
-      navigate(
-        next &&
-          next.startsWith(`/${session.role || r}`) &&
-          !next.startsWith("//")
-          ? next
-          : `/${session.role || r}`,
-      );
+      navigate(afterSignIn(next, session.role));
     } catch (err: any) {
-      setError(
-        err?.message || "Sign in failed. Please verify your credentials.",
-      );
+      setError(err?.message || "Sign in failed. Please check your email and password.");
     } finally {
       setLoading(false);
     }
@@ -1466,10 +1144,7 @@ export function Auth() {
             businessName: value(d, "name"),
             bio: "Organic field grower registered on Gather & Grow.",
           });
-          act(
-            { type: "role", role: "farmer" },
-            "Farmer account created. Welcome to Gather & Grow!",
-          );
+          await gateway.signIn();
           navigate("/farmer");
         } else {
           await registerCustomerApi({
@@ -1479,11 +1154,8 @@ export function Auth() {
             phone: value(d, "phone"),
             address: value(d, "address"),
           });
-          act(
-            { type: "role", role: "customer" },
-            "Customer account created. Welcome to Gather & Grow!",
-          );
-          navigate("/customer");
+          await gateway.signIn();
+          navigate(afterSignIn(params.get("next"), "customer"));
         }
       } catch (err: any) {
         setError(
@@ -1496,18 +1168,10 @@ export function Auth() {
     } else {
       try {
         const session = await loginApi(email, password);
-        const resolvedRole =
-          session.role || (role === "admin" ? "admin" : loginRole);
-        act(
-          { type: "role", role: resolvedRole },
-          `Signed in as ${session.name || resolvedRole}.`,
-        );
+        const resolvedRole = session.role || loginRole;
+        await gateway.signIn();
         const next = params.get("next");
-        navigate(
-          next && next.startsWith(`/${resolvedRole}`) && !next.startsWith("//")
-            ? next
-            : `/${resolvedRole}`,
-        );
+        navigate(afterSignIn(next, resolvedRole));
       } catch (err: any) {
         setError(
           err?.message ||
@@ -1522,7 +1186,7 @@ export function Auth() {
   return (
     <div className="auth">
       <div className="auth-photo">
-        <img src={images.market} alt="Produce laid out at a market" />
+        <img src="/images/market.jpg" alt="Produce laid out at a market" />
         <div>
           <p>The Living Market</p>
           <h2>
@@ -1561,62 +1225,31 @@ export function Auth() {
         ) : (
           <>
             {!register && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  flexWrap: "wrap",
-                  marginBottom: "16px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--pe-muted)",
-                    alignSelf: "center",
-                  }}
-                >
-                  Quick Fill:
-                </span>
-                <button
-                  type="button"
-                  className="pe-cat-btn"
-                  style={{ fontSize: "11px", padding: "4px 8px" }}
-                  onClick={() => {
-                    setEmailInput("hira.khan@example.com");
-                    setPasswordInput("CustomerPass123!");
-                    setRole("customer");
-                  }}
-                >
-                  Customer Demo
-                </button>
-                <button
-                  type="button"
-                  className="pe-cat-btn"
-                  style={{ fontSize: "11px", padding: "4px 8px" }}
-                  onClick={() => {
-                    setEmailInput("tariq@goodearthgrowers.pk");
-                    setPasswordInput("FarmerPass123!");
-                    setRole("farmer");
-                  }}
-                >
-                  Farmer Demo
-                </button>
-                {role === "admin" && (
-                  <button
-                    type="button"
-                    className="pe-cat-btn"
-                    style={{ fontSize: "11px", padding: "4px 8px" }}
-                    onClick={() => {
-                      setEmailInput("admin@marketlink.pk");
-                      setPasswordInput("AdminPass123!");
-                      setRole("admin");
-                    }}
-                  >
-                    Admin Demo
-                  </button>
-                )}
-              </div>
+              <section className="evaluator-access" aria-labelledby="evaluator-title">
+                <p id="evaluator-title" className="evaluator-title">
+                  Evaluator accounts
+                </p>
+                <div className="evaluator-grid">
+                  {EVALUATOR_ACCOUNTS.map((a) => (
+                    <button
+                      key={a.email}
+                      type="button"
+                      className="evaluator-card"
+                      disabled={loading}
+                      onClick={() => {
+                        setEmailInput(a.email);
+                        setPasswordInput(a.password);
+                        setRole(a.role);
+                        enter(a.email, a.password);
+                      }}
+                    >
+                      <span className="evaluator-role">{a.label}</span>
+                      <strong>{a.name}</strong>
+                      <span className="evaluator-email">{a.email}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
             )}
             <Form onSubmit={handleFormSubmit}>
               {register && (
@@ -1652,14 +1285,14 @@ export function Auth() {
                   type="email"
                   required
                   autoComplete="off"
-                  placeholder="sample@example.test"
+                  placeholder="you@example.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                 />
               </Field>
               <Field
                 label="Password"
-                hint="Password rule: at least 8 characters. Securely hashed on MongoDB Atlas."
+                hint={register ? "At least 8 characters." : undefined}
               >
                 <div className="password-field">
                   <input
@@ -1692,17 +1325,6 @@ export function Auth() {
                   />
                 </Field>
               )}
-              {!register && role !== "admin" && (
-                <Field label="Target Role">
-                  <select
-                    value={loginRole}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                  >
-                    <option value="customer">Customer Account</option>
-                    <option value="farmer">Farmer Stall Account</option>
-                  </select>
-                </Field>
-              )}
               {error && (
                 <p className="error" role="alert">
                   {error}
@@ -1719,19 +1341,13 @@ export function Auth() {
             </Form>
             <div className="auth-links">
               {register ? (
-                <Link to="/login">Already have an account? Sign in</Link>
+                <Link to={params.get("next") ? `/login?next=${encodeURIComponent(params.get("next")!)}` : "/login"}>
+                  Already have an account? Sign in
+                </Link>
               ) : (
-                <>
-                  <Link to="/register">New to the market? Join us</Link>
-                  <button
-                    className="text-button"
-                    onClick={() =>
-                      enter(role === "admin" ? "admin" : loginRole)
-                    }
-                  >
-                    Direct Sign In as {role === "admin" ? "Admin" : loginRole}
-                  </button>
-                </>
+                <Link to={params.get("next") ? `/register/customer?next=${encodeURIComponent(params.get("next")!)}` : "/register"}>
+                  New to the market? Join us
+                </Link>
               )}
             </div>
           </>
@@ -1754,11 +1370,10 @@ export function Info() {
         <div className="two-col">
           <div>
             <h2>The Gather & Grow team</h2>
-            <Notice>
-              Verified team email, phone, address and Google Maps location are
-              awaiting owner-provided content. No fictional contact details are
-              presented as real.
-            </Notice>
+            <p>
+              Send us a message and the market operations team will pick it up
+              from their inbox.
+            </p>
             <p>
               For reservation questions, review your order and the pickup
               details first.
@@ -1801,7 +1416,7 @@ export function Info() {
             Find your next market <ArrowUpRight size={18} />
           </Link>
         </div>
-        <img src={images.basket} alt="A basket filled with a garden harvest" />
+        <img src="/images/harvest.jpg" alt="A basket filled with a garden harvest" />
       </div>
       <section className="section">
         <h2>Made for the whole market.</h2>
@@ -1839,7 +1454,7 @@ export function NotFound() {
     <div className="container section">
       <Heading
         title="This path has wandered off."
-        intro="The page or sample record could not be found."
+        intro="That page or record could not be found."
       />
       <Link className="button" to="/markets">
         Back to the market <ArrowRight size={18} />

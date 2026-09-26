@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 export const createReviewSchema = z.object({
-  orderId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid order ID'),
+  // Optional: a grower's stall can be reviewed by any signed-in customer. When an
+  // order is given it must be a collected order, and the review is marked verified.
+  orderId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid order ID').optional(),
   targetType: z.enum(['farmer', 'product'], {
     errorMap: () => ({ message: 'targetType must be either "farmer" or "product"' }),
   }),
@@ -15,6 +17,6 @@ export const replyReviewSchema = z.object({
 });
 
 export const updateReviewModerationSchema = z.object({
-  moderationStatus: z.enum(['approved', 'hidden', 'flagged']),
+  moderationStatus: z.enum(['approved', 'rejected', 'hidden', 'flagged']),
   moderationReason: z.string().max(250).optional(),
 });

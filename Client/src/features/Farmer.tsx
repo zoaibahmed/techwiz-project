@@ -28,7 +28,8 @@ import {
   Empty,
   Confirm,
 } from "../components/ui";
-import { money, total, date, time, images, activeOrder } from "../data/market";
+import { money, total, date, time, activeOrder, orderRef } from "../data/market";
+import { PHOTO_LIBRARY } from "../data/photos";
 import type { Product, Order } from "../data/market";
 import { Notifications } from "./Customer";
 import { NotFound } from "./Public";
@@ -89,136 +90,162 @@ function FarmerOverviewCockpit({
   ownOrders: Order[];
 }) {
   const act = useAction();
+  const s = useMarket();
+  const m = s.metrics;
   const pendingOrders = ownOrders.filter((o) => o.stage === "Placed");
   const activeReservationsCount = ownOrders.filter(activeOrder).length;
 
+  const myMarkets = s.markets.filter((x) => (f.marketIds ?? [f.marketId]).includes(x.id) && x.active);
+  const upcoming = myMarkets
+    .flatMap((x) => (x.nextDates ?? [x.day]).filter(Boolean).map((d) => ({ market: x, day: d })))
+    .sort((a, b) => a.day.localeCompare(b.day) || a.market.name.localeCompare(b.market.name));
+  const next = upcoming[0];
+  const nextSlots = next
+    ? s.slots.filter((x) => x.farmerId === f.id && x.marketId === next.market.id && (x.date ?? x.start.slice(0, 10)) === next.day)
+    : [];
+  const cutoff = nextSlots.map((x) => x.cutoff).sort()[0];
+  const open = cutoff ? new Date(s.now) < new Date(cutoff) : false;
+  const nextOrders = next ? ownOrders.filter((o) => activeOrder(o) && o.marketDate === next.day && o.marketId === next.market.id) : [];
+  const nextUnits = nextOrders.reduce((n, o) => n + o.lines.reduce((u, l) => u + l.quantity, 0), 0);
+  const lowStock = (m?.stock.lowStock ?? []).map((x) => ownProducts.find((p) => p.id === x.productId)?.name).filter(Boolean);
+  const soldOut = (m?.stock.soldOut ?? []).map((x) => ownProducts.find((p) => p.id === x.productId)?.name).filter(Boolean);
+
+  // The coming seven days, with this stall's real market days and packing days.
+  const today = new Date(s.now);
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today.getTime() + i * 86400000);
+    const iso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(d);
+    const markets = upcoming.filter((u) => u.day === iso).map((u) => u.market);
+    const packing = upcoming.some((u) => {
+      const before = new Date(`${u.day}T12:00:00+05:00`).getTime() - 86400000;
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date(before)) === iso;
+    });
+    return { iso, markets, packing };
+  });
+
   return (
     <div className="farmer-workbench container">
-      {/* Executive Header */}
       <div className="fw-header">
         <div className="fw-header-info">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <span className="fw-status-chip accepted">
-              <Sprout size={13} /> Active Producer
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px", flexWrap: "wrap" }}>
+            <span className={`fw-status-chip ${f.state === "Approved" ? "accepted" : "placed"}`}>
+              <Sprout size={13} /> {f.state === "Approved" ? "Approved grower" : f.state}
             </span>
             <span style={{ fontSize: "13px", color: "var(--fw-muted)" }}>
-              Stall #14 · Gulberg & Orchard Markets
+              {[f.stall && `Stall ${f.stall}`, myMarkets.map((x) => x.name).join(" & ")].filter(Boolean).join(" · ")}
             </span>
           </div>
-          <h1>{f.name} Workbench</h1>
+          <h1>{f.name}</h1>
           <p className="fw-header-sub">
-            Welcome back, {f.person}. Market Day preparations are in progress for Saturday, 3 October.
+            Welcome back, {String(f.person).split(" ")[0]}.{" "}
+            {next
+              ? `${date(next.day)} at ${next.market.name}: ${nextOrders.length} order${nextOrders.length === 1 ? "" : "s"} and ${nextUnits} units to pack.`
+              : "No market day is scheduled yet. Join a market to start taking pre-orders."}
           </p>
         </div>
         <div className="fw-header-actions">
           <Link className="button secondary" to="/farmer/pickups">
-            <ClipboardList size={16} /> Packing List ({activeReservationsCount})
+            <ClipboardList size={16} /> Packing list ({activeReservationsCount})
           </Link>
           <Link className="button" to="/farmer/stock">
-            <Sliders size={16} /> Manage Saturday Stock
+            <Sliders size={16} /> Manage stock
           </Link>
         </div>
       </div>
 
-      {/* Next Market Day Hero Card */}
-      <div className="fw-next-market-card">
-        <div>
-          <span className="fw-nm-badge">Next Market Occurrence</span>
-          <h2>The Orchard Market · Lahore</h2>
-          <p className="fw-nm-location">
-            <MapPin size={14} /> Model Town Park Entrance 3, Lahore · Sat 08:00–13:00
-          </p>
+      {next && (
+        <div className="fw-next-market-card">
+          <div>
+            <span className="fw-nm-badge">Next market day · {date(next.day)}</span>
+            <h2>{next.market.name}</h2>
+            <p className="fw-nm-location">
+              <MapPin size={14} /> {next.market.address} · {next.market.hours}
+            </p>
+          </div>
+          <div className="fw-nm-stat-block">
+            <p className="fw-nm-stat-label">Order cutoff</p>
+            <p className="fw-nm-stat-val">{cutoff ? `${date(cutoff)} ${time(cutoff)}` : "Add a pickup window"}</p>
+            <p className="fw-nm-stat-sub">Asia/Karachi</p>
+          </div>
+          <div className="fw-nm-stat-block">
+            <p className="fw-nm-stat-label">Pre-orders</p>
+            <p className="fw-nm-stat-val" style={{ color: open ? "#a8baa3" : "var(--fw-paper)" }}>
+              {open ? "Open" : "Closed for changes"}
+            </p>
+            <p className="fw-nm-stat-sub">{nextOrders.length} reserved · {nextSlots.length} pickup windows</p>
+          </div>
+          <div>
+            <Link
+              className="button"
+              to="/farmer/pickups"
+              style={{ background: "var(--fw-paper)", color: "var(--fw-forest)", border: "none", fontWeight: "600" }}
+            >
+              Open pickup station <ArrowUpRight size={16} />
+            </Link>
+          </div>
         </div>
-        <div className="fw-nm-stat-block">
-          <p className="fw-nm-stat-label">Order Cutoff</p>
-          <p className="fw-nm-stat-val">Friday 20:00</p>
-          <p className="fw-nm-stat-sub">Asia/Karachi timezone</p>
+      )}
+
+      <div className="fw-briefing">
+        <div className="fw-briefing-head">
+          <span className="fw-briefing-badge">This week</span>
+          <strong>What needs your attention</strong>
         </div>
-        <div className="fw-nm-stat-block">
-          <p className="fw-nm-stat-label">Pre-order Status</p>
-          <p className="fw-nm-stat-val" style={{ color: "#a8dba8" }}>Open for Booking</p>
-          <p className="fw-nm-stat-sub">{activeReservationsCount} bags reserved</p>
-        </div>
-        <div>
-          <Link
-            className="button"
-            to="/farmer/pickups"
-            style={{ background: "var(--fw-paper)", color: "var(--fw-forest)", border: "none", fontWeight: "600" }}
-          >
-            Open Prep Station <ArrowUpRight size={16} />
-          </Link>
+        <div className="fw-briefing-grid">
+          <div>
+            <strong>Packing</strong>
+            <span>
+              {nextUnits
+                ? `${nextUnits} units across ${nextOrders.length} orders for ${next ? date(next.day) : "your next market"}.`
+                : "Nothing reserved for your next market day yet."}
+            </span>
+          </div>
+          <div>
+            <strong>Stock</strong>
+            <span>
+              {soldOut.length
+                ? `${soldOut.join(", ")} sold out. `
+                : ""}
+              {lowStock.length
+                ? `${lowStock.join(", ")} running low.`
+                : soldOut.length
+                  ? ""
+                  : "Every listed product has stock left for walk-up shoppers."}
+            </span>
+          </div>
+          <div>
+            <strong>Customers</strong>
+            <span>
+              {pendingOrders.length ? `${pendingOrders.length} pre-order${pendingOrders.length === 1 ? "" : "s"} to accept. ` : "No pre-orders waiting. "}
+              {m?.reviews.awaitingReply ? `${m.reviews.awaitingReply} reviews without a reply.` : ""}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Farm Copilot Contextual Intelligence Briefing */}
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid var(--fw-border-subtle)",
-          borderLeft: "4px solid var(--fw-forest)",
-          borderRadius: "6px",
-          padding: "20px 24px",
-          margin: "24px 0",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ background: "var(--fw-sage)", color: "var(--fw-forest)", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Farm Copilot Briefing
-            </span>
-            <strong style={{ fontSize: "15px", color: "var(--fw-ink)" }}>Saturday Market Preparation & Inventory Risks</strong>
-          </div>
-          <span style={{ fontSize: "12px", color: "var(--fw-muted)" }}>Grounded in current stall catalogue & reservations</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", fontSize: "14px", lineHeight: "1.5" }}>
-          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
-            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
-              Harvest Allocation:
-            </strong>
-            <span>
-              {ownProducts.reduce((sum, p) => sum + p.reserved, 0)} units reserved across {ownOrders.filter(activeOrder).length} customer orders. Crate packing should begin by Friday evening.
-            </span>
-          </div>
-          <div style={{ background: "var(--fw-sage)", padding: "12px 16px", borderRadius: "4px" }}>
-            <strong style={{ color: "var(--fw-forest)", display: "block", marginBottom: "4px" }}>
-              Stock Risk Assessment:
-            </strong>
-            <span>
-              {ownProducts.some(p => p.stock - p.reserved <= 5 && p.stock - p.reserved > 0)
-                ? `${ownProducts.filter(p => p.stock - p.reserved <= 5 && p.stock - p.reserved > 0).map(p => p.name).join(", ")} are close to selling out. Consider publishing additional harvest allocation.`
-                : "All active produce lines maintain healthy buffer quantities for walk-up shoppers."}
-            </span>
-          </div>
-        </div>
-      </div>
+      <FarmerOperationalStatsArea />
 
-      {/* High-Density Operational Analytics & Executive KPI Area */}
-      <FarmerOperationalStatsArea f={f} ownProducts={ownProducts} ownOrders={ownOrders} />
-
-      {/* Priority Action Section: Orders Awaiting Response */}
       {pendingOrders.length > 0 && (
         <section className="fw-prep-card" style={{ borderLeft: "4px solid var(--fw-harvest)" }}>
           <div className="fw-prep-header">
             <div>
               <span className="fw-status-chip placed" style={{ marginBottom: "6px" }}>
-                Urgent Action Required
+                Needs a response
               </span>
-              <h2 style={{ fontSize: "22px", margin: "4px 0" }}>
-                {pendingOrders.length} Sample Pre-order{pendingOrders.length > 1 ? "s" : ""} Awaiting Your Response
+              <h2 style={{ fontSize: "22px", margin: "4px 0 6px" }}>
+                {pendingOrders.length} pre-order{pendingOrders.length > 1 ? "s" : ""} awaiting your response
               </h2>
               <p style={{ margin: 0, fontSize: "14px", color: "var(--fw-muted)" }}>
-                Accepting these reservations locks customer inventory and schedules packing time.
+                Accepting confirms the reservation to the customer and adds it to your packing list.
               </p>
             </div>
             <button
               className="button"
               onClick={() => {
-                pendingOrders.forEach((o) => {
-                  act({ type: "stage", id: o.id, stage: "Accepted" });
-                });
+                pendingOrders.forEach((o) => act({ type: "stage", id: o.id, stage: "Accepted" }, "Orders accepted."));
               }}
             >
-              <CheckCircle2 size={16} /> Batch Accept All ({pendingOrders.length})
+              <CheckCircle2 size={16} /> Accept all ({pendingOrders.length})
             </button>
           </div>
           <div className="fw-orders-container">
@@ -229,84 +256,69 @@ function FarmerOverviewCockpit({
         </section>
       )}
 
-      {/* Week-at-a-Glance Rhythm & Schedule */}
       <section className="fw-prep-card">
         <div className="fw-prep-header">
           <div>
-            <h2 style={{ fontSize: "22px", margin: "0 0 4px" }}>Weekly Market Rhythm</h2>
+            <h2 style={{ fontSize: "22px", margin: "0 0 4px" }}>Your week</h2>
             <p style={{ margin: 0, fontSize: "14px", color: "var(--fw-muted)" }}>
-              Scheduled harvest updates, customer reservation cutoffs, and Saturday market day.
+              Market days and the packing day before each one.
             </p>
           </div>
           <Link className="button secondary compact" to="/farmer/markets">
-            View All Markets <ArrowUpRight size={15} />
+            My markets <ArrowUpRight size={15} />
           </Link>
         </div>
-
         <div className="week-board">
-          {[
-            { day: "Mon 28", label: "Field prep", active: false },
-            { day: "Tue 29", label: "Catalog update", active: false },
-            { day: "Wed 30", label: "Inventory check", active: false },
-            { day: "Thu 1", label: "Pre-orders live", active: false },
-            { day: "Fri 2", label: "Cutoff 20:00", active: true, highlight: "Harvest & pack" },
-            { day: "Sat 3", label: "Orchard Market", active: true, market: true },
-            { day: "Sun 4", label: "Stall rest", active: false },
-          ].map((item) => (
-            <div key={item.day} className={item.market ? "market-day" : ""}>
-              <p style={{ fontWeight: item.active ? "600" : "400" }}>{item.day}</p>
-              {item.market ? (
+          {week.map((d) => (
+            <div key={d.iso} className={d.markets.length ? "market-day" : ""}>
+              <p style={{ fontWeight: d.markets.length || d.packing ? 600 : 400 }}>{date(d.iso)}</p>
+              {d.markets.length ? (
                 <>
                   <Sprout size={24} />
-                  <strong>The Orchard</strong>
-                  <span style={{ fontSize: "12px" }}>08:00 - 13:00</span>
+                  {d.markets.map((x) => (
+                    <strong key={x.id}>{x.name}</strong>
+                  ))}
+                  <span style={{ fontSize: "12px" }}>{d.markets[0].hours}</span>
                   <Link to="/farmer/pickups" style={{ fontSize: "12px", textDecoration: "underline", marginTop: "4px" }}>
-                    Pack List
+                    Packing list
                   </Link>
                 </>
-              ) : item.highlight ? (
+              ) : d.packing ? (
                 <>
                   <ClipboardList size={22} />
-                  <strong>{item.highlight}</strong>
-                  <span style={{ fontSize: "12px" }}>{item.label}</span>
+                  <strong>Harvest &amp; pack</strong>
                 </>
               ) : (
-                <span className="muted" style={{ fontSize: "13px" }}>{item.label}</span>
+                <span className="muted" style={{ fontSize: "13px" }}>No market</span>
               )}
             </div>
           ))}
         </div>
       </section>
 
-      {/* Quick Links Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginTop: "24px" }}>
-        <Link to="/farmer/orders" className="fw-kpi-card" style={{ textDecoration: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+      <div className="fw-quick-links">
+        <Link to="/farmer/orders" className="fw-kpi-card">
+          <div className="fw-quick-head">
             <ClipboardList size={20} color="var(--fw-forest)" />
-            <h3 style={{ margin: 0, fontSize: "17px" }}>Order Queue</h3>
+            <h3>Orders</h3>
           </div>
-          <p style={{ fontSize: "13px", color: "var(--fw-muted)", margin: 0 }}>
-            {ownOrders.length} total orders · Track fulfillment stages
-          </p>
+          <p>{activeReservationsCount} open · {ownOrders.length} in total</p>
         </Link>
-
-        <Link to="/farmer/stock" className="fw-kpi-card" style={{ textDecoration: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+        <Link to="/farmer/stock" className="fw-kpi-card">
+          <div className="fw-quick-head">
             <Sliders size={20} color="var(--fw-forest)" />
-            <h3 style={{ margin: 0, fontSize: "17px" }}>Stock Ledger</h3>
+            <h3>Dated stock</h3>
           </div>
-          <p style={{ fontSize: "13px", color: "var(--fw-muted)", margin: 0 }}>
-            Adjust Saturday quotas & reserved allocations
-          </p>
+          <p>{m?.stock.offers ?? 0} upcoming offers · {m?.stock.availableUnits ?? 0} units available</p>
         </Link>
-
-        <Link to="/farmer/reviews" className="fw-kpi-card" style={{ textDecoration: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
+        <Link to="/farmer/reviews" className="fw-kpi-card">
+          <div className="fw-quick-head">
             <Star size={20} color="var(--fw-forest)" />
-            <h3 style={{ margin: 0, fontSize: "17px" }}>Customer Reviews</h3>
+            <h3>Reviews</h3>
           </div>
-          <p style={{ fontSize: "13px", color: "var(--fw-muted)", margin: 0 }}>
-            Respond to verified buyer feedback
+          <p>
+            {m?.reviews.average ? `${m.reviews.average.toFixed(1)} ★ from ${m.reviews.count}` : "No reviews yet"}
+            {m?.reviews.awaitingReply ? ` · ${m.reviews.awaitingReply} to answer` : ""}
           </p>
         </Link>
       </div>
@@ -318,7 +330,8 @@ function FarmerOverviewCockpit({
    2. ORDERS QUEUE COMPONENT
    ========================================================================= */
 function FarmerOrdersQueue({ ownOrders }: { ownOrders: Order[] }) {
-  const [filter, setFilter] = useState("All");
+  // Open the queue on the orders that need work; history is one tab away.
+  const [filter, setFilter] = useState(ownOrders.some((o) => o.stage === "Placed") ? "Placed" : "All");
   const [search, setSearch] = useState("");
   const act = useAction();
 
@@ -328,7 +341,8 @@ function FarmerOrdersQueue({ ownOrders }: { ownOrders: Order[] }) {
     return ownOrders.filter((o) => {
       const matchStage = filter === "All" || o.stage.toLowerCase() === filter.toLowerCase();
       const matchSearch =
-        o.id.toLowerCase().includes(search.toLowerCase()) ||
+        (o.number ?? o.id).toLowerCase().includes(search.toLowerCase()) ||
+        (o.customerName ?? "").toLowerCase().includes(search.toLowerCase()) ||
         o.lines.some((l) => l.name.toLowerCase().includes(search.toLowerCase()));
       return matchStage && matchSearch;
     });
@@ -434,7 +448,7 @@ function FarmerOrderCard({ o }: { o: Order }) {
     <article className={`fw-order-card ${o.stage === "Placed" ? "urgent" : o.stage === "Ready for pickup" ? "ready" : ""}`}>
       <div className="fw-order-header">
         <div className="fw-order-id-group">
-          <span className="fw-order-ref">{o.id}</span>
+          <span className="fw-order-ref">{orderRef(o)}</span>
           <span className={`fw-status-chip ${stageClass}`}>{o.stage}</span>
           {slot && (
             <span className="fw-order-slot">
@@ -443,7 +457,7 @@ function FarmerOrderCard({ o }: { o: Order }) {
           )}
         </div>
         <div style={{ fontSize: "13px", color: "var(--fw-muted)" }}>
-          The Orchard Market · Customer Pickup
+          {[o.marketName || s.markets.find((m) => m.id === o.marketId)?.name, o.customerName].filter(Boolean).join(" · ")}
         </div>
       </div>
 
@@ -469,14 +483,14 @@ function FarmerOrderCard({ o }: { o: Order }) {
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 className="button compact"
-                onClick={() => act({ type: "stage", id: o.id, stage: "Accepted" }, `Order ${o.id} accepted.`)}
+                onClick={() => act({ type: "stage", id: o.id, stage: "Accepted" }, `Order ${orderRef(o)} accepted.`)}
               >
                 <CheckCircle2 size={14} /> Accept
               </button>
               <button
                 className="button secondary compact"
-                style={{ color: "var(--fw-danger)", borderColor: "#f8c8c8" }}
-                onClick={() => act({ type: "stage", id: o.id, stage: "Declined" }, `Order ${o.id} declined.`)}
+                style={{ color: "var(--fw-danger)", borderColor: "#f6e8e4" }}
+                onClick={() => act({ type: "stage", id: o.id, stage: "Declined" }, `Order ${orderRef(o)} declined.`)}
               >
                 Decline
               </button>
@@ -486,7 +500,7 @@ function FarmerOrderCard({ o }: { o: Order }) {
           {o.stage === "Accepted" && (
             <button
               className="button compact"
-              onClick={() => act({ type: "stage", id: o.id, stage: "Ready for pickup" }, `Order ${o.id} ready for pickup.`)}
+              onClick={() => act({ type: "stage", id: o.id, stage: "Ready for pickup" }, `Order ${orderRef(o)} is ready for pickup.`)}
             >
               <PackageCheck size={14} /> Mark Ready
             </button>
@@ -495,8 +509,8 @@ function FarmerOrderCard({ o }: { o: Order }) {
           {o.stage === "Ready for pickup" && (
             <button
               className="button compact"
-              style={{ background: "var(--fw-success)", color: "#fff", borderColor: "var(--fw-success)" }}
-              onClick={() => act({ type: "stage", id: o.id, stage: "Completed" }, `Order ${o.id} pickup completed.`)}
+              style={{ background: "var(--fw-success)", color: "#ffffff", borderColor: "var(--fw-success)" }}
+              onClick={() => act({ type: "stage", id: o.id, stage: "Completed" }, `Order ${orderRef(o)} collected.`)}
             >
               <CheckCircle2 size={14} /> Handed to Customer
             </button>
@@ -656,10 +670,10 @@ function Stock({ ownProducts }: { ownProducts: Product[] }) {
     <div className="farmer-workbench container">
       <div className="fw-header">
         <div>
-          <span className="fw-status-chip accepted">Inventory Control</span>
-          <h1>Saturday Market Stock Ledger</h1>
+          <span className="fw-status-chip accepted">Dated stock</span>
+          <h1>Stock for upcoming market days</h1>
           <p className="fw-header-sub">
-            The Orchard Market · Saturday, 3 October · Adjust live quotas, reservation buffers, and prices.
+            <StockDays ownProducts={ownProducts} /> Adjust quantities and prices; stock can never go below what customers have reserved.
           </p>
         </div>
         <div className="fw-header-actions">
@@ -676,28 +690,7 @@ function Stock({ ownProducts }: { ownProducts: Product[] }) {
         Published stock and reserved allocations are dynamically balanced. You cannot reduce published stock below active customer reservations.
       </Notice>
 
-      {/* Farm Copilot Pricing Intelligence */}
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid var(--fw-border-subtle)",
-          borderLeft: "4px solid var(--fw-forest)",
-          borderRadius: "6px",
-          padding: "16px 20px",
-          margin: "16px 0",
-          fontSize: "13.5px",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "8px" }}>
-          <strong style={{ color: "var(--fw-forest)", display: "flex", alignItems: "center", gap: "6px" }}>
-            <Sprout size={14} /> Farm Copilot Pricing & Allocation Intelligence
-          </strong>
-          <span style={{ fontSize: "12px", color: "var(--fw-muted)" }}>Benchmark: Orchard & Liberty Markets</span>
-        </div>
-        <p style={{ margin: "0 0 8px", color: "var(--fw-ink)", lineHeight: "1.5" }}>
-          Market comparison: Vine tomatoes at your stall are listed at {money(18000)}/500g. Comparable heirloom tomatoes at Model Town average Rs. 350/kg ({money(17500)}/500g). You can ask Farm Copilot in chat to "compare my tomato prices" or "apply pricing recommendation" for automated review and preview.
-        </p>
-      </div>
+      <PriceBenchmark ownProducts={ownProducts} />
 
       <table className="fw-stock-table" style={{ marginTop: "20px" }}>
         <thead>
@@ -904,7 +897,7 @@ function StockTemplates({ ownProducts }: { ownProducts: Product[] }) {
           <span className="fw-status-chip accepted">Stock Automation</span>
           <h1>Weekly Rhythm Templates</h1>
           <p className="fw-header-sub">
-            Save standard weekly harvest quotas and apply them with one click before Saturday.
+            Save your usual weekly quantities and apply them to your next market day in one step.
           </p>
         </div>
       </div>
@@ -923,11 +916,11 @@ function StockTemplates({ ownProducts }: { ownProducts: Product[] }) {
               ))}
               <div style={{ marginTop: "16px" }}>
                 <Confirm
-                  label="Apply to Saturday Stock"
+                  label="Apply to next market day"
                   title={`Apply "${t.name}" template?`}
-                  onConfirm={() => act({ type: "apply-template", id: t.id }, `Template ${t.name} applied to Saturday.`)}
+                  onConfirm={() => act({ type: "apply-template", id: t.id }, `Template ${t.name} applied to your next market day.`)}
                 >
-                  This updates published quantities for Saturday. Protected customer reservations are kept intact.
+                  This sets published quantities for your next market day. Existing customer reservations are kept.
                 </Confirm>
               </div>
             </section>
@@ -948,7 +941,7 @@ function StockTemplates({ ownProducts }: { ownProducts: Product[] }) {
         >
           <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Save Current Quantities as Template</h2>
           <Field label="Template Name">
-            <input name="name" placeholder="e.g. Standard Peak Season Saturday" required />
+            <input name="name" placeholder="e.g. Peak season weekend" required />
           </Field>
           <p style={{ fontSize: "13px", color: "var(--fw-muted)" }}>
             Captures current stock numbers across all your {ownProducts.length} produce varieties.
@@ -967,6 +960,7 @@ function PickupWindows({ f }: { f: any }) {
   const s = useMarket();
   const act = useAction();
   const ownSlots = s.slots.filter((x) => x.farmerId === f.id);
+  const nextDay = s.markets.find((m) => m.id === f.marketId)?.day ?? "";
 
   return (
     <div className="farmer-workbench container">
@@ -1009,7 +1003,7 @@ function PickupWindows({ f }: { f: any }) {
             act({
               type: "slot",
               value: {
-                id: `demo-s-${crypto.randomUUID().slice(0, 8)}`,
+                id: `new-slot-${crypto.randomUUID().slice(0, 8)}`,
                 farmerId: f.id,
                 marketId: f.marketId,
                 start: `${value(d, "day")}T${value(d, "start")}:00+05:00`,
@@ -1021,7 +1015,7 @@ function PickupWindows({ f }: { f: any }) {
         >
           <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Add Scheduled Window</h2>
           <Field label="Market Day Date">
-            <input type="date" name="day" defaultValue="2026-10-03" required />
+            <input type="date" name="day" defaultValue={nextDay} required />
           </Field>
           <div className="two-col">
             <Field label="Window Start">
@@ -1032,7 +1026,7 @@ function PickupWindows({ f }: { f: any }) {
             </Field>
           </div>
           <Field label="Reservation Cutoff">
-            <input type="datetime-local" name="cutoff" defaultValue="2026-10-02T20:00" required />
+            <input type="datetime-local" name="cutoff" defaultValue={nextDay ? `${nextDay}T06:00` : ""} required />
           </Field>
           <button className="button">Add Pickup Window</button>
         </Form>
@@ -1088,7 +1082,7 @@ function FarmerProfilePage({ f, page }: { f: any; page: string }) {
               <textarea
                 required
                 rows={3}
-                defaultValue="Stall #14, near the South Gate, under the shade trees by the organic dairy section."
+                defaultValue={f.stall ? `Stall ${f.stall}` : ""}
               />
             </Field>
             <div className="two-col">
@@ -1104,7 +1098,7 @@ function FarmerProfilePage({ f, page }: { f: any; page: string }) {
         <button className="button">Save Profile Updates</button>
         {validated && (
           <p role="status" style={{ color: "var(--fw-success)", marginTop: "12px", fontWeight: "500" }}>
-            ✓ Stall settings verified and updated in development workspace.
+            ✓ Stall settings saved.
           </p>
         )}
       </Form>
@@ -1121,7 +1115,7 @@ function ProductEditor() {
   const { productId } = useParams();
   const navigate = useNavigate();
   const p = s.products.find((p) => p.id === productId && p.farmerId === s.farmerId);
-  const [image, setImage] = useState(p?.image ?? images.tomatoes);
+  const [image, setImage] = useState(p?.image ?? PHOTO_LIBRARY["Market stall"]);
 
   if (productId && !p) return <NotFound />;
 
@@ -1133,14 +1127,14 @@ function ProductEditor() {
       <div className="fw-header" style={{ marginTop: "16px" }}>
         <div>
           <h1>{p ? `Edit ${p.name}` : "Add New Produce Listing"}</h1>
-          <p className="fw-header-sub">Configure harvest description, pricing, and initial Saturday stock.</p>
+          <p className="fw-header-sub">Describe the produce, set its price and the stock for your next market day.</p>
         </div>
       </div>
 
       <Form
         onSubmit={(d) => {
           const product: Product = {
-            id: p?.id ?? `demo-p-${crypto.randomUUID().slice(0, 8)}`,
+            id: p?.id ?? `new-product-${crypto.randomUUID().slice(0, 8)}`,
             farmerId: s.farmerId,
             name: value(d, "name"),
             category: value(d, "category"),
@@ -1185,7 +1179,7 @@ function ProductEditor() {
               placeholder="e.g. 250"
             />
           </Field>
-          <Field label="Saturday Published Stock Quantity">
+          <Field label="Stock for next market day">
             <input
               type="number"
               name="stock"
@@ -1205,9 +1199,9 @@ function ProductEditor() {
             placeholder="Describe harvest method, freshness, culinary notes..."
           />
         </Field>
-        <Field label="Editorial Preview Image">
+        <Field label="Listing photograph">
           <select value={image} onChange={(e) => setImage(e.target.value)}>
-            {Object.entries(images).map(([name, url]) => (
+            {Object.entries(PHOTO_LIBRARY).map(([name, url]) => (
               <option key={name} value={url}>
                 {name}
               </option>
@@ -1244,7 +1238,7 @@ function FarmerOrder() {
       <div className="fw-header" style={{ marginTop: "16px" }}>
         <div>
           <span className="fw-status-chip accepted">{o.stage}</span>
-          <h1>Reservation Reference: {o.id}</h1>
+          <h1>Order {orderRef(o)}</h1>
           <p className="fw-header-sub">
             {slot ? `${date(slot.start)} · ${time(slot.start)}–${time(slot.end)}` : "Market Day Pickup"}
           </p>
@@ -1298,7 +1292,7 @@ function FarmerOrder() {
           {o.stage === "Ready for pickup" && (
             <button
               className="button"
-              style={{ background: "var(--fw-success)", color: "#fff" }}
+              style={{ background: "var(--fw-success)", color: "#ffffff" }}
               onClick={() => act({ type: "stage", id: o.id, stage: "Completed" })}
             >
               Complete Stall Handover
@@ -1451,7 +1445,7 @@ function FarmerOnboardingWizard({ f }: { f: any }) {
   const [address, setAddress] = useState("Bedian Road Farm Estate, Sector 8, Lahore");
 
   // Step 3: Profile & Practices
-  const [businessName, setBusinessName] = useState(f.name || "Good Earth Growers");
+  const [businessName, setBusinessName] = useState(f.name || "");
   const [bio, setBio] = useState(
     f.story || "Dedicated family farm cultivating pesticide-free vegetables, heirloom greens and seasonal field crops."
   );
@@ -1463,7 +1457,7 @@ function FarmerOnboardingWizard({ f }: { f: any }) {
 
   // Step 4: Markets
   const [selectedMarketId, setSelectedMarketId] = useState(
-    f.marketId || s.markets[0]?.id || "demo-m1"
+    f.marketId || s.markets[0]?.id || ""
   );
 
   const saveStep = async (stepNum: number) => {
@@ -1666,7 +1660,7 @@ function FarmerOnboardingWizard({ f }: { f: any }) {
           <div className="stack">
             <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Nominated Farmers Market Venues</h2>
             <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Choose which scheduled community markets you plan to supply with fresh Saturday allocations.
+              Choose the markets where you will run a stall.
             </p>
             <Field label="Primary Target Market Venue">
               <select value={selectedMarketId} onChange={(e) => setSelectedMarketId(e.target.value)}>
@@ -1703,7 +1697,7 @@ function FarmerOnboardingWizard({ f }: { f: any }) {
               <p><strong>Location:</strong> {address}, {city}, {region}</p>
               <p><strong>Contact:</strong> {phone}</p>
               <p><strong>Practices:</strong> {practices.join(", ")}</p>
-              <p><strong>Selected Venue:</strong> {s.markets.find((m) => m.id === selectedMarketId)?.name ?? "The Orchard Market"}</p>
+              <p><strong>Selected Venue:</strong> {s.markets.find((m) => m.id === selectedMarketId)?.name ?? "—"}</p>
             </div>
 
             <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
@@ -1737,7 +1731,7 @@ function FarmerReviewsHub({ f }: { f: any }) {
   const avgRating =
     ownReviews.length > 0
       ? (ownReviews.reduce((sum, r) => sum + r.rating, 0) / ownReviews.length).toFixed(1)
-      : "5.0";
+      : "—";
 
   const draftReply = (reviewId: string, rating: number) => {
     const polite =
@@ -1898,5 +1892,56 @@ function FarmerReviewsHub({ f }: { f: any }) {
         )}
       </section>
     </div>
+  );
+}
+
+/** "Sat 26 Sep at The Orchard Market, Sun 27 Sep at …" from the grower's live offers. */
+function StockDays({ ownProducts }: { ownProducts: Product[] }) {
+  const s = useMarket();
+  const days = new Map<string, string>();
+  for (const p of ownProducts)
+    for (const o of p.offers ?? []) {
+      const name = s.markets.find((m) => m.id === o.marketId)?.name;
+      if (name) days.set(`${o.date}|${o.marketId}`, `${date(o.date)} at ${name}`);
+    }
+  const list = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(0, 3).map(([, v]) => v);
+  return <>{list.length ? `${list.join(" · ")}.` : "No upcoming offers yet."}</>;
+}
+
+/** Compares each product's price with other growers' same-category, same-unit listings. */
+function PriceBenchmark({ ownProducts }: { ownProducts: Product[] }) {
+  const s = useMarket();
+  const rows = ownProducts
+    .filter((p) => p.visible && !p.archived)
+    .map((p) => {
+      const peers = s.products.filter(
+        (q) => q.farmerId !== p.farmerId && q.visible && q.category === p.category && q.unit === p.unit,
+      );
+      if (!peers.length) return null;
+      const avg = Math.round(peers.reduce((n, q) => n + q.price, 0) / peers.length);
+      return { p, avg, peers: peers.length, diff: Math.round(((p.price - avg) / avg) * 100) };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x)
+    .slice(0, 4);
+  if (!rows.length) return null;
+  return (
+    <section className="fw-briefing" aria-labelledby="price-benchmark">
+      <div className="fw-briefing-head">
+        <span className="fw-briefing-badge">Prices</span>
+        <strong id="price-benchmark">How your prices compare</strong>
+        <span className="small muted">Other growers’ listings in the same category and unit</span>
+      </div>
+      <div className="fw-briefing-grid">
+        {rows.map(({ p, avg, peers, diff }) => (
+          <div key={p.id}>
+            <strong>{p.name}</strong>
+            <span>
+              {money(p.price)} / {p.unit} · others average {money(avg)} ({peers} listing{peers === 1 ? "" : "s"}).{" "}
+              {diff === 0 ? "Right on the market average." : diff > 0 ? `${diff}% above average.` : `${Math.abs(diff)}% below average.`}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

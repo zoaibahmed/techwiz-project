@@ -38,7 +38,10 @@ export const createMarketSchema = z.object({
   mapProvider: z.enum(['google', 'osm']).default('google'),
 });
 
-export const updateMarketSchema = createMarketSchema.partial();
+export const updateMarketSchema = createMarketSchema.partial().extend({
+  isActive: z.boolean().optional(),
+  description: z.string().max(500).optional(),
+});
 
 
 export const categorySchema = z.object({

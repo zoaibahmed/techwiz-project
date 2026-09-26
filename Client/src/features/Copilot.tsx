@@ -208,7 +208,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       );
 
       // Immediately synchronize newly created/updated data from backend to active workspace
-      await gateway.syncFromBackend();
+      await gateway.refresh();
     } catch (err: any) {
       alert(`Could not confirm action: ${err?.message || "Unknown error"}`);
     } finally {
@@ -412,8 +412,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                     className="draft-preview"
                     style={{
                       border: r.proposedAction.confirmed
-                        ? "1px solid #203328"
-                        : "1px solid #946927",
+                        ? "1px solid #0f291d"
+                        : "1px solid #a86d33",
                       background: r.proposedAction.confirmed
                         ? "rgba(32, 51, 40, 0.04)"
                         : "rgba(148, 105, 39, 0.05)",
@@ -424,11 +424,11 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                   >
                     {r.proposedAction.confirmed ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#203328" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#0f291d" }}>
                           <CheckCircle size={18} />
                           <strong>{getConfirmedTitle(r.proposedAction.actionType)}</strong>
                         </div>
-                        <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#203328", whiteSpace: "pre-line" }}>
+                        <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#0f291d", whiteSpace: "pre-line" }}>
                           {r.proposedAction.summary}
                         </p>
                         <div style={{ marginTop: "0.5rem" }}>
@@ -437,7 +437,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                       </div>
                     ) : (
                       <>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#946927" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#a86d33" }}>
                           <Sparkles size={16} />
                           <strong>{getActionPreviewTitle(r.proposedAction.actionType)}</strong>
                         </div>
@@ -458,17 +458,17 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                               >
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                                   <div>
-                                    <strong style={{ color: "#203328", fontSize: "0.875rem" }}>{p.name}</strong>
-                                    <span style={{ marginLeft: "8px", color: "#6A7B6D", fontSize: "0.75rem" }}>
+                                    <strong style={{ color: "#0f291d", fontSize: "0.875rem" }}>{p.name}</strong>
+                                    <span style={{ marginLeft: "8px", color: "#65806e", fontSize: "0.75rem" }}>
                                       ({p.category || "Produce"})
                                     </span>
                                   </div>
-                                  <strong style={{ color: "#946927" }}>
+                                  <strong style={{ color: "#a86d33" }}>
                                     Rs. {p.pricePKR} / {p.unit}
                                   </strong>
                                 </div>
                                 {p.description && (
-                                  <p style={{ margin: 0, color: "#4A5A4D", fontSize: "0.78rem", fontStyle: "italic", lineHeight: 1.4 }}>
+                                  <p style={{ margin: 0, color: "#5a665c", fontSize: "0.78rem", fontStyle: "italic", lineHeight: 1.4 }}>
                                     {p.description}
                                   </p>
                                 )}
@@ -486,8 +486,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
                             type="button"
                             className="button"
                             style={{
-                              background: "#203328",
-                              color: "#F4EFE6",
+                              background: "#0f291d",
+                              color: "#fbf3e8",
                               padding: "0.45rem 1rem",
                               fontSize: "0.875rem",
                               cursor: "pointer",
@@ -506,7 +506,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
             ))}
 
             {busy && (
-              <p role="status" style={{ fontStyle: "italic", color: "#6A7B6D" }}>
+              <p role="status" style={{ fontStyle: "italic", color: "#65806e" }}>
                 Reviewing your request and checking records…
               </p>
             )}
