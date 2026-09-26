@@ -17,6 +17,7 @@ import { reviewRouter } from './review.routes.js';
 import { announcementRouter } from './announcement.routes.js';
 import { inquiryRouter } from './inquiry.routes.js';
 import { uploadRouter } from './upload.routes.js';
+import { chatRouter } from './chat.routes.js';
 
 const apiRouter = Router();
 
@@ -44,6 +45,7 @@ v1Router.use('/', reviewRouter);
 v1Router.use('/', announcementRouter);
 v1Router.use('/', inquiryRouter);
 v1Router.use('/', uploadRouter);
+v1Router.use('/', chatRouter);
 
 // Mount versioned API at /api/v1
 apiRouter.use('/v1', v1Router);
@@ -67,6 +69,7 @@ apiRouter.use('/', reviewRouter);
 apiRouter.use('/', announcementRouter);
 apiRouter.use('/', inquiryRouter);
 apiRouter.use('/', uploadRouter);
+apiRouter.use('/', chatRouter);
 
 export default apiRouter;
 

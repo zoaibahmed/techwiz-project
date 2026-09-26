@@ -276,6 +276,12 @@ ${JSON.stringify(promptContext, null, 2)}`;
     const compProds = await db.collection('products').find({ _id: { $in: compPIds } }).toArray();
     const compMap = new Map(compProds.map((p) => [p._id.toString(), p.name]));
 
+    const conversations = await db.collection('conversations')
+      .find({ $or: [{ farmerUserId: userId }, { farmerProfileId: profileId }].filter((q) => Object.values(q)[0] != null), status: { $ne: 'deleted' } })
+      .sort({ lastMessageAt: -1 })
+      .limit(10)
+      .toArray();
+
     promptContext = {
       role: 'farmer',
       route: pathname,
@@ -284,6 +290,15 @@ ${JSON.stringify(promptContext, null, 2)}`;
       stallNumber: profile?.stallNumber || 'Stall A-04',
       selectedRecordId: selectedId,
       visibleIds,
+      conversations: conversations.map((c) => ({
+        id: c._id.toString(),
+        customerName: c.customerName,
+        lastMessageText: c.lastMessageText,
+        lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : null,
+        unreadCount: c.farmerUnreadCount || 0,
+        relatedProductName: c.relatedProductName,
+        relatedOrderNumber: c.relatedOrderNumber,
+      })),
       productsCatalogue: products.map((p) => ({
         id: p._id.toString(),
         name: p.name,
@@ -914,9 +929,59 @@ ${JSON.stringify(promptContext, null, 2)}`;
           replyText = `You have no active orders on your workbench currently.`;
         }
       }
-      // 7. General Farmer Overview
+      // 7. Customer Messages & Inquiries ("Show my unread messages", "Who messaged me today?", "Draft a reply to Sarah")
+      else if (lower.includes('message') || lower.includes('chat') || lower.includes('inbox') || lower.includes('who messaged') || lower.includes('inquir') || lower.includes('reply')) {
+        const convos = promptContext.conversations || [];
+        const unreadConvos = convos.filter((c) => c.unreadCount > 0);
+
+        if (lower.includes('draft') || lower.includes('reply') || lower.includes('send')) {
+          // Identify target conversation by customer name or first conversation
+          const targetConvo = convos.find((c) => lower.includes(c.customerName.toLowerCase().split(' ')[0])) || convos[0];
+          if (targetConvo) {
+            const replySuggestion = `Hello ${targetConvo.customerName}! Thank you for checking in. Yes, our harvest will be packed and ready for stall pickup this Saturday morning!`;
+            const cap = findCapability('farmer_send_chat_message');
+            const draftData = cap.formatDraft({
+              conversationId: targetConvo.id,
+              message: replySuggestion,
+            }, user, context, targetConvo);
+
+            const ins = await db.collection('aiActionDrafts').insertOne({
+              userId,
+              role: 'farmer',
+              capabilityId: cap.id,
+              actionType: draftData.actionType,
+              summary: draftData.summary,
+              details: draftData.details,
+              payload: draftData.payload,
+              expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+              createdAt: new Date(),
+            });
+
+            proposedAction = {
+              draftId: ins.insertedId.toString(),
+              actionType: draftData.actionType,
+              summary: draftData.summary,
+              details: draftData.details,
+              requiresConfirmation: true,
+            };
+
+            replyText = `I have drafted a grounded response for ${targetConvo.customerName}:\n\n"${replySuggestion}"\n\nPlease confirm below to send this reply directly to their chat.`;
+          } else {
+            replyText = `You don't have any customer conversations open to reply to yet. As soon as a customer messages your stall, I can draft replies for you here!`;
+          }
+        } else if (unreadConvos.length > 0) {
+          replyText = `You have ${unreadConvos.length} unread customer conversation(s):\n` +
+            unreadConvos.map((c) => `• ${c.customerName}: "${c.lastMessageText || 'New inquiry'}"`).join('\n') +
+            `\n\nYou can ask me to "Draft a reply to ${unreadConvos[0].customerName.split(' ')[0]}" or visit your Messages inbox to view the full history.`;
+        } else if (convos.length > 0) {
+          replyText = `All customer messages have been read! Most recent conversation is with ${convos[0].customerName} regarding "${convos[0].lastMessageText}".`;
+        } else {
+          replyText = `No customer conversations yet. Shoppers browsing your produce or pre-orders can click "Message Grower" to start chatting with your stall.`;
+        }
+      }
+      // 8. General Farmer Overview
       else {
-        replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, assist with stock allocations, compare competitor prices, and manage your catalogue products. How can I assist your farm today?`;
+        replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, customer messages, stock allocations, and catalogue products. How can I assist your farm today?`;
       }
     }
 
