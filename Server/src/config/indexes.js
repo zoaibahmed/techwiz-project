@@ -80,6 +80,16 @@ export async function setupDatabaseIndexes(db) {
     // 14. Announcements
     await db.collection('announcements').createIndex({ isActive: 1, createdAt: -1 });
 
+    // 15. Real Customer <-> Farmer Messaging
+    await db.collection('conversations').createIndex({ customerId: 1, updatedAt: -1 });
+    await db.collection('conversations').createIndex({ farmerUserId: 1, updatedAt: -1 });
+    await db.collection('conversations').createIndex({ farmerProfileId: 1, updatedAt: -1 });
+    await db.collection('conversations').createIndex({ relatedOrderId: 1 }, { sparse: true });
+    await db.collection('conversations').createIndex({ relatedProductId: 1 }, { sparse: true });
+
+    await db.collection('messages').createIndex({ conversationId: 1, createdAt: 1 });
+    await db.collection('messages').createIndex({ conversationId: 1, senderRole: 1, readAt: 1 });
+
     console.log('[Database] Indexes verified and established.');
     return true;
   } catch (err) {

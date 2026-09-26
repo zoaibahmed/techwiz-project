@@ -106,6 +106,13 @@ import {
   getPlatformAnalyticsAdminService,
 } from '../analytics.service.js';
 
+import {
+  listConversationsService,
+  getConversationDetailService,
+  sendMessageService,
+  suggestReplyService,
+} from '../chat.service.js';
+
 /**
  * Normalizes common produce names and typos
  */
@@ -918,6 +925,61 @@ export const CAPABILITIES = [
       },
     },
     execute: async (user, args) => getFarmerReportsService(user.id, args),
+  },
+  {
+    id: 'farmer.get_messages',
+    name: 'farmer_get_messages',
+    role: 'farmer',
+    type: 'read',
+    requiresConfirmation: false,
+    description: 'Retrieve shopper inquiries and customer chat messages, including unread message counts.',
+    parameters: {
+      type: 'object',
+      properties: {
+        filter: { type: 'string', enum: ['all', 'unread', 'order-linked', 'archived'] },
+        search: { type: 'string', description: 'Search term for customer or message' },
+      },
+    },
+    execute: async (user, args) => listConversationsService(user, args || {}),
+  },
+  {
+    id: 'farmer.draft_chat_reply',
+    name: 'farmer_draft_chat_reply',
+    role: 'farmer',
+    type: 'read',
+    requiresConfirmation: false,
+    description: 'Draft a polite response to a customer grounded in real inventory and order status.',
+    parameters: {
+      type: 'object',
+      properties: {
+        conversationId: { type: 'string', description: 'Conversation ID' },
+      },
+      required: ['conversationId'],
+    },
+    execute: async (user, args) => suggestReplyService(user, args.conversationId),
+  },
+  {
+    id: 'farmer.send_chat_message',
+    name: 'farmer_send_chat_message',
+    role: 'farmer',
+    type: 'write',
+    requiresConfirmation: true,
+    description: 'Propose sending an official message or reply to a customer conversation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        conversationId: { type: 'string', description: 'Target Conversation ID' },
+        message: { type: 'string', description: 'Message body to send' },
+      },
+      required: ['conversationId', 'message'],
+    },
+    formatDraft: (args, user, context, conversation) => ({
+      actionType: 'send_chat_message',
+      summary: `Send message to customer:\n"${args.message}"`,
+      details: { ...args, customerName: conversation?.customerName },
+      payload: args,
+    }),
+    execute: async (user, args) => sendMessageService(user, args.conversationId, { message: args.message }),
   },
 
   // =========================================================================
