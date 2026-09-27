@@ -1,0 +1,12 @@
+import {Router} from 'express';
+import {authenticateToken,requireRole} from '../middleware/auth.js';
+import {listTickets,getTicket,createTicket,replyTicket,closeTicket,inspectConversation} from '../services/support.service.js';
+const router=Router();router.use(authenticateToken,requireRole(['customer','farmer','admin']));
+const action=fn=>async(req,res,next)=>{try{res.json({data:await fn(req)})}catch(e){next(e)}};
+router.get('/tickets',action(r=>listTickets(r.user,String(r.query.q||''))));
+router.post('/tickets',action(r=>createTicket(r.user,r.body)));
+router.get('/tickets/:id',action(r=>getTicket(r.user,r.params.id)));
+router.post('/tickets/:id/messages',action(r=>replyTicket(r.user,r.params.id,r.body)));
+router.post('/tickets/:id/close',action(r=>closeTicket(r.user,r.params.id)));
+router.get('/conversations/:id',action(r=>inspectConversation(r.user,r.params.id)));
+export default router;

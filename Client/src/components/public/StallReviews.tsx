@@ -1,3 +1,5 @@
+import { fetchPublicFarmerReviewsApi } from "../../data/api";
+import type { Review } from "../../data/market";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -75,19 +77,46 @@ export function StallReviews({ farmer: f }: { farmer: Farmer }) {
   const [params, setParams] = useSearchParams();
   const root = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(12);
+  const summary = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = summary.current;
+    if (!element) return;
+    const update = () => element.style.setProperty("--review-sticky-top", `${Math.min(24, window.innerHeight - element.offsetHeight - 24)}px`);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    window.addEventListener("resize", update);
+    update();
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
+  useEffect(() => setVisibleCount(12), [f.id]);
   const [needSignIn, setNeedSignIn] = useState(false);
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
-  const published = s.reviews.filter((r) => r.visible && r.target === f.id && r.targetType !== "product");
+  const [remote, setRemote] = useState<Review[] | null>(null);
+  const [reviewError,setReviewError]=useState("");
+  const [loadingReviews,setLoadingReviews]=useState(false);
+  const [retry,setRetry]=useState(0);
+  useEffect(()=>{
+    let active=true; setRemote(null); setReviewError(""); setLoadingReviews(false);
+    if(f.id.startsWith("demo-")) return;
+    setLoadingReviews(true);
+    fetchPublicFarmerReviewsApi(f.id).then(result=>{
+      if(!active)return;
+      setRemote(result.reviews.filter(r=>r.moderationStatus === "approved").map(r=>({id:r.id,orderId:r.orderId??"",target:f.id,targetType:"farmer",rating:r.rating,text:r.comment,reply:r.farmerReply?.text??"",visible:true,author:r.customerName,at:r.createdAt,status:r.moderationStatus,verified:r.verified===true})));
+    }).catch(()=>{if(active)setReviewError("Reviews could not be loaded. Please try again.")}).finally(()=>{if(active)setLoadingReviews(false)});
+    return()=>{active=false};
+  },[f.id,retry]);
+  const published = remote ?? s.reviews.filter((r) => r.visible && r.target === f.id && r.targetType !== "product");
   const mine = s.reviews.find(
     (r) => r.mine && r.target === f.id && r.targetType !== "product" && !r.orderId && (r.status === "pending" || r.status === "approved"),
   );
   const pending = mine?.status === "pending" ? mine : null;
-  const count = f.reviewCount || published.length;
-  const average = f.rating || (published.length ? published.reduce((a, r) => a + r.rating, 0) / published.length : 0);
+  const count = remote ? remote.length : (f.reviewCount || published.length);
+  const average = published.length ? published.reduce((a, r) => a + r.rating, 0) / published.length : (remote ? 0 : f.rating || 0);
   const spread = [5, 4, 3, 2, 1].map((n) => ({ n, count: published.filter((r) => r.rating === n).length }));
   const next = `/farmers/${f.id}?review=1`;
 
@@ -131,7 +160,7 @@ export function StallReviews({ farmer: f }: { farmer: Farmer }) {
 
   return (
     <section className="sr" ref={root} id="reviews" aria-labelledby="sr-title">
-      <div className="sr-summary">
+      <div className="sr-summary" ref={summary}>
         <span className="sr-kicker">
           <Star size={14} /> Stall reviews
         </span>
@@ -257,14 +286,17 @@ export function StallReviews({ farmer: f }: { farmer: Farmer }) {
         </AnimatePresence>
       </div>
 
+      <div className="sr-content">
+      {loadingReviews && <p role="status">Loading reviews…</p>}
+      {reviewError && <p role="alert">{reviewError} <button onClick={()=>setRetry(v=>v+1)}>Retry</button></p>}
       <div className="sr-list">
         {published.length ? (
-          published.slice(0, 12).map((r, i) => (
+          published.slice(0, visibleCount).map((r, i) => (
             <motion.article
               key={r.id}
               className="sr-card"
-              initial={reduce ? false : { clipPath: "inset(100% 0% 0% 0%)", y: 16 }}
-              whileInView={{ clipPath: "inset(0% 0% 0% 0%)", y: 0 }}
+              initial={false}
+              whileInView={reduce ? undefined : { y: [6, 0] }}
               viewport={{ once: true, amount: 0.3 }}
               transition={{ duration: 0.7, delay: (i % 3) * 0.06, ease: EASE.riseCurve }}
             >
@@ -292,9 +324,11 @@ export function StallReviews({ farmer: f }: { farmer: Farmer }) {
         ) : (
           <div className="sr-empty">
             <Stars value={0} size={22} />
-            <p>Approved reviews will appear here.</p>
+            <p>{loadingReviews ? "Checking published reviews…" : reviewError ? "Review service unavailable." : "No approved reviews have been published yet."}</p>
           </div>
         )}
+      </div>
+      {published.length > visibleCount && <button className="sr-more" onClick={() => setVisibleCount(n => n + 12)}>Show more reviews ({published.length - visibleCount} remaining)</button>}
       </div>
     </section>
   );

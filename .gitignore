@@ -26,6 +26,8 @@ coverage/
 .nyc_output/
 playwright-report/
 test-results/
+artifacts/
+*.tsbuildinfo
 Server/uploads/*
 !Server/uploads/.gitkeep
 

@@ -69,7 +69,7 @@ export function VisitorProvider({ children }: { children: ReactNode }) {
 
   // Handle first-visit prompt if user has never seen onboarding
   useEffect(() => {
-    if (!visitor.seen) {
+    if (!visitor.seen && !/^\/(farmer|admin|customer)(\/|$)/.test(window.location.pathname)) {
       const timer = setTimeout(() => {
         setModalOpen(true);
       }, 350);

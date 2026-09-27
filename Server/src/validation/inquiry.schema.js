@@ -3,9 +3,10 @@ import { z } from 'zod';
 export const contactInquirySchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   email: z.string().email('Invalid email address'),
-  phone: z.string().max(20).optional(),
+  phone: z.string().max(30).optional().default(''),
   subject: z.string().min(1, 'Subject is required').max(200),
-  message: z.string().min(1, 'Message is required').max(2000),
+  message: z.string().min(1, 'Message is required').max(5000),
+  website: z.string().max(200).optional(),
 });
 
 export const updateInquirySchema = z.object({

@@ -178,15 +178,22 @@ export async function createFarmerProductService(farmerProfileId, data) {
   const fId = new ObjectId(farmerProfileId);
   const now = new Date();
 
+  const category = ObjectId.isValid(data.categoryId || '')
+    ? await db.collection('categories').findOne({_id:new ObjectId(data.categoryId),isActive:true})
+    : await db.collection('categories').findOne({isActive:true,$or:[{name:data.categoryId},{slug:data.categoryId}]});
+  if (!category) throw Object.assign(new Error('Select an active product category.'),{statusCode:400});
+  const categoryObjectId = category._id;
+
   const doc = {
     farmerId: fId,
     name: data.name.trim(),
     description: data.description || '',
-    categoryId: new ObjectId(data.categoryId),
-    unit: data.unit,
-    basePriceMinor: data.basePriceMinor,
+    categoryId: categoryObjectId,
+    unit: data.unit || 'kg',
+    basePriceMinor: data.basePriceMinor || 100,
     currency: data.currency || 'PKR',
-    imageUrl: data.imageUrl || '',
+    imageUrl: data.imageUrl || data.image || '',
+    status: 'active',
     isArchived: false,
     createdAt: now,
     updatedAt: now,
@@ -194,14 +201,18 @@ export async function createFarmerProductService(farmerProfileId, data) {
 
   const result = await db.collection('products').insertOne(doc);
 
+  // Stock is published separately using the farmer-provided quantity and market date.
+
   return {
     id: result.insertedId.toString(),
     name: doc.name,
     description: doc.description,
-    categoryId: data.categoryId,
+    categoryId: doc.categoryId.toString(),
     unit: doc.unit,
     basePriceMinor: doc.basePriceMinor,
     currency: doc.currency,
+    imageUrl: doc.imageUrl,
+    status: 'active',
     isArchived: false,
   };
 }
@@ -214,11 +225,26 @@ export async function updateFarmerProductService(farmerProfileId, productId, dat
   const updateFields = { updatedAt: new Date() };
   if (data.name) updateFields.name = data.name.trim();
   if (data.description !== undefined) updateFields.description = data.description;
-  if (data.categoryId) updateFields.categoryId = new ObjectId(data.categoryId);
+  if (data.categoryId) {
+    let categoryObjectId = null;
+    if (ObjectId.isValid(data.categoryId) && String(new ObjectId(data.categoryId)) === data.categoryId) {
+      categoryObjectId = new ObjectId(data.categoryId);
+    } else {
+      const foundCat = await db.collection('categories').findOne({
+        $or: [
+          { name: new RegExp(`^${data.categoryId}$`, 'i') },
+          { slug: new RegExp(`^${data.categoryId}$`, 'i') },
+        ],
+      });
+      if (foundCat) categoryObjectId = foundCat._id;
+    }
+    if (categoryObjectId) updateFields.categoryId = categoryObjectId;
+  }
   if (data.unit) updateFields.unit = data.unit;
   if (data.basePriceMinor) updateFields.basePriceMinor = data.basePriceMinor;
   if (data.currency) updateFields.currency = data.currency;
   if (data.imageUrl !== undefined) updateFields.imageUrl = data.imageUrl;
+  if (data.image !== undefined && !data.imageUrl) updateFields.imageUrl = data.image;
 
   const result = await db.collection('products').updateOne({ _id: pId, farmerId: fId }, { $set: updateFields });
   if (result.matchedCount === 0) {
@@ -237,6 +263,7 @@ export async function updateFarmerProductService(farmerProfileId, productId, dat
     unit: updated.unit,
     basePriceMinor: updated.basePriceMinor,
     currency: updated.currency,
+    imageUrl: updated.imageUrl || '',
     isArchived: updated.isArchived,
   };
 }

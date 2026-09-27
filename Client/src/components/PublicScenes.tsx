@@ -19,10 +19,10 @@ import { countryName } from "../data/visitor";
 gsap.registerPlugin(ScrollTrigger);
 const directions = {
   markets: {
-    title: "A place. A morning. Your market.",
-    body: "Find the gathering that fits your day. Meet its growers, browse the harvest and plan where you will collect.",
+    title: "Find your next farmers market.",
+    body: "Choose a location and market day. See the farmers attending, browse available produce and plan your pickup.",
     image: "/images/market-arrival.jpg",
-    label: "Explore the gathering",
+    label: "Browse markets",
     caption: "Editorial market photograph. Listed venues are separate records.",
   },
   growers: {
@@ -30,7 +30,7 @@ const directions = {
     body: "Go beyond a product label. Find the growers, the way they work and the markets where you can meet them.",
     image: "/images/market-person.jpg",
     label: "Meet the growers",
-    caption: "Growers at Lahore’s weekend markets.",
+    caption: "Editorial market photography; individual farmer details appear below.",
   },
   produce: {
     title: "What will you bring home?",

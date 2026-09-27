@@ -1,3 +1,4 @@
+import { ContactForm } from "../components/ContactForm";
 import { SceneHeader, HelpExperience } from "../components/PublicScenes";
 import { motion, useReducedMotion } from "motion/react";
 import { useVisitor } from "../data/visitor-context";
@@ -19,7 +20,6 @@ import {
   Search,
   ShoppingBasket,
   CalendarDays,
-  Star,
   Store,
   Sprout,
   Users,
@@ -46,7 +46,8 @@ import { date, money } from "../data/market";
 import { gateway } from "../data/gateway";
 import { growerPhoto, marketPhoto } from "../data/photos";
 import type { Role } from "../data/market";
-import { loginApi, registerCustomerApi, registerFarmerApi } from "../data/api";
+import { registerCustomerApi, registerFarmerApi, forgotPasswordApi, resetPasswordApi, sendLoginOtpApi, verifyLoginOtpApi } from "../data/api";
+import { VisualCaptcha } from "../components/VisualCaptcha";
 
 // Scope public records without mutating the account/workspace store.
 function useDiscoveryState() {
@@ -58,14 +59,22 @@ function useDiscoveryState() {
       (!visitor.city || m.city?.toLowerCase() === visitor.city.toLowerCase()),
   );
   const ids = new Set(markets.map((m) => m.id));
-  // Growers can attend several markets; include anyone attending one here.
-  const farmers = state.farmers.filter((f) => ids.has(f.marketId) || (f.marketIds ?? []).some((id) => ids.has(id)));
+
+  // Keep growers attending markets in the city, located in the city, or registered without an assigned market
+  const cityLower = visitor.city?.toLowerCase().trim();
+  const farmers = state.farmers.filter((f) => {
+    if (ids.has(f.marketId) || (f.marketIds ?? []).some((id) => ids.has(id))) return true;
+    if (cityLower && ((f as any).city?.toLowerCase().trim() === cityLower || f.location?.toLowerCase().includes(cityLower))) return true;
+    if (!f.marketIds || f.marketIds.length === 0) return true;
+    return false;
+  });
+
   const farmerIds = new Set(farmers.map((f) => f.id));
   return {
     ...state,
-    markets,
-    farmers,
-    products: state.products.filter((p) => farmerIds.has(p.farmerId)),
+    markets: markets.length ? markets : state.markets,
+    farmers: farmers.length ? farmers : state.farmers,
+    products: state.products.filter((p) => farmerIds.size === 0 || farmerIds.has(p.farmerId)),
     slots: state.slots.filter((slot) => ids.has(slot.marketId)),
   };
 }
@@ -152,7 +161,9 @@ export function Markets() {
           <div className="market-results">
             {filtered.map((m) => {
               const attendingFarmers = s.farmers.filter(
-                (f) => f.marketId === m.id && f.state === "Approved",
+                (f) =>
+                  (f.marketId === m.id || (f.marketIds ?? []).includes(m.id)) &&
+                  (String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"),
               );
               const marketProducts = s.products.filter(
                 (p) =>
@@ -259,15 +270,17 @@ export function Markets() {
 }
 
 export function MarketDetail() {
-  const s = useDiscoveryState();
+  const state = useMarket();
   const { marketId } = useParams();
-  const m = s.markets.find((m) => m.id === marketId);
+  const m = state.markets.find((m) => m.id === marketId);
   if (!m) return <NotFound />;
 
-  const farmers = s.farmers.filter(
-    (f) => f.marketId === m.id && f.state === "Approved",
+  const farmers = state.farmers.filter(
+    (f) =>
+      (f.marketId === m.id || (f.marketIds ?? []).includes(m.id)) &&
+      (String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"),
   );
-  const marketProducts = s.products.filter(
+  const marketProducts = state.products.filter(
     (p) => p.visible && farmers.some((f) => f.id === p.farmerId),
   );
 
@@ -396,7 +409,7 @@ export function MarketDetail() {
         {farmers.length ? (
           <div className="pe-growers-grid">
             {farmers.map((f, i) => {
-              const prodsCount = s.products.filter(
+              const prodsCount = state.products.filter(
                 (p) => p.farmerId === f.id && p.visible,
               ).length;
               return (
@@ -459,29 +472,35 @@ export function MarketDetail() {
 }
 
 export function Farmers() {
-  const s = useDiscoveryState();
+  const state = useMarket();
+  const allApproved = state.farmers.filter(
+    (f) => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved",
+  );
+
   return (
     <div className="grower-editorial-page">
       <SceneHeader kind="growers" target="grower-directory" />
       <GrowerDirectory
-        farmers={s.farmers}
-        markets={s.markets.filter((m) => m.active)}
-        products={s.products}
-        today={s.now.slice(0, 10)}
+        farmers={allApproved}
+        markets={state.markets.filter((m) => m.active)}
+        products={state.products}
+        today={state.now.slice(0, 10)}
       />
     </div>
   );
 }
 
 export function FarmerDetail() {
-  const s = useDiscoveryState();
+  const state = useMarket();
   const { farmerId } = useParams();
   const [chatOpen, setChatOpen] = useState(false);
-  const f = s.farmers.find((f) => f.id === farmerId && f.state === "Approved");
+  const f = state.farmers.find(
+    (f) => f.id === farmerId && (String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"),
+  );
   if (!f) return <NotFound />;
 
-  const m = s.markets.find((m) => m.id === f.marketId);
-  const ownProducts = s.products.filter(
+  const m = state.markets.find((m) => m.id === f.marketId);
+  const ownProducts = state.products.filter(
     (p) => p.farmerId === f.id && p.visible,
   );
 
@@ -659,7 +678,7 @@ export function FarmerDetail() {
 }
 
 export function Products() {
-  const s = useDiscoveryState();
+  const s = useMarket();
   const [params, set] = useSearchParams();
   const filters: ShelfFilters = {
     q: params.get("q") ?? "",
@@ -679,7 +698,9 @@ export function Products() {
     set(n, { replace: key === "q" });
   };
 
-  const approved = s.farmers.filter((f) => f.state === "Approved");
+  const approved = s.farmers.filter(
+    (f) => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved",
+  );
   const approvedIds = new Set(approved.map((f) => f.id));
   const shelf = s.products.filter((p) => p.visible && approvedIds.has(p.farmerId));
   const attends = (farmerId: string, marketId: string) => {
@@ -694,7 +715,7 @@ export function Products() {
         `${p.name} ${p.category} ${p.description}`.toLowerCase().includes(q) &&
         (!filters.category || p.category === filters.category) &&
         (!filters.farmer || p.farmerId === filters.farmer) &&
-        (!filters.market || attends(p.farmerId, filters.market)) &&
+        (!filters.market || attends(p.farmerId, filters.market) || p.marketId === filters.market) &&
         (!day || (p.offers ?? []).some((o) => o.date === day) || s.slots.some((slot) => slot.farmerId === p.farmerId && slot.start.startsWith(day))) &&
         (!filters.available || (p.available && left(p) > 0)) &&
         (!max || p.price <= max * 100),
@@ -731,7 +752,7 @@ export function Products() {
 }
 
 export function ProductDetail() {
-  const s = useDiscoveryState();
+  const s = useMarket();
   const reduceDetailMotion = useReducedMotion();
   const act = useAction();
   const { productId } = useParams();
@@ -740,11 +761,17 @@ export function ProductDetail() {
   const [added, setAdded] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
-  if (!p || s.farmers.find((f) => f.id === p.farmerId)?.state !== "Approved")
-    return <NotFound />;
+  const f = p
+    ? s.farmers.find(
+        (f) =>
+          f.id === p.farmerId &&
+          (String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"),
+      )
+    : undefined;
 
-  const f = s.farmers.find((f) => f.id === p.farmerId)!;
-  const m = s.markets.find((m) => m.id === f.marketId);
+  if (!p || !f) return <NotFound />;
+
+  const m = s.markets.find((m) => m.id === f.marketId || (f.marketIds ?? []).includes(m.id) || m.id === p.marketId);
   const slots = s.slots.filter(
     (x) => x.farmerId === f.id && new Date(x.start) > new Date(s.now),
   );
@@ -757,7 +784,7 @@ export function ProductDetail() {
       </Link>
 
       <div className="pe-detail-hero" style={{ marginTop: "16px" }}>
-        <motion.div className="pe-detail-gallery" initial={reduceDetailMotion ? false : {clipPath:"inset(0 100% 0 0)"}} animate={{clipPath:"inset(0 0% 0 0)"}} transition={{duration:.75,ease:[.76,0,.24,1]}}> 
+        <motion.div className="pe-detail-gallery" initial={reduceDetailMotion ? false : {clipPath:"inset(0 100% 0 0)"}} animate={{clipPath:"inset(0 0% 0 0)"}} transition={{duration:.75,ease:[.76,0,.24,1]}}>
           <img src={p.image} alt={p.name} />
           <span className="detail-photo-label">{p.category} / {p.unit}</span>
         </motion.div>
@@ -793,7 +820,7 @@ export function ProductDetail() {
             style={{ marginBottom: "16px" }}
           >
             <span className="pe-produce-price-val" style={{ fontSize: "28px" }}>
-              {money(p.price)}
+              {money(p.price, p.currency)}
             </span>
             <span className="pe-produce-unit" style={{ fontSize: "16px" }}>
               / {p.unit}
@@ -883,17 +910,22 @@ export function ProductDetail() {
                   type="number"
                   className="fw-stepper-input"
                   aria-label="Selected quantity"
-                  value={quantity}
+                  value={quantity || ""}
                   min={1}
-                  max={Math.max(1, stock)}
-                  readOnly
+                  onChange={(e) => {
+                    if (e.target.value === "") {
+                      set(0);
+                    } else {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) set(val);
+                    }
+                  }}
                 />
                 <button
                   type="button"
                   className="fw-stepper-btn"
                   aria-label="Increase quantity"
-                  disabled={quantity >= stock}
-                  onClick={() => set(Math.min(stock, quantity + 1))}
+                  onClick={() => set(quantity + 1)}
                 >
                   +
                 </button>
@@ -910,11 +942,52 @@ export function ProductDetail() {
             </span>
           </div>
 
+          {quantity > stock && (
+            <div
+              role="alert"
+              style={{
+                padding: "10px 14px",
+                borderRadius: "6px",
+                backgroundColor: "#fef3f2",
+                border: "1px solid #fecdca",
+                color: "#b42318",
+                fontSize: "13px",
+                lineHeight: "1.4",
+                marginBottom: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+              }}
+            >
+              <div>
+                <strong>Stock not available:</strong> You entered {quantity} {p.unit}, but only {stock} {p.unit} {stock === 1 ? "is" : "are"} currently available in stock. Lower the value to continue.
+              </div>
+              {stock > 0 && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "12px",
+                    whiteSpace: "nowrap",
+                    borderColor: "#b42318",
+                    color: "#b42318",
+                  }}
+                  onClick={() => set(stock)}
+                >
+                  Set to {stock}
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="actions" style={{ marginBottom: "16px" }}>
             <button
               className="button grow"
-              disabled={!p.available || stock < 1}
+              disabled={!p.available || stock < 1 || quantity < 1 || quantity > stock}
               onClick={() => {
+                if (quantity > stock || quantity < 1) return;
                 if (
                   act(
                     {
@@ -931,9 +1004,11 @@ export function ProductDetail() {
               }}
             >
               <ShoppingBasket size={18} />
-              {added
-                ? "Added to Market Bag!"
-                : `Add to Bag (${money(p.price * quantity)})`}
+              {quantity > stock
+                ? `Stock not available (Max ${stock} ${p.unit})`
+                : added
+                  ? "Added to Market Bag!"
+                  : `Add to Bag (${money(p.price * Math.max(1, quantity), p.currency)})`}
             </button>
             <button
               type="button"
@@ -980,112 +1055,19 @@ export function ProductDetail() {
         </div>
       </section>
 
-      {/* Community Produce Reviews Section */}
-      <section className="section">
-        <div className="pe-section-header">
-          <span className="pe-eyebrow">
-            <Star size={14} /> Community feedback
-          </span>
-          <h2 className="pe-section-title">
-            Community tasting notes & reviews.
-          </h2>
-        </div>
 
-        {s.reviews.filter((r) => r.visible && r.target === p.id).length > 0 ? (
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-          >
-            {s.reviews
-              .filter((r) => r.visible && r.target === p.id)
-              .map((r) => (
-                <blockquote
-                  className="review"
-                  key={r.id}
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid var(--pe-border)",
-                    borderRadius: "6px",
-                    padding: "20px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      marginBottom: "8px",
-                      color: "var(--pe-harvest)",
-                    }}
-                  >
-                    {[...Array(r.rating || 5)].map((_, idx) => (
-                      <Star key={idx} size={14} fill="currentColor" />
-                    ))}
-                    <strong
-                      style={{
-                        fontSize: "13px",
-                        color: "var(--pe-ink)",
-                        marginLeft: "4px",
-                      }}
-                    >
-                      Order reference · {r.orderId}
-                    </strong>
-                  </div>
-                  <p
-                    style={{
-                      fontSize: "15px",
-                      lineHeight: "1.55",
-                      margin: "0 0 10px",
-                    }}
-                  >
-                    “{r.text}”
-                  </p>
-                  {r.reply && (
-                    <div
-                      style={{
-                        borderLeft: "3px solid var(--pe-forest)",
-                        paddingLeft: "12px",
-                        marginTop: "10px",
-                        color: "var(--pe-forest)",
-                        fontSize: "13.5px",
-                      }}
-                    >
-                      <strong>Farmer Reply:</strong> {r.reply}
-                    </div>
-                  )}
-                </blockquote>
-              ))}
-          </div>
-        ) : (
-          <p style={{ color: "var(--pe-muted)", fontStyle: "italic" }}>
-            No customer reviews have been recorded for this item yet. Verified
-            customers can leave feedback after completing pickup.
-          </p>
-        )}
-      </section>
     </div>
   );
 }
 
-/** Seeded accounts for evaluation (see Server/src/seed/seedData.js). */
-const EVALUATOR_ACCOUNTS: { role: Role; label: string; name: string; email: string; password: string }[] = [
-  { role: "customer", label: "Customer", name: "Sarah Ahmed", email: "customer.sarah@marketlink.com", password: "Customer123!" },
-  { role: "farmer", label: "Grower", name: "Greenfield Farm", email: "farmer.greenfield@marketlink.com", password: "Farmer123!" },
-  { role: "admin", label: "Administrator", name: "Market operations", email: "admin@marketlink.com", password: "Admin123!" },
-];
 
-/**
- * Where to go after signing in: the requested page when it is a same-site path
- * the role may open (its own workspace, or a public stall/product/market page
- * for customers), otherwise the role's workspace.
- */
 function afterSignIn(next: string | null, role: Role) {
-  const safe = !!next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\");
-  const allowed =
-    safe &&
-    (next!.startsWith(`/${role}`) || (role === "customer" && /^\/(farmers|products|markets)\//.test(next!)));
-  return allowed ? next! : `/${role}`;
+  const safe = !!next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\');
+  if (!safe) return `/${role}`;
+  if (next === '/checkout' || next === '/basket' || next === '/products') return next;
+  const allowed = next.startsWith(`/${role}/`) || next === `/${role}` || (role === 'customer' && /^\/(farmers|products|markets)\//.test(next));
+  return allowed ? next : `/${role}`;
 }
-
 export function Auth() {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
@@ -1101,19 +1083,97 @@ export function Auth() {
     : pathname.includes("admin")
       ? "admin"
       : "customer";
-  const [loginRole, setRole] = useState<Role>(role);
+  const loginRole = role;
   const [error, setError] = useState("");
 
-  const enter = async (email: string, pass: string) => {
-    setError("");
+  // ── CAPTCHA state ────────────────────────────────────────────────────────
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+
+  // ── 2-Step Login state ───────────────────────────────────────────────────
+  type LoginStep = 'form' | 'otp';
+  const [loginStep, setLoginStep] = useState<LoginStep>('form');
+  const [loginOtp, setLoginOtp] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+
+  // ── Forgot Password state ────────────────────────────────────────────────
+  type FPStep = 'login' | 'forgot' | 'otp' | 'reset' | 'done';
+  const [fpStep, setFpStep] = useState<FPStep>('login');
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpOtp, setFpOtp] = useState('');
+  const [fpPassword, setFpPassword] = useState('');
+  const [fpConfirm, setFpConfirm] = useState('');
+  const [fpError, setFpError] = useState('');
+  const [fpCaptchaVerified, setFpCaptchaVerified] = useState(false);
+
+  const handleForgotSubmit = async () => {
+    setFpError('');
+    if (!fpCaptchaVerified) {
+      setFpError('Please complete the security verification challenge before continuing.');
+      return;
+    }
     setLoading(true);
     try {
-      const session = await loginApi(email, pass);
+      await forgotPasswordApi(fpEmail.trim());
+      setFpStep('otp');
+    } catch (e: any) {
+      setFpError(e?.message || 'Failed to send reset code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async () => {
+    setFpError('');
+    if (!fpOtp.trim() || fpOtp.trim().length !== 6) {
+      setFpError('Please enter the 6-digit code from your email.');
+      return;
+    }
+    setFpStep('reset');
+  };
+
+  const handleResetSubmit = async () => {
+    setFpError('');
+    if (fpPassword.length < 8) { setFpError('Password must be at least 8 characters.'); return; }
+    if (fpPassword !== fpConfirm) { setFpError('Passwords do not match.'); return; }
+    setLoading(true);
+    try {
+      await resetPasswordApi(fpEmail.trim(), fpOtp.trim(), fpPassword);
+      setFpStep('done');
+    } catch (e: any) {
+      setFpError(e?.message || 'Reset failed. The code may be incorrect or expired.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 2-Step Login OTP verification ────────────────────────────────────────
+  const handleLoginOtpSubmit = async () => {
+    setError('');
+    if (!loginOtp.trim() || loginOtp.trim().length !== 6) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const session = await verifyLoginOtpApi(loginEmail || emailInput, loginOtp.trim());
       await gateway.signIn();
       const next = params.get("next");
-      navigate(afterSignIn(next, session.role));
+      navigate(afterSignIn(next, session.role || loginRole));
     } catch (err: any) {
-      setError(err?.message || "Sign in failed. Please check your email and password.");
+      setError(err?.message || 'Invalid or expired verification code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendLoginOtp = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await sendLoginOtpApi(loginEmail || emailInput, passwordInput);
+      setError('A fresh verification code has been sent.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resend code. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -1166,12 +1226,21 @@ export function Auth() {
         setLoading(false);
       }
     } else {
+      // Login — verify CAPTCHA first, then dispatch login verification OTP
+      if (!captchaVerified) {
+        setError('Please complete the security verification challenge below before signing in.');
+        setLoading(false);
+        return;
+      }
       try {
-        const session = await loginApi(email, password);
-        const resolvedRole = session.role || loginRole;
-        await gateway.signIn();
-        const next = params.get("next");
-        navigate(afterSignIn(next, resolvedRole));
+        const result = await sendLoginOtpApi(email, password);
+        if (result.user && !result.otpSent) {
+          await gateway.signIn();
+          navigate(afterSignIn(params.get("next"), result.user.role));
+          return;
+        }
+        setLoginEmail(email);
+        setLoginStep('otp');
       } catch (err: any) {
         setError(
           err?.message ||
@@ -1197,161 +1266,274 @@ export function Auth() {
         </div>
       </div>
       <div className="auth-form">
-        <p className="eyebrow">
-          {role === "admin" ? "Administration" : "A place at the market"}
-        </p>
-        <h1>
-          {choose
-            ? "How will you join us?"
-            : register
-              ? role === "farmer"
-                ? "Bring your stall."
-                : "Make market day yours."
-              : "Welcome back."}
-        </h1>
-        {choose ? (
-          <div className="stack">
-            <Link className="choice" to="/register/customer">
-              <h3>I’m here for the harvest</h3>
-              <p>Discover growers and plan your pickups.</p>
-              <ArrowUpRight />
-            </Link>
-            <Link className="choice" to="/register/farmer">
-              <h3>I’m bringing my stall</h3>
-              <p>Plan your stock and prepare for market day.</p>
-              <ArrowUpRight />
-            </Link>
-          </div>
-        ) : (
-          <>
-            {!register && (
-              <section className="evaluator-access" aria-labelledby="evaluator-title">
-                <p id="evaluator-title" className="evaluator-title">
-                  Evaluator accounts
-                </p>
-                <div className="evaluator-grid">
-                  {EVALUATOR_ACCOUNTS.map((a) => (
-                    <button
-                      key={a.email}
-                      type="button"
-                      className="evaluator-card"
-                      disabled={loading}
-                      onClick={() => {
-                        setEmailInput(a.email);
-                        setPasswordInput(a.password);
-                        setRole(a.role);
-                        enter(a.email, a.password);
-                      }}
-                    >
-                      <span className="evaluator-role">{a.label}</span>
-                      <strong>{a.name}</strong>
-                      <span className="evaluator-email">{a.email}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-            <Form onSubmit={handleFormSubmit}>
-              {register && (
+        <div className="auth-card">
+          <p className="eyebrow">
+            {role === "admin" ? "Administration" : "A place at the market"}
+          </p>
+
+          {/* ── Forgot Password Flow ─────────────────────────────────────── */}
+          {!register && fpStep !== 'login' ? (
+            <div className="fp-flow">
+              {fpStep === 'forgot' && (
                 <>
-                  <Field
-                    label={
-                      role === "farmer" ? "Stall or business name" : "Full name"
-                    }
-                  >
-                    <input name="name" required autoComplete="off" />
+                  <h1>Reset your password</h1>
+                  <p className="auth-subtitle">Enter your account email. First complete the security check, and we will send a 6-digit code to your inbox.</p>
+                  <Field label="Email address">
+                    <input type="email" value={fpEmail} onChange={e => setFpEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" />
                   </Field>
-                  {role === "farmer" && (
-                    <Field label="Contact person">
-                      <input name="person" required autoComplete="off" />
-                    </Field>
-                  )}
-                  <Field label="Contact number">
-                    <input
-                      name="phone"
-                      type="tel"
-                      required
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field label="Address">
-                    <textarea name="address" required rows={2} />
-                  </Field>
+                  <VisualCaptcha
+                    verified={fpCaptchaVerified}
+                    onVerify={setFpCaptchaVerified}
+                    label="Security verification"
+                    hint="Type the 5 characters above to enable sending reset code"
+                  />
+                  {fpError && <p className="error" role="alert">{fpError}</p>}
+                  <button className="button full" onClick={handleForgotSubmit} disabled={loading || !fpEmail.includes('@') || !fpCaptchaVerified}>
+                    {loading ? 'Sending code…' : 'Send reset code'}
+                    <ArrowRight size={18} />
+                  </button>
+                  <div className="auth-links"><button className="link-button" onClick={() => { setFpStep('login'); setFpError(''); }}>← Back to sign in</button></div>
                 </>
               )}
-              <Field label="Email">
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="off"
-                  placeholder="you@example.com"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                />
-              </Field>
-              <Field
-                label="Password"
-                hint={register ? "At least 8 characters." : undefined}
-              >
-                <div className="password-field">
-                  <input
-                    name="password"
-                    type={show ? "text" : "password"}
-                    required
-                    minLength={8}
-                    autoComplete="off"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => setShow(!show)}
-                    aria-label={show ? "Hide password" : "Show password"}
-                  >
-                    {show ? "Hide" : "Show"}
+              {fpStep === 'otp' && (
+                <>
+                  <h1>Enter your code</h1>
+                  <p className="auth-subtitle">We sent a 6-digit code to <strong>{fpEmail}</strong>. It expires in 10 minutes.</p>
+                  <Field label="6-digit code">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={fpOtp}
+                      onChange={e => setFpOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      className="otp-input"
+                      required
+                    />
+                  </Field>
+                  {fpError && <p className="error" role="alert">{fpError}</p>}
+                  <button className="button full" onClick={handleOtpSubmit} disabled={fpOtp.length !== 6}>
+                    Verify code
+                    <ArrowRight size={18} />
                   </button>
-                </div>
-              </Field>
-              {register && (
-                <Field label="Confirm password">
-                  <input
-                    name="confirm"
-                    type="password"
-                    required
-                    minLength={8}
-                    autoComplete="off"
-                  />
-                </Field>
+                  <div className="auth-links">
+                    <button className="link-button" onClick={handleForgotSubmit} disabled={loading}>{loading ? 'Resending…' : 'Resend code'}</button>
+                    <button className="link-button" onClick={() => { setFpStep('login'); setFpError(''); }}>← Back to sign in</button>
+                  </div>
+                </>
               )}
-              {error && (
-                <p className="error" role="alert">
-                  {error}
-                </p>
+              {fpStep === 'reset' && (
+                <>
+                  <h1>Set a new password</h1>
+                  <p className="auth-subtitle">Choose a strong password for your account.</p>
+                  <Field label="New password" hint="At least 8 characters">
+                    <input type="password" value={fpPassword} onChange={e => setFpPassword(e.target.value)} required minLength={8} />
+                  </Field>
+                  <Field label="Confirm new password">
+                    <input type="password" value={fpConfirm} onChange={e => setFpConfirm(e.target.value)} required minLength={8} />
+                  </Field>
+                  {fpError && <p className="error" role="alert">{fpError}</p>}
+                  <button className="button full" onClick={handleResetSubmit} disabled={loading || fpPassword.length < 8}>
+                    {loading ? 'Updating password…' : 'Update password'}
+                    <ArrowRight size={18} />
+                  </button>
+                </>
               )}
-              <button className="button" type="submit" disabled={loading}>
-                {loading
-                  ? "Verifying credentials..."
-                  : register
-                    ? "Complete Registration"
-                    : "Sign in to Gather & Grow"}
-                <ArrowRight size={18} />
-              </button>
-            </Form>
-            <div className="auth-links">
-              {register ? (
-                <Link to={params.get("next") ? `/login?next=${encodeURIComponent(params.get("next")!)}` : "/login"}>
-                  Already have an account? Sign in
-                </Link>
-              ) : (
-                <Link to={params.get("next") ? `/register/customer?next=${encodeURIComponent(params.get("next")!)}` : "/register"}>
-                  New to the market? Join us
-                </Link>
+              {fpStep === 'done' && (
+                <>
+                  <h1>Password updated!</h1>
+                  <p className="auth-subtitle">Your password has been changed successfully. You can now sign in with your new password.</p>
+                  <button className="button full" onClick={() => { setFpStep('login'); setLoginStep('form'); setFpError(''); setFpOtp(''); setFpPassword(''); setFpConfirm(''); }}>
+                    Sign in now
+                    <ArrowRight size={18} />
+                  </button>
+                </>
               )}
             </div>
+          ) : !register && loginStep === 'otp' ? (
+            /* ── 2-Step Login OTP Screen ─────────────────────────────────── */
+            <div className="otp-flow">
+              <h1>Check your email</h1>
+              <p className="auth-subtitle">
+                We sent a 6-digit login verification code to <strong>{loginEmail || emailInput}</strong>.
+              </p>
+              <Field label="6-digit verification code" hint="Enter the 6-digit security code sent to your email">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={loginOtp}
+                  onChange={e => setLoginOtp(e.target.value.replace(/\D/g, ''))}
+                  placeholder="123456"
+                  className="otp-input"
+                  required
+                  autoFocus
+                />
+              </Field>
+              {error && <p className="error" role="alert">{error}</p>}
+              <button className="button full" onClick={handleLoginOtpSubmit} disabled={loading || loginOtp.length !== 6}>
+                {loading ? 'Verifying…' : 'Verify & Sign in'}
+                <ArrowRight size={18} />
+              </button>
+              <div className="auth-links">
+                <button className="link-button" onClick={handleResendLoginOtp} disabled={loading}>
+                  {loading ? 'Resending…' : 'Resend verification code'}
+                </button>
+                <button className="link-button" onClick={() => { setLoginStep('form'); setError(''); setLoginOtp(''); }}>
+                  ← Back to credentials
+                </button>
+              </div>
+            </div>
+          ) : (
+          // ── Normal Login / Register Form ─────────────────────────────────
+          <>
+            <h1>
+              {choose
+                ? "How will you join us?"
+                : register
+                  ? role === "farmer"
+                    ? "Bring your stall."
+                    : "Make market day yours."
+                  : "Welcome back."}
+            </h1>
+            {choose ? (
+              <div className="stack">
+                <Link className="choice" to="/register/customer">
+                  <h3>I'm here for the harvest</h3>
+                  <p>Discover growers and plan your pickups.</p>
+                  <ArrowUpRight />
+                </Link>
+                <Link className="choice" to="/register/farmer">
+                  <h3>I'm bringing my stall</h3>
+                  <p>Plan your stock and prepare for market day.</p>
+                  <ArrowUpRight />
+                </Link>
+              </div>
+            ) : (
+              <>
+                <Form onSubmit={handleFormSubmit}>
+                  {register && (
+                    <>
+                      <Field
+                        label={
+                          role === "farmer" ? "Stall or business name" : "Full name"
+                        }
+                      >
+                        <input name="name" required autoComplete="off" />
+                      </Field>
+                      {role === "farmer" && (
+                        <Field label="Contact person">
+                          <input name="person" required autoComplete="off" />
+                        </Field>
+                      )}
+                      <Field label="Contact number">
+                        <input
+                          name="phone"
+                          type="tel"
+                          required
+                          autoComplete="off"
+                        />
+                      </Field>
+                      <Field label="Address">
+                        <textarea name="address" required rows={2} />
+                      </Field>
+                    </>
+                  )}
+                  <Field label="Email">
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      autoComplete="off"
+                      placeholder="you@example.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label="Password"
+                    hint={register ? "At least 8 characters." : undefined}
+                  >
+                    <div className="password-field">
+                      <input
+                        name="password"
+                        type={show ? "text" : "password"}
+                        required
+                        minLength={8}
+                        autoComplete="off"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setShow(!show)}
+                        aria-label={show ? "Hide password" : "Show password"}
+                      >
+                        {show ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </Field>
+                  {register && (
+                    <Field label="Confirm password">
+                      <input
+                        name="confirm"
+                        type="password"
+                        required
+                        minLength={8}
+                        autoComplete="off"
+                      />
+                    </Field>
+                  )}
+
+                  {/* ── Visual CAPTCHA (login only) ────────────────────────── */}
+                  {!register && (
+                    <VisualCaptcha
+                      verified={captchaVerified}
+                      onVerify={setCaptchaVerified}
+                      label="Security check"
+                      hint="Verify the characters above to enable sign in"
+                    />
+                  )}
+
+                  {error && (
+                    <p className="error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <button className="button full" type="submit" disabled={loading || (!register && !captchaVerified)}>
+                    {loading
+                      ? "Verifying credentials..."
+                      : register
+                        ? "Complete Registration"
+                        : "Sign in to Gather & Grow"}
+                    <ArrowRight size={18} />
+                  </button>
+                </Form>
+                <div className="auth-links">
+                  {register ? (
+                    <Link to={params.get("next") ? `/login?next=${encodeURIComponent(params.get("next")!)}` : "/login"}>
+                      Already have an account? Sign in
+                    </Link>
+                  ) : (
+                    <>
+                      <button
+                        className="link-button"
+                        onClick={() => { setFpEmail(emailInput); setFpStep('forgot'); setError(''); }}
+                      >
+                        Forgot your password?
+                      </button>
+                      <Link to={params.get("next") ? `/register/customer?next=${encodeURIComponent(params.get("next")!)}` : "/register"}>
+                        New to the market? Join us
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
+        </div>
       </div>
     </div>
   );
@@ -1367,7 +1549,7 @@ export function Info() {
           title="Let’s keep in touch."
           intro="Questions about Gather & Grow? Start here."
         />
-        <div className="two-col">
+        <div className="contact-layout">
           <div>
             <h2>The Gather & Grow team</h2>
             <p>
@@ -1382,14 +1564,7 @@ export function Info() {
               Open my orders
             </Link>
           </div>
-          <div className="contact-map">
-            <MapPin size={40} />
-            <h2>A real place, soon.</h2>
-            <p>
-              The required Google Maps embed will be configured when the team
-              supplies its public location.
-            </p>
-          </div>
+          <ContactForm />
         </div>
       </div>
     );

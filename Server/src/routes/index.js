@@ -1,3 +1,5 @@
+import supportRouter from './support.routes.js';
+import locationRouter from './location.routes.js';
 import { Router } from 'express';
 import healthRoutes from './health.routes.js';
 import authRoutes from './auth.routes.js';
@@ -27,6 +29,8 @@ apiRouter.use('/health', healthRoutes);
 
 // Version 1 Sub-Router
 const v1Router = Router();
+v1Router.use('/', locationRouter);
+v1Router.use('/support', supportRouter);
 v1Router.use('/health', healthRoutes);
 v1Router.use('/', workspaceRouter);
 v1Router.use('/auth', authRoutes);

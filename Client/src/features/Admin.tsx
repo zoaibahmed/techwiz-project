@@ -1,5 +1,8 @@
+import {ApplicationReview} from './ApplicationReview';
+import {SupportDesk} from './SupportDesk';
+import {VenueEditor} from './VenueEditor';
 import { useState, useMemo } from "react";
-import { Link, useLocation, useParams, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   ArrowUpRight,
   Users,
@@ -22,7 +25,6 @@ import {
   Confirm,
 } from "../components/ui";
 import { Notifications } from "./Customer";
-import { NotFound } from "./Public";
 import { money, date, time, total, activeOrder } from "../data/market";
 import {
   AdminCommandOperationalStats,
@@ -34,10 +36,11 @@ export function AdminPage() {
   const page = pathname.split("/")[2] ?? "";
   const id = pathname.split("/")[3];
 
+  if (page === "support") return <SupportDesk />;
   if (page === "notifications") return <Notifications />;
   if (page === "reports" || page === "analytics") return <AdminAnalyticsWorkspace />;
-  if (page === "markets" && (id || pathname.includes("/new"))) return <MarketEditor />;
-  if (page === "farmers" && id) return <AdminFarmerDetail id={id} />;
+  if (page === "markets" && (id || pathname.includes("/new"))) return <VenueEditor />;
+  if (page === "farmers" && id) return <ApplicationReview id={id} />;
   if (page === "farmers") return <AdminFarmersHub />;
   if (page === "customers") return <AdminCustomersHub />;
   if (page === "markets") return <AdminMarketsHub />;
@@ -278,11 +281,10 @@ function AdminOverviewCockpit() {
    ========================================================================= */
 function AdminFarmersHub() {
   const s = useMarket();
-  const act = useAction();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
 
-  const pendingList = s.farmers.filter((f) => f.state === "Pending");
+  const pendingList = s.farmers.filter((f) => f.approvalStatus === "pending" && f.onboardingStatus === "submitted");
 
   const filtered = useMemo(() => {
     return s.farmers.filter((f) => {
@@ -305,18 +307,7 @@ function AdminFarmersHub() {
           </p>
         </div>
         <div className="fw-header-actions">
-          {pendingList.length > 0 && (
-            <button
-              className="button"
-              onClick={() => {
-                pendingList.forEach((f) => {
-                  act({ type: "farmer", value: { ...f, state: "Approved" } });
-                });
-              }}
-            >
-              <CheckCircle2 size={16} /> Batch Approve All Pending ({pendingList.length})
-            </button>
-          )}
+          {pendingList.length > 0 && <p>{pendingList.length} submitted applications to review individually.</p>}
         </div>
       </div>
 
@@ -368,16 +359,16 @@ function AdminFarmersHub() {
                 {f.state === "Pending" && (
                   <button
                     className="button compact"
-                    onClick={() => act({ type: "farmer", value: { ...f, state: "Approved" } }, `${f.name} approved.`)}
+                    onClick={() => { window.location.href = `/admin/farmers/${f.id}`; }}
                   >
-                    <CheckCircle2 size={14} /> Approve
+                    <CheckCircle2 size={14} /> Review application
                   </button>
                 )}
                 {f.state === "Approved" && (
                   <button
                     className="button secondary compact"
                     style={{ color: "var(--fw-danger)", borderColor: "#f6e8e4" }}
-                    onClick={() => act({ type: "farmer", value: { ...f, state: "Suspended" } }, `${f.name} suspended.`)}
+                    onClick={() => { window.location.href = `/admin/farmers/${f.id}`; }}
                   >
                     Suspend
                   </button>
@@ -385,7 +376,7 @@ function AdminFarmersHub() {
                 {f.state === "Suspended" && (
                   <button
                     className="button compact"
-                    onClick={() => act({ type: "farmer", value: { ...f, state: "Approved" } }, `${f.name} restored.`)}
+                    onClick={() => { window.location.href = `/admin/farmers/${f.id}`; }}
                   >
                     Restore
                   </button>
@@ -397,67 +388,6 @@ function AdminFarmersHub() {
             </article>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function AdminFarmerDetail({ id }: { id: string }) {
-  const s = useMarket();
-  const act = useAction();
-  const f = s.farmers.find((f) => f.id === id);
-
-  if (!f) return <NotFound />;
-  const m = s.markets.find((m) => m.id === f.marketId);
-  const ownProducts = s.products.filter((p) => p.farmerId === f.id);
-
-  return (
-    <div className="farmer-workbench container narrow">
-      <Link className="back-link" to="/admin/farmers">
-        ← Back to Producer Directory
-      </Link>
-      <div className="fw-header" style={{ marginTop: "16px" }}>
-        <div>
-          <span className={`fw-status-chip ${f.state.toLowerCase()}`}>{f.state}</span>
-          <h1>{f.name}</h1>
-          <p className="fw-header-sub">Contact: {f.person} · Lahore, Pakistan</p>
-        </div>
-      </div>
-
-      <div className="paper-panel">
-        <h2 style={{ fontSize: "20px", marginBottom: "16px" }}>Stall Application Details</h2>
-        <dl className="definition-list">
-          <dt>Contact Person</dt>
-          <dd>{f.person}</dd>
-          <dt>Allocated Market</dt>
-          <dd>{m ? `${m.name} (${m.area})` : "None"}</dd>
-          <dt>Public Farm Story</dt>
-          <dd style={{ lineHeight: "1.6" }}>{f.story}</dd>
-          <dt>Catalogue Items</dt>
-          <dd>{ownProducts.length} active items listed</dd>
-        </dl>
-
-        <div className="actions" style={{ marginTop: "24px" }}>
-          {f.state !== "Approved" && (
-            <Confirm
-              label="Approve Producer"
-              title={`Approve ${f.name}?`}
-              onConfirm={() => act({ type: "farmer", value: { ...f, state: "Approved" } }, `${f.name} approved.`)}
-            >
-              Approval allows this producer to publish Saturday stock and accept customer pre-orders.
-            </Confirm>
-          )}
-          {f.state !== "Suspended" && (
-            <Confirm
-              label="Suspend Producer"
-              title={`Suspend ${f.name}?`}
-              danger
-              onConfirm={() => act({ type: "farmer", value: { ...f, state: "Suspended" } }, `${f.name} suspended.`)}
-            >
-              Suspension disables customer discovery and prevents new bookings while preserving historical records.
-            </Confirm>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -548,88 +478,6 @@ function AdminMarketsHub() {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function MarketEditor() {
-  const s = useMarket();
-  const act = useAction();
-  const { marketId } = useParams();
-  const navigate = useNavigate();
-  const [error, setError] = useState("");
-  const m = s.markets.find((m) => m.id === marketId);
-
-  return (
-    <div className="farmer-workbench container narrow">
-      <Link className="back-link" to="/admin/markets">
-        ← Back to Market Venues
-      </Link>
-      <div className="fw-header" style={{ marginTop: "16px" }}>
-        <div>
-          <h1>{m ? `Edit ${m.name}` : "Create New Market Location"}</h1>
-          <p className="fw-header-sub">Set operating day, time hours, Lahore area, and map location.</p>
-        </div>
-      </div>
-
-      <Form
-        onSubmit={(d) => {
-          if (value(d, "end") <= value(d, "start")) {
-            setError("Closing time must be after opening time.");
-            return;
-          }
-          if (
-            act({
-              type: "market",
-              value: {
-                id: m?.id ?? `new-market-${crypto.randomUUID().slice(0, 8)}`,
-                name: value(d, "name"),
-                area: value(d, "area"),
-                address: value(d, "address"),
-                day: value(d, "day"),
-                hours: `${value(d, "start")}–${value(d, "end")}`,
-                active: m?.active ?? true,
-              },
-            })
-          ) {
-            navigate("/admin/markets");
-          }
-        }}
-      >
-        <Field label="Market Venue Name">
-          <input name="name" required defaultValue={m?.name} placeholder="e.g. The Orchard Market" />
-        </Field>
-        <Field label="Neighbourhood / District">
-          <input name="area" required defaultValue={m?.area} placeholder="e.g. Model Town / Gulberg" />
-        </Field>
-        <Field label="Address / Venue Instructions">
-          <textarea
-            name="address"
-            required
-            defaultValue={m?.address}
-            rows={2}
-            placeholder="e.g. Model Town Park Entrance 3, Circular Rd, Lahore"
-          />
-        </Field>
-        <Field label="Market Operating Day">
-          <input name="day" required defaultValue={m?.day ?? "Every Saturday"} />
-        </Field>
-        <div className="two-col">
-          <Field label="Opens (PKT)">
-            <input name="start" type="time" defaultValue={m?.hours.split("–")[0] ?? "08:00"} required />
-          </Field>
-          <Field label="Closes (PKT)">
-            <input name="end" type="time" defaultValue={m?.hours.split("–")[1] ?? "13:00"} required />
-          </Field>
-        </div>
-        {error && <p className="error" role="alert">{error}</p>}
-        <div className="actions" style={{ marginTop: "24px" }}>
-          <button className="button">Save Market Venue</button>
-          <Link to="/admin/markets" className="button quiet">
-            Cancel
-          </Link>
-        </div>
-      </Form>
     </div>
   );
 }

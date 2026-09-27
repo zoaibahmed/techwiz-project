@@ -15,16 +15,16 @@ function getCsrfToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-async function ensureCsrfToken(): Promise<string | null> {
-  let token = getCsrfToken();
-  if (!token && typeof window !== 'undefined') {
-    try {
-      const res = await fetch(`${BASE}/auth/csrf-token`, { credentials: 'include' });
-      const json = await res.json();
-      token = json?.data?.csrfToken || getCsrfToken();
-    } catch {}
+let csrfBootstrap: Promise<string | null> | null = null;
+async function ensureCsrfToken(force = false): Promise<string | null> {
+  if (!force && getCsrfToken()) return getCsrfToken();
+  if (typeof window === 'undefined') return null;
+  if (!csrfBootstrap) {
+    csrfBootstrap = fetch(`${BASE}/auth/csrf-token`, {credentials:'include',signal:AbortSignal.timeout(12000)})
+      .then(async res => {if (!res.ok) throw new Error('Could not verify this request. Please try again.'); const body=await res.json(); return body?.data?.csrfToken || getCsrfToken();})
+      .finally(() => {csrfBootstrap=null;});
   }
-  return token;
+  return csrfBootstrap;
 }
 
 // ─── Base HTTP Helpers ───────────────────────────────────────────────────────
@@ -47,7 +47,9 @@ export interface ApiError {
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  attempt = 0,
+  csrfRetried = false
 ): Promise<T> {
   const url = `${BASE}${endpoint}`;
   const headers = new Headers(options.headers || {});
@@ -78,6 +80,12 @@ async function request<T>(
     signal: options.signal || AbortSignal.timeout(12000),
   });
 
+  // Read requests may recover from a brief backend restart; never replay writes on gateway errors.
+  if (method === 'GET' && [502,503,504].includes(response.status) && attempt < 2 && !options.signal?.aborted) {
+    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    return request<T>(endpoint, options, attempt + 1, csrfRetried);
+  }
+
   if (!response.ok) {
     let errBody: any = null;
     try {
@@ -85,8 +93,15 @@ async function request<T>(
     } catch {
       errBody = { message: await response.text().catch(() => 'Network error') };
     }
+    // This specific rejection occurs before mutation, so refreshing its token is safe once.
+    if (response.status === 403 && errBody?.error?.code === 'CSRF_TOKEN_INVALID' && !csrfRetried) {
+      const csrf = await ensureCsrfToken(true);
+      const retryHeaders = new Headers(options.headers);
+      if (csrf) retryHeaders.set('x-csrf-token',csrf);
+      return request<T>(endpoint,{...options,headers:retryHeaders},attempt,true);
+    }
     const error: any = new Error(
-      errBody?.error?.message || errBody?.message || `Request failed with status ${response.status}`
+      errBody?.error?.message || errBody?.message || ([502,503,504].includes(response.status) ? 'The server is temporarily unavailable. Please try again shortly.' : `Request failed with status ${response.status}`)
     );
     error.statusCode = response.status;
     error.code = errBody?.error?.code || errBody?.code;
@@ -869,3 +884,86 @@ export async function probeServer(): Promise<boolean> {
 export async function archiveFarmerProductApi(id: string): Promise<any> {
   return request<any>(`/farmer/products/${id}`, { method: 'DELETE' });
 }
+
+export function sendContactApi(data: {name:string;email:string;subject:string;message:string;website:string}): Promise<{accepted:boolean;autoReplySent:boolean}> { return request("/contact",{method:"POST",body:JSON.stringify(data)}); }
+
+export function searchLocationsApi(q:string,country:string):Promise<{label:string;latitude:number;longitude:number}[]> {return request('/locations/search?'+new URLSearchParams({q,country}));}
+
+export interface SupportMessage {
+  id: string;
+  senderId?: string;
+  senderName?: string;
+  senderRole: string;
+  text: string;
+  body?: string;
+  createdAt: string;
+  readAt?: string;
+}
+export interface SupportConversationInspect {
+  id: string;
+  readOnly: boolean;
+  conversation?: {
+    id: string;
+    customerName: string;
+    customerEmail?: string;
+    farmerBusinessName: string;
+    farmerContactPerson?: string;
+    relatedProductName?: string;
+    relatedOrderNumber?: string;
+    status: string;
+    createdAt: string;
+  };
+  messages: SupportMessage[];
+}
+export interface SupportTicket {
+  id: string;
+  reference: string;
+  subject: string;
+  status: 'open' | 'closed';
+  ownerName: string;
+  ownerRole: string;
+  updatedAt: string;
+  messages?: SupportMessage[];
+}
+export const supportApi = {
+  list: (q = '') => request<SupportTicket[]>('/support/tickets?' + new URLSearchParams({ q })),
+  get: (id: string) => request<SupportTicket>('/support/tickets/' + encodeURIComponent(id)),
+  create: (subject: string, message: string) => request<SupportTicket>('/support/tickets', { method: 'POST', body: JSON.stringify({ subject, message }) }),
+  reply: (id: string, message: string) => request<SupportTicket>(`/support/tickets/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ message }) }),
+  close: (id: string) => request<SupportTicket>(`/support/tickets/${encodeURIComponent(id)}/close`, { method: 'POST' }),
+  conversation: (id: string) => request<SupportConversationInspect>('/support/conversations/' + encodeURIComponent(id))
+};
+
+// --- Auth Extras -------------------------------------------------------------
+export async function sendLoginOtpApi(email: string, password: string): Promise<{ otpSent: boolean; email: string; user?: UserSession }> {
+  const res = await request<any>('/auth/login-otp/send', { method: 'POST', body: JSON.stringify({ email, password }) });
+  return res || { otpSent: true, email };
+}
+
+export async function verifyLoginOtpApi(email: string, otp: string): Promise<UserSession> {
+  const res = await request<any>('/auth/login-otp/verify', { method: 'POST', body: JSON.stringify({ email, otp }) });
+  return (res?.user || res) as UserSession;
+}
+
+export async function forgotPasswordApi(email: string): Promise<{ sent: boolean }> {
+  const res = await request<any>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  return res?.sent !== undefined ? res : { sent: true };
+}
+
+export async function resetPasswordApi(email: string, otp: string, newPassword: string): Promise<{ reset: boolean }> {
+  const res = await request<any>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, otp, newPassword }) });
+  return res?.reset !== undefined ? res : { reset: true };
+}
+
+export async function verifyCaptchaApi(token: string): Promise<{ success: boolean }> {
+  const res = await request<any>('/auth/verify-captcha', { method: 'POST', body: JSON.stringify({ token }) });
+  return res?.success !== undefined ? res : { success: true };
+}
+
+
+export interface MarketJoinRequest {marketId:string;marketName:string;status:'pending'|'approved'|'rejected';reason:string;requestedAt:string}
+export const marketParticipationApi = {
+ list: (farmerId?:string) => request<MarketJoinRequest[]>(farmerId ? `/admin/farmers/${farmerId}/market-requests` : '/farmer/market-requests'),
+ apply: (marketId:string) => request<MarketJoinRequest[]>('/farmer/market-requests',{method:'POST',body:JSON.stringify({marketId})}),
+ decide: (farmerId:string,marketId:string,status:'approved'|'rejected',reason:string) => request<MarketJoinRequest[]>(`/admin/farmers/${farmerId}/market-requests/${marketId}`,{method:'PATCH',body:JSON.stringify({status,reason})}),
+};

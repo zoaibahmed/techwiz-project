@@ -13,6 +13,7 @@ import { CustomerChatModal } from "../components/CustomerChatModal";
 import {
   fetchCustomerProfileApi,
   updateCustomerProfileApi,
+  checkoutApi,
 } from "../data/api";
 import {
   useMarket,
@@ -186,11 +187,16 @@ export function Basket() {
   const checkout = useLocation().pathname === "/checkout";
   const [slots, setSlots] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
   const products = Object.keys(s.basket)
     .map((id) => s.products.find((p) => p.id === id)!)
     .filter(Boolean);
   const farmers = [...new Set(products.map((p) => p.farmerId))];
   const sum = products.reduce((n, p) => n + p.price * s.basket[p.id], 0);
+  const hasOverStock = products.some(
+    (p) => s.basket[p.id] > Math.max(0, p.stock - p.reserved),
+  );
   if (done)
     return (
       <div className="container narrow section">
@@ -201,7 +207,7 @@ export function Basket() {
           title="Your market morning is planned."
           intro="Each grower has your reservation. You will be notified as they accept and pack your order."
         />
-        <Link className="button" to="/customer/orders">
+        <Link className="button" to={s.role === "farmer" ? "/farmer/orders" : s.role === "admin" ? "/admin/orders" : "/customer/orders"}>
           View my orders <ArrowRight size={18} />
         </Link>
       </div>
@@ -224,6 +230,20 @@ export function Basket() {
           <div>
             {farmers.map((id) => {
               const f = s.farmers.find((f) => f.id === id)!;
+              const stallProducts = products.filter(p => p.farmerId === id);
+              const farmerWindows = s.slots.filter(x => x.farmerId === id);
+              const availableWindows = farmerWindows.filter((x) => {
+                const notExpired =
+                  (new Date(x.end) > new Date(s.now) || new Date(x.start) > new Date(s.now)) &&
+                  new Date(x.cutoff) > new Date(s.now);
+                const capacityOk = !x.capacity || (x.reserved ?? 0) < x.capacity;
+                const marketOk =
+                  !f.marketId ||
+                  x.marketId === f.marketId ||
+                  (f.marketIds ?? []).includes(x.marketId) ||
+                  stallProducts.some((p) => p.marketId === x.marketId);
+                return notExpired && capacityOk && marketOk;
+              });
               return (
                 <section className="basket-group" key={id}>
                   <div className="spread">
@@ -245,77 +265,133 @@ export function Basket() {
                   </div>
                   {products
                     .filter((p) => p.farmerId === id)
-                    .map((p) => (
-                      <div className="basket-line" key={p.id}>
-                        <img src={p.image} alt={p.name} />
-                        <div>
-                          <h3>
-                            <Link to={`/products/${p.id}`}>{p.name}</Link>
-                          </h3>
-                          <p className="small muted">
-                            {money(p.price)} / {p.unit}
-                          </p>
-                          <button
-                            className="text-button"
-                            onClick={() =>
-                              act(
-                                { type: "basket", id: p.id, quantity: 0 },
-                                "Removed from your basket.",
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </div>
-                        <Quantity
-                          label={`${p.name} quantity`}
-                          quantity={s.basket[p.id]}
-                          max={p.stock - p.reserved}
-                          onChange={(quantity) =>
-                            act({ type: "basket", id: p.id, quantity })
-                          }
-                        />
-                        <strong>{money(p.price * s.basket[p.id])}</strong>
-                        {s.basketPrices[p.id] !== p.price && (
-                          <Notice>
-                            Price changed from {money(s.basketPrices[p.id])} to{" "}
-                            {money(p.price)} per unit.{" "}
-                            <button
-                              className="text-button"
-                              onClick={() =>
-                                act(
-                                  {
-                                    type: "basket",
-                                    id: p.id,
-                                    quantity: s.basket[p.id],
-                                  },
-                                  "Current price accepted.",
-                                )
+                    .map((p) => {
+                      const available = Math.max(0, p.stock - p.reserved);
+                      const isOverStock = s.basket[p.id] > available;
+                      return (
+                        <div key={p.id}>
+                          <div className="basket-line">
+                            <img src={p.image} alt={p.name} />
+                            <div>
+                              <h3>
+                                <Link to={`/products/${p.id}`}>{p.name}</Link>
+                              </h3>
+                              <p className="small muted">
+                                {money(p.price)} / {p.unit}
+                              </p>
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  act(
+                                    { type: "basket", id: p.id, quantity: 0 },
+                                    "Removed from your basket.",
+                                  )
+                                }
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <Quantity
+                              label={`${p.name} quantity`}
+                              quantity={s.basket[p.id]}
+                              max={available}
+                              onChange={(quantity) =>
+                                act({ type: "basket", id: p.id, quantity })
                               }
+                            />
+                            <strong>{money(p.price * s.basket[p.id])}</strong>
+                            {s.basketPrices[p.id] !== p.price && (
+                              <Notice>
+                                Price changed from {money(s.basketPrices[p.id])} to{" "}
+                                {money(p.price)} per unit.{" "}
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    act(
+                                      {
+                                        type: "basket",
+                                        id: p.id,
+                                        quantity: s.basket[p.id],
+                                      },
+                                      "Current price accepted.",
+                                    )
+                                  }
+                                >
+                                  Accept current price
+                                </button>
+                              </Notice>
+                            )}
+                          </div>
+                          {isOverStock && (
+                            <div
+                              role="alert"
+                              style={{
+                                padding: "10px 14px",
+                                borderRadius: "6px",
+                                backgroundColor: "#fef3f2",
+                                border: "1px solid #fecdca",
+                                color: "#b42318",
+                                fontSize: "13px",
+                                lineHeight: "1.4",
+                                marginTop: "6px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                              }}
                             >
-                              Accept current price
-                            </button>
-                          </Notice>
-                        )}
-                      </div>
-                    ))}
+                              <span>
+                                <strong>Stock not available:</strong> You requested {s.basket[p.id]} {p.unit}, but only {available} {p.unit} {available === 1 ? "is" : "are"} available in stock. Lower your quantity to {available} to continue.
+                              </span>
+                              {available > 0 ? (
+                                <button
+                                  type="button"
+                                  className="button secondary"
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: "12px",
+                                    whiteSpace: "nowrap",
+                                    borderColor: "#b42318",
+                                    color: "#b42318",
+                                  }}
+                                  onClick={() => act({ type: "basket", id: p.id, quantity: available })}
+                                >
+                                  Set to {available} {p.unit}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="button secondary"
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: "12px",
+                                    whiteSpace: "nowrap",
+                                    borderColor: "#b42318",
+                                    color: "#b42318",
+                                  }}
+                                  onClick={() => act({ type: "basket", id: p.id, quantity: 0 })}
+                                >
+                                  Remove item
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   {checkout && (
                     <div className="pickup-select">
                       <Field label={`Pickup window for ${f.name}`}>
                         <select
                           required
+                          disabled={!availableWindows.length}
                           value={slots[id] ?? ""}
                           onChange={(e) =>
                             setSlots({ ...slots, [id]: e.target.value })
                           }
                         >
                           <option value="">Choose a pickup window</option>
-                          {s.slots
-                            .filter(
-                              (x) =>
-                                x.farmerId === id &&
-                                new Date(x.start) > new Date(s.now),
-                            )
+                          {availableWindows
                             .map((x) => (
                               <option key={x.id} value={x.id}>
                                 {date(x.start)} · {time(x.start)}–{time(x.end)}
@@ -323,6 +399,7 @@ export function Basket() {
                             ))}
                         </select>
                       </Field>
+                      {!availableWindows.length && <div role="status" className="pickup-unavailable"><strong>No pickup window available for this reservation.</strong><p>{farmerWindows.length ? "The saved windows do not match this produce's market/date, are full, or their booking cutoff has passed." : `${f.name} has not published a pickup window yet. Market opening hours alone do not create collection slots.`}</p><p>Stock date: {[...new Set(stallProducts.map(p => p.date).filter(Boolean))].map(d => date(d!)).join(', ') || 'Not published'}. The farmer must publish stock and a pickup window for the same market day.</p><Link to={`/farmers/${id}`}>Visit the stall to contact the farmer</Link></div>}
                       <p className="small muted">
                         Times in Asia/Karachi. Reservations close at each window’s cutoff.
                       </p>
@@ -358,28 +435,114 @@ export function Basket() {
               <br />
               No online payment.
             </p>
+            {checkoutError && (
+              <div
+                role="alert"
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: "6px",
+                  backgroundColor: "#fef3f2",
+                  border: "1px solid #fecdca",
+                  color: "#b42318",
+                  fontSize: "13px",
+                  lineHeight: "1.4",
+                  marginBottom: "14px",
+                }}
+              >
+                <strong>Reservation failed:</strong> {checkoutError}
+              </div>
+            )}
+            {hasOverStock && (
+              <div
+                role="alert"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "6px",
+                  backgroundColor: "#fff6ed",
+                  border: "1px solid #ffedd5",
+                  color: "#c2410c",
+                  fontSize: "12.5px",
+                  lineHeight: "1.4",
+                  marginBottom: "14px",
+                }}
+              >
+                Some items in your basket exceed available grower stock. Please lower the quantity to continue.
+              </div>
+            )}
             {checkout ? (
               <button
                 className="button full"
-                disabled={farmers.some((f) => !slots[f])}
-                onClick={() => {
-                  if (s.role !== "customer") {
+                disabled={submitting || hasOverStock || farmers.some((f) => !slots[f])}
+                onClick={async () => {
+                  if (!s.role) {
                     navigate("/login?next=/checkout");
                     return;
                   }
-                  if (
-                    act(
-                      { type: "checkout", slots },
-                      "Reserved. Pay at the stall when you collect.",
-                    )
-                  )
+                  if (hasOverStock) {
+                    setCheckoutError("One or more items exceed available stock. Please lower the quantity before reserving.");
+                    return;
+                  }
+                  if (farmers.some((f) => !slots[f])) {
+                    setCheckoutError("Please choose a pickup window for every grower.");
+                    return;
+                  }
+
+                  setSubmitting(true);
+                  setCheckoutError("");
+                  try {
+                    for (const farmerId of farmers) {
+                      const slot = s.slots.find((x) => x.id === slots[farmerId]);
+                      if (!slot) throw new Error("Choose a pickup window for every grower.");
+                      const items = products
+                        .filter((p) => p.farmerId === farmerId)
+                        .map((p) => ({ productId: p.id, quantity: s.basket[p.id] }));
+
+                      const marketDate = slot.date ?? (slot.start ? slot.start.slice(0, 10) : "");
+                      await checkoutApi({
+                        marketId: slot.marketId,
+                        marketDate,
+                        pickupWindowId: slot.id,
+                        items,
+                        customerNotes: "Reserved online. Payment at the stall.",
+                        idempotencyKey: `web-${globalThis.crypto.randomUUID()}`,
+                      });
+                    }
+
+                    // Clear basket
+                    for (const p of products) {
+                      act({ type: "basket", id: p.id, quantity: 0 });
+                    }
+
+                    // Refresh state from server so real order numbers and updated stocks load
+                    await gateway.refresh();
                     setDone(true);
+                  } catch (err: any) {
+                    const msg = err.response?.data?.error?.message || err.details?.message || err.message || "Failed to complete reservation.";
+                    setCheckoutError(msg);
+                  } finally {
+                    setSubmitting(false);
+                  }
                 }}
               >
-                Confirm reservation <ArrowRight size={18} />
+                {submitting ? (
+                  "Reserving your harvest…"
+                ) : (
+                  <>
+                    Confirm reservation <ArrowRight size={18} />
+                  </>
+                )}
               </button>
             ) : (
-              <Link className="button full" to="/checkout">
+              <Link
+                className={`button full ${hasOverStock ? "disabled" : ""}`}
+                to={hasOverStock ? "#" : "/checkout"}
+                onClick={(e) => {
+                  if (hasOverStock) {
+                    e.preventDefault();
+                    setCheckoutError("Please adjust items exceeding available stock before reviewing pickup.");
+                  }
+                }}
+              >
                 Review pickup <ArrowRight size={18} />
               </Link>
             )}
@@ -520,7 +683,7 @@ export function OrderDetail() {
             <Field label="Your review">
               <textarea name="text" required minLength={8} rows={5} />
             </Field>
-            <button className="button">Save sample review</button>
+            <button className="button">Submit review</button>
           </Form>
         )}
       </div>

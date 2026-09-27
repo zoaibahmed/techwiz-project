@@ -70,3 +70,14 @@ export const step8ReviewSchema = z.object({
     errorMap: () => ({ message: 'You must agree to MarketLink seller terms before submitting.' }),
   }),
 });
+
+export function normalizeOnboardingSteps(raw = {}) {
+ const names=['','account','location','profile','markets','products','schedule','pickup','review'];
+ const result={...raw};
+ for(let step=1;step<=8;step++){const key=`step${step}_${names[step]}`;if(!result[key]&&raw[`step${step}`])result[key]=raw[`step${step}`];delete result[`step${step}`]}
+ return result;
+}
+export function completeApplication(raw) {
+ const s=normalizeOnboardingSteps(raw);
+ return step1AccountSchema.safeParse(s.step1_account).success && step2LocationSchema.safeParse(s.step2_location).success && step3ProfileSchema.safeParse(s.step3_profile).success && step4MarketsSchema.safeParse(s.step4_markets).success && step8ReviewSchema.safeParse(s.step8_review).success;
+}

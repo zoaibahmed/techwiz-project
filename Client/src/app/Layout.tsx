@@ -39,6 +39,7 @@ export const nav: Record<Role, [string, string][]> = {
     ["/customer/market-day", "My planner"],
     ["/customer/orders", "Orders"],
     ["/customer/messages", "Messages"],
+    ["/customer/support", "Support"],
     ["/customer/favourites", "Favourites"],
     ["/customer/notifications", "Notifications"],
     ["/customer/profile", "Profile"],
@@ -46,6 +47,7 @@ export const nav: Record<Role, [string, string][]> = {
   farmer: [
     ["/farmer", "Weekly planner"],
     ["/farmer/messages", "Messages"],
+    ["/farmer/support", "Support"],
     ["/farmer/orders", "Orders"],
     ["/farmer/pickups", "Pickup queue"],
     ["/farmer/products", "Products"],
@@ -61,6 +63,7 @@ export const nav: Record<Role, [string, string][]> = {
   admin: [
     ["/admin", "Command centre"],
     ["/admin/farmers", "Farmers"],
+    ["/admin/support", "Support inbox"],
     ["/admin/customers", "Customers"],
     ["/admin/markets", "Markets"],
     ["/admin/moderation", "Moderation"],
@@ -88,6 +91,8 @@ export function Layout() {
           ? "customer"
           : null;
   const workspace = role === "farmer" || role === "admin";
+  const restrictedFarmer = role === "farmer" && s.farmers.find(f=>f.id===s.farmerId)?.state !== "Approved";
+  const roleNav = role ? (restrictedFarmer ? nav.farmer.filter(([path])=>["/farmer","/farmer/support"].includes(path)) : nav[role]) : [];
 
   // Unread message badge for the signed-in workspace.
   useEffect(() => {
@@ -141,7 +146,7 @@ export function Layout() {
           <NavLink to="/markets">{t('navMarkets')}</NavLink>
           <NavLink to="/products">{t('navProduce')}</NavLink>
           <NavLink to="/farmers">{t('navGrowers')}</NavLink>
-          <Link to="/help">{t('navHelp')}</Link>
+          <NavLink to="/help">{t('navHelp')}</NavLink>
         </nav>
         <div className="header-actions">
           <button
@@ -180,12 +185,37 @@ export function Layout() {
           </button>
         </div>
       </header>
-      {menu && (
-        <nav className="mobile-nav" aria-label="Mobile navigation">
+      {/* Mobile Left Sidebar Drawer */}
+      <div
+        className={`mobile-drawer-backdrop ${menu ? "open" : ""}`}
+        onClick={() => setMenu(false)}
+        aria-hidden="true"
+      />
+      <aside
+        className={`mobile-drawer-sidebar ${menu ? "open" : ""}`}
+        aria-label="Mobile navigation"
+      >
+        <div className="mobile-drawer-header">
+          <div className="mobile-drawer-brand">
+            <Link to="/" onClick={() => setMenu(false)}>
+              <strong>MarketLink</strong>
+              <small>Gather & Grow</small>
+            </Link>
+          </div>
           <button
             type="button"
-            className="header-location-pill"
-            style={{ margin: "8px 16px", alignSelf: "flex-start" }}
+            className="icon-button mobile-drawer-close"
+            aria-label="Close navigation"
+            onClick={() => setMenu(false)}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="mobile-drawer-body">
+          <button
+            type="button"
+            className="header-location-pill mobile-drawer-pill"
             onClick={() => {
               setMenu(false);
               openModal();
@@ -199,28 +229,70 @@ export function Layout() {
                 : t("anywhere")}
             </span>
           </button>
-          <Link to="/markets">{t('navMarkets')}</Link>
-          <Link to="/products">{t('navProduce')}</Link>
-          <Link to="/farmers">{t('navGrowers')}</Link>
-          <Link to="/help">{t('navHelp')}</Link>
-          <Link to={s.role ? `/${s.role}` : "/login"}>
-            {s.role ? t('workspace') : t('signIn')}
-          </Link>
-          {role &&
-            nav[role].map(([path, label]) => {
-              const isMessages = path.endsWith('/messages');
-              const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
-              return (
-                <Link key={path} to={path}>
-                  {label}{badge}
-                </Link>
-              );
-            })}
-        </nav>
-      )}
+
+          <nav className="mobile-drawer-nav" aria-label="Main links">
+            <NavLink to="/markets" onClick={() => setMenu(false)}>
+              {t("navMarkets")}
+            </NavLink>
+            <NavLink to="/products" onClick={() => setMenu(false)}>
+              {t("navProduce")}
+            </NavLink>
+            <NavLink to="/farmers" onClick={() => setMenu(false)}>
+              {t("navGrowers")}
+            </NavLink>
+            <NavLink to="/help" onClick={() => setMenu(false)}>
+              {t("navHelp")}
+            </NavLink>
+          </nav>
+
+          <div className="mobile-drawer-divider" />
+
+          <div className="mobile-drawer-account">
+            <Link
+              to={s.role ? `/${s.role}` : "/login"}
+              onClick={() => setMenu(false)}
+              className="mobile-drawer-workspace-btn"
+            >
+              <LayoutDashboard size={16} />
+              <span>{s.role ? t("workspace") : t("signIn")}</span>
+            </Link>
+
+            {role && (
+              <div className="mobile-drawer-role-section">
+                <p className="mobile-drawer-section-title">
+                  {role === "farmer"
+                    ? "Grower Workbench"
+                    : role === "admin"
+                      ? "Administration"
+                      : "My Market Space"}
+                </p>
+                <div className="mobile-drawer-role-links">
+                  {roleNav.map(([path, label]) => {
+                    const isMessages = path.endsWith("/messages");
+                    const badge =
+                      isMessages && unreadChatCount > 0
+                        ? ` (${unreadChatCount})`
+                        : "";
+                    return (
+                      <NavLink
+                        key={path}
+                        to={path}
+                        onClick={() => setMenu(false)}
+                      >
+                        {label}
+                        {badge}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
       <div
         className={
-          workspace ? "workspace" : role === "customer" ? "customer-shell" : ""
+          workspace ? `workspace workspace-${role}` : role === "customer" ? "customer-shell" : ""
         }
       >
         {role === "customer" && (
@@ -299,7 +371,7 @@ export function Layout() {
               {role === "farmer" ? "Your stall" : "Administration"}
             </p>
             <nav aria-label={`${role} workspace`}>
-              {nav[role].map(([path, label]) => {
+              {roleNav.map(([path, label]) => {
                 const isMessages = path.endsWith('/messages');
                 const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
                 return (
@@ -402,6 +474,7 @@ export function Layout() {
               {t('help')} <ArrowUpRight size={14} />
             </Link>
           </div>
+          <div className="footer-invite"><div><span>For growers and independent producers</span><h2>Make room for your next market day.</h2><p>Create your farm profile, apply to a local venue and manage reservations in one place.</p></div><Link className="button" to="/register/farmer">Start your farmer application <ArrowUpRight size={18}/></Link></div>
           <p className="footer-bottom">
             The Living Market · eGreen Basket{" "}
             <span>Pre-order online · Pay at the stall</span>

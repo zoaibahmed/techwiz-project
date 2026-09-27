@@ -1,3 +1,4 @@
+import {SupportDesk} from './features/SupportDesk';
 import { lazy, Suspense, Component } from "react";
 import type { ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -97,6 +98,7 @@ export function App() {
                 <Route path="checkout" element={<Basket />} />
                 <Route element={<Guard role="customer" />}>
                   <Route path="customer" element={<CustomerHome />} />
+                  <Route path="customer/support" element={<SupportDesk />} />
                   <Route path="customer/market-day" element={<Planner />} />
                   <Route path="customer/orders" element={<Orders />} />
                   <Route path="customer/messages" element={<CustomerInboxWorkspace />} />

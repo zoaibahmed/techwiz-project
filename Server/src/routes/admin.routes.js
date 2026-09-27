@@ -1,3 +1,4 @@
+import {marketRequests,decideMarket} from '../services/marketParticipation.service.js';
 import { Router } from 'express';
 import {
   listFarmersAdmin,
@@ -38,6 +39,9 @@ router.use(authenticateToken, requireRole(['admin']));
 // 1. Farmer approval & status management
 router.get('/farmers', listFarmersAdmin);
 router.patch('/farmers/:id/status', updateFarmerStatusAdmin);
+
+router.get('/farmers/:id/market-requests', async(req,res,next)=>{try{res.json({data:await marketRequests(req.params.id)})}catch(e){next(e)}});
+router.patch('/farmers/:id/market-requests/:marketId', async(req,res,next)=>{try{res.json({data:await decideMarket(req.params.id,req.params.marketId,req.body.status,req.body.reason,req.user.id)})}catch(e){next(e)}});
 
 // 2. Customer management
 router.get('/customers', listCustomersAdmin);

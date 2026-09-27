@@ -43,6 +43,14 @@ export const env = {
   // Optional AI / OpenAI Configuration (Kept server-only, never exposed to client)
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+
+  // Email (Nodemailer / Gmail SMTP)
+  EMAIL_USER: process.env.EMAIL_USER || '',
+  EMAIL_APP_PASSWORD: process.env.EMAIL_APP_PASSWORD || '',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'Gather & Grow <noreply@marketlink.com>',
+
+  // Google reCAPTCHA v2 secret (server-side verification only)
+  RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || '',
 };
 
 export function validateEnv() {

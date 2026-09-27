@@ -68,12 +68,14 @@ export function InteractiveMap({
   selected,
   onSelect,
   occludeRight = 0,
+  showDetailsLink = true,
 }: {
   markets: Market[];
   selected: string;
   onSelect: (id: string) => void;
   /** Width in px of a panel floating over the map's right edge; fits and pans keep pins clear of it. */
   occludeRight?: number;
+  showDetailsLink?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -103,35 +105,21 @@ export function InteractiveMap({
           mapMarkets.reduce((s, m) => s + m.coords[0], 0) / mapMarkets.length,
           mapMarkets.reduce((s, m) => s + m.coords[1], 0) / mapMarkets.length,
         ]
-      : [31.5204, 74.3587]; // Lahore default
+      : [22, 0]; // Worldwide view until a real venue is selected
 
     const map = L.map(containerRef.current, {
       center,
-      zoom: 12,
+      zoom: mapMarkets.length ? 12 : 2,
       zoomControl: false,
       attributionControl: false,
       scrollWheelZoom: true,
     });
 
-    // Esri Light Gray Canvas: a quiet, keyless basemap with English labels that
-    // sits under the brand palette; tinted warmer in CSS.
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 16,
-      className: 'brand-tiles',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 16,
-      className: 'brand-tile-labels',
-      pane: 'overlayPane',
-    }).addTo(map);
-
-    // Attribution in bottom-right, subtle
-    L.control.attribution({
-      position: 'bottomright',
-      prefix: false,
-    }).addTo(map).addAttribution(
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Tiles &copy; Esri'
-    );
+    L.control.attribution({position:'bottomright',prefix:false}).addTo(map);
 
     // Zoom control on right side
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -236,18 +224,18 @@ export function InteractiveMap({
               {current.hours ? ` · ${current.hours}` : ''}
             </small>
           </span>
-          <Link
+          {showDetailsLink && <Link
             to={`/markets/${current.id}`}
             aria-label={`Explore ${current.name}`}
           >
             <ArrowUpRight size={20} />
-          </Link>
+          </Link>}
         </motion.div>
       )}
 
       <small className="living-map-disclaimer">
         {hasCoords
-          ? 'Map data © OpenStreetMap contributors · Tiles © Esri'
+          ? 'Map data © OpenStreetMap contributors'
           : 'Awaiting real market coordinates'}
       </small>
     </div>

@@ -23,3 +23,4 @@ import "./global-market.css";
 
 import "./public-scenes.css";
 import "./theme-contract.css";
+import "./clarity.css";

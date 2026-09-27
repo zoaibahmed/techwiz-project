@@ -115,6 +115,8 @@ export function Favourite({ id }: { id: string }) {
   const s = useMarket();
   const act = useAction();
   const selected = s.favourites.includes(id);
+  if (s.role && s.role !== "customer") return null;
+  if (!s.role) return <Link className="icon-button favourite" to="/login" aria-label="Sign in to save favourites"><Heart size={19}/></Link>;
   return (
     <button
       className={`icon-button favourite ${selected ? "selected" : ""}`}
@@ -309,33 +311,53 @@ export function Quantity({
   min?: number;
   label?: string;
 }) {
+  const isOver = quantity > max;
   return (
-    <div className="quantity">
-      <button
-        aria-label={`Decrease ${label}`}
-        disabled={quantity <= min}
-        onClick={() => onChange(quantity - 1)}
-      >
-        −
-      </button>
-      <input
-        aria-label={label}
-        type="number"
-        min={min}
-        max={max}
-        step={1}
-        value={quantity}
-        onChange={(e) => {
-          if (e.target.value !== "") onChange(Number(e.target.value));
-        }}
-      />
-      <button
-        aria-label={`Increase ${label}`}
-        disabled={quantity >= max}
-        onClick={() => onChange(quantity + 1)}
-      >
-        +
-      </button>
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start" }}>
+      <div className={`quantity ${isOver ? "over-limit" : ""}`}>
+        <button
+          aria-label={`Decrease ${label}`}
+          disabled={quantity <= min}
+          onClick={() => onChange(Math.max(min, quantity - 1))}
+        >
+          −
+        </button>
+        <input
+          aria-label={label}
+          type="number"
+          min={min}
+          max={max}
+          step={1}
+          value={quantity}
+          onChange={(e) => {
+            if (e.target.value !== "") {
+              const val = parseInt(e.target.value, 10);
+              if (!isNaN(val)) onChange(val);
+            }
+          }}
+        />
+        <button
+          aria-label={`Increase ${label}`}
+          disabled={quantity >= max}
+          onClick={() => onChange(Math.min(max, quantity + 1))}
+        >
+          +
+        </button>
+      </div>
+      {isOver && (
+        <span
+          role="alert"
+          style={{
+            display: "block",
+            fontSize: "11px",
+            color: "#b42318",
+            marginTop: "3px",
+            fontWeight: 500,
+          }}
+        >
+          Max {max} available
+        </span>
+      )}
     </div>
   );
 }

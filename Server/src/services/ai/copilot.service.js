@@ -244,13 +244,12 @@ export async function copilotChatService(user, message, context = {}) {
       } : null,
     };
 
-    systemPrompt = `You are MarketLink Customer Market Companion. You are an operational interface for the customer in Lahore.
+    systemPrompt = `You are MarketLink Customer Market Companion. You are an intelligent personal companion and operational assistant for local market shoppers in Lahore.
 ROLE & OPERATING RULES:
-1. You actually operate the platform for the customer (search produce, review pre-orders, cancel orders, reorder, plan pickups).
-2. DO NOT advise the customer to click buttons or teach them how to use MarketLink. Perform or draft the requested action directly.
-3. Market model: Market Pickup Only. Customers reserve online and inspect, collect, and pay in person at the stall.
-4. When performing consequential writes (e.g. cancelling an order, modifying an order, submitting a review), invoke the relevant tool to prepare a draft for confirmation.
-5. Use warm, natural, helpful language. NEVER output developer terms (e.g. "MongoDB", "Atlas", "two-phase", "ObjectId", "JSON").
+1. Operational Actions: When the customer asks to perform actions (such as searching/filtering produce, reviewing orders, cancelling an eligible reservation, or checking market timings), execute or draft that action directly. For consequential actions like cancellations, call the corresponding tool so an interactive draft can be reviewed.
+2. Answering General Questions: When the customer asks general questions (e.g. recipe ideas, cooking tips, produce freshness, seasonal fruits/vegetables in Pakistan, organic gardening, nutritional benefits, or how market pickup and stock work), provide rich, knowledgeable, warm, and helpful answers! Never decline general questions or say you only do dashboard actions.
+3. Market model: Market Pickup Only. Customers reserve online and inspect, collect, and pay in person at the stall during the designated pickup window.
+4. Tone & Style: Warm, natural, helpful, and concise. NEVER output developer terms (e.g. "MongoDB", "Atlas", "two-phase", "ObjectId", "JSON").
 
 Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
@@ -349,10 +348,10 @@ ${JSON.stringify(promptContext, null, 2)}`;
       } : null,
     };
 
-    systemPrompt = `You are MarketLink Farm Copilot. You are the operational workbench interface for the grower in Lahore.
+    systemPrompt = `You are MarketLink Farm Copilot. You are an intelligent agricultural partner and operational copilot for the local grower in Lahore.
 ROLE & OPERATING RULES:
-1. You operate the farm workbench (manage produce catalogue, set prices, publish dated stock, mark sold out, accept/decline orders, reply to reviews).
-2. DO NOT advise the farmer to click buttons or instruct them on how to code or configure MarketLink. Perform or draft the requested action directly.
+1. Operational Workbench: When the farmer asks to perform workbench operations (such as managing produce catalogue, updating prices, publishing dated stock, marking items sold out, accepting orders, or drafting replies to customers), execute or draft the appropriate action immediately using tools so they can confirm it with one click.
+2. Answering General Questions & Agricultural Advice: When the farmer asks general questions (e.g. organic fertilizers, pest management, watering schedules, seasonal planting in Punjab, general stock strategies, pricing comparisons, or how the platform/stock works), provide insightful, expert, and practical answers! Never refuse general questions or claim you only operate the workbench.
 3. Pronoun and Reference Resolution:
    - "this" / "it" -> refers to the selected record (selectedRecordId) or current context.
    - "Bananas and Oranges" -> create new produce items in master catalogue.
@@ -360,7 +359,7 @@ ROLE & OPERATING RULES:
    - "publish 30kg tomatoes for Saturday" -> allocate dated stock.
    - "accept all pending orders" -> progress orders to accepted state.
 4. Consequential writes must invoke the matching capability to create a clear preview draft for confirmation.
-5. Tone: Energetic, professional, agricultural partner. NEVER use technical jargon like "MongoDB", "Atlas", "two-phase", "JSON".
+5. Tone: Energetic, professional, knowledgeable agricultural partner. NEVER use technical jargon like "MongoDB", "Atlas", "two-phase", "JSON".
 
 Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
@@ -410,16 +409,16 @@ ${JSON.stringify(promptContext, null, 2)}`;
       } : null,
     };
 
-    systemPrompt = `You are MarketLink Market Intelligence. You are the command centre operating interface for the platform administrator.
+    systemPrompt = `You are MarketLink Market Intelligence. You are an executive advisor and command centre operating interface for the platform administrator.
 ROLE & OPERATING RULES:
-1. You operate the administrative controls (approve/reject/suspend farmers, manage markets, broadcast announcements, moderate reviews, view analytics).
-2. DO NOT advise the admin on UI navigation or code implementation. Perform or draft the requested action directly.
+1. Administrative Operations: When the admin commands an action (e.g. approving/suspending farmers, managing markets, broadcasting announcements, moderating reviews), invoke the matching tool to prepare an action draft for confirmation.
+2. Platform Inquiries & Strategic Analysis: When the admin asks general questions, platform insights, market performance trends, policy advice, or system summaries, provide clear, articulate, data-grounded answers. Never refuse general or analytical questions.
 3. Pronoun and Reference Resolution:
    - "him" / "this farmer" / "the second one" -> resolves against pending/selected farmers in context.
    - "suspend Tariq" -> find Tariq Mahmood and draft suspension.
    - "approve him" -> approve selected/pending farmer.
 4. Consequential writes must invoke the matching tool to prepare an action draft for confirmation.
-5. Tone: Executive, precise, operational. NEVER output internal database or development jargon.
+5. Tone: Executive, precise, authoritative, and helpful. NEVER output internal database or development jargon.
 
 Current Grounded Records:
 ${JSON.stringify(promptContext, null, 2)}`;
@@ -656,11 +655,11 @@ ${JSON.stringify(promptContext, null, 2)}`;
         }
       }
       // 2. Cooking / Recipe Ideas with Market Produce
-      else if (lower.includes('cook') || lower.includes('recipe') || lower.includes('dish') || lower.includes('meal')) {
+      else if (!replyText && (lower.includes('cook') || lower.includes('recipe') || lower.includes('dish') || lower.includes('meal'))) {
         replyText = `Fresh Lahore Tomatoes and organic market greens are perfect for healthy local cooking! You can prepare an authentic Tomato-Herb curry, a crisp salad with garden cucumbers, or slow-roasted Lahore Tomatoes with aromatic mint. You can reserve all fresh ingredients online for morning collection at your local farmers stall.`;
       }
       // 3. Search Produce / Check Stock
-      else if (lower.includes('strawberry') || lower.includes('strawberries') || lower.includes('tomato') || lower.includes('spinach') || lower.includes('available') || lower.includes('saturday')) {
+      else if (!replyText && (lower.includes('strawberry') || lower.includes('strawberries') || lower.includes('tomato') || lower.includes('spinach') || lower.includes('available') || lower.includes('saturday'))) {
         const matching = (promptContext.availableProduce || []).filter((p) =>
           lower.includes(p.name.toLowerCase()) || (lower.includes('saturday') && p.marketDate?.toLowerCase().includes('sat'))
         );
@@ -672,8 +671,8 @@ ${JSON.stringify(promptContext, null, 2)}`;
           replyText = `Fresh harvest produce is updated weekly by our local farmers. Saturday markets open from 08:00 to 14:00 with Fresh Lahore Tomatoes, organic spinach, and orchard fruits.`;
         }
       }
-      // 3. Orders status
-      else if (lower.includes('order') || lower.includes('reservation') || lower.includes('ready')) {
+      // 4. Orders status
+      else if (!replyText && (lower.includes('order') || lower.includes('reservation') || lower.includes('ready'))) {
         const orders = promptContext.recentOrders || [];
         if (orders.length > 0) {
           replyText = `Here is your recent pre-order status:\n` +
@@ -682,8 +681,8 @@ ${JSON.stringify(promptContext, null, 2)}`;
           replyText = `You do not have any active pre-orders placed yet. You can explore available produce under the Harvest Catalogue.`;
         }
       }
-      // 4. Default Customer Overview
-      else {
+      // 5. Default Customer Overview
+      else if (!replyText) {
         replyText = `Welcome to your Market Companion! I can help you find farmers markets across Lahore, inspect fresh harvest produce, check pickup windows, and manage your pre-orders. How can I assist your market visit today?`;
       }
     }
@@ -745,7 +744,7 @@ ${JSON.stringify(promptContext, null, 2)}`;
         replyText = `I have updated your proposal with the revised pricing and authentic produce descriptions. Review the preview below and confirm to save them to your master catalogue!`;
       }
       // 2. Add / Create Products (e.g. "Add tomatoes and bananas" or "Create four products: ...")
-      else if ((lower.includes('add') || lower.includes('create')) && (lower.includes('product') || lower.includes('produce') || lower.includes('tomatoes') || lower.includes('bananas') || lower.includes('spinach') || lower.includes('mint') || lower.includes('strawberries'))) {
+      else if ((!replyText || lower.startsWith('add') || lower.startsWith('create') || lower.includes('add product') || lower.includes('create product')) && !lower.includes('?') && (lower.includes('add') || lower.includes('create')) && (lower.includes('product') || lower.includes('produce') || lower.includes('tomatoes') || lower.includes('bananas') || lower.includes('spinach') || lower.includes('mint') || lower.includes('strawberries'))) {
         const parsedProducts = [];
         if (lower.includes('tomatoes') || lower.includes('bananas') || lower.includes('apples') || lower.includes('oranges') || lower.includes('four')) {
           parsedProducts.push(
@@ -787,7 +786,7 @@ ${JSON.stringify(promptContext, null, 2)}`;
         replyText = `I have drafted a proposal to add ${parsedProducts.length} produce listings to your catalogue. Review the preview below and confirm to save them.`;
       }
       // 3. Edit Saved Produce Price / Details ("Change tomato price to 150" or "Change this to 180")
-      else if ((lower.includes('change') || lower.includes('update') || lower.includes('reduce') || lower.includes('increase')) && (lower.includes('price') || lower.includes('cost') || lower.includes('to') || selectedId)) {
+      else if ((!replyText || lower.startsWith('change') || lower.startsWith('update') || lower.startsWith('set') || lower.startsWith('reduce')) && !lower.includes('?') && (lower.includes('change') || lower.includes('update') || lower.includes('reduce') || lower.includes('increase')) && (lower.includes('price') || lower.includes('cost') || lower.includes('to') || selectedId)) {
         const catalogue = promptContext.productsCatalogue || [];
         let targetProduct = null;
         if (selectedId) {
@@ -829,7 +828,7 @@ ${JSON.stringify(promptContext, null, 2)}`;
         }
       }
       // 4. Publish Dated Stock Allocation ("Publish 30kg tomatoes for Saturday")
-      else if (lower.includes('publish') || lower.includes('allocate') || (lower.includes('stock') && lower.includes('saturday'))) {
+      else if ((!replyText || lower.startsWith('publish') || lower.startsWith('allocate')) && !lower.includes('?') && (lower.includes('publish') || lower.includes('allocate') || (lower.includes('stock') && lower.includes('saturday')))) {
         const catalogue = promptContext.productsCatalogue || [];
         const prod = catalogue.find((p) => lower.includes(p.name.toLowerCase())) || catalogue[0] || { id: '66f400000000000000000001', name: 'Fresh Tomatoes', unit: 'kg' };
         const qtyMatch = lower.match(/(\d+)\s*(?:kg|bunch|box|units?)?/i);
@@ -922,10 +921,10 @@ ${JSON.stringify(promptContext, null, 2)}`;
             requiresConfirmation: true,
           };
           replyText = `I have prepared an action to accept pending order #${pendingOrder.orderNumber}. Confirm below to notify the customer.`;
-        } else if (orders.length > 0) {
+        } else if (!replyText && orders.length > 0) {
           replyText = `You currently have ${orders.length} order(s) on your workbench. Most recent:\n` +
             orders.slice(0, 5).map((o) => `• Order #${o.orderNumber}: ${o.status.replace(/_/g, ' ')} (${o.customerName}) — Rs. ${o.totalPKR}`).join('\n');
-        } else {
+        } else if (!replyText) {
           replyText = `You have no active orders on your workbench currently.`;
         }
       }
@@ -969,18 +968,18 @@ ${JSON.stringify(promptContext, null, 2)}`;
           } else {
             replyText = `You don't have any customer conversations open to reply to yet. As soon as a customer messages your stall, I can draft replies for you here!`;
           }
-        } else if (unreadConvos.length > 0) {
+        } else if (!replyText && unreadConvos.length > 0) {
           replyText = `You have ${unreadConvos.length} unread customer conversation(s):\n` +
             unreadConvos.map((c) => `• ${c.customerName}: "${c.lastMessageText || 'New inquiry'}"`).join('\n') +
             `\n\nYou can ask me to "Draft a reply to ${unreadConvos[0].customerName.split(' ')[0]}" or visit your Messages inbox to view the full history.`;
-        } else if (convos.length > 0) {
+        } else if (!replyText && convos.length > 0) {
           replyText = `All customer messages have been read! Most recent conversation is with ${convos[0].customerName} regarding "${convos[0].lastMessageText}".`;
-        } else {
+        } else if (!replyText) {
           replyText = `No customer conversations yet. Shoppers browsing your produce or pre-orders can click "Message Grower" to start chatting with your stall.`;
         }
       }
       // 8. General Farmer Overview
-      else {
+      else if (!replyText) {
         replyText = `Welcome to Farm Copilot! I monitor your market day pre-orders, customer messages, stock allocations, and catalogue products. How can I assist your farm today?`;
       }
     }
@@ -1040,7 +1039,7 @@ ${JSON.stringify(promptContext, null, 2)}`;
             requiresConfirmation: true,
           };
           replyText = `I have drafted an action to approve the registration for "${targetFarmer.businessName}" (${targetFarmer.contactPerson}). Confirm below to activate their stall privileges.`;
-        } else {
+        } else if (!replyText) {
           if (pending.length > 0) {
             replyText = `There are currently ${pending.length} farmer applicant(s) waiting for approval:\n` +
               pending.map((f, i) => `${i + 1}. ${f.businessName} (${f.contactPerson}) — ${f.city}`).join('\n') +
@@ -1079,7 +1078,7 @@ ${JSON.stringify(promptContext, null, 2)}`;
         replyText = `I have drafted a platform announcement. Review the notice below and confirm to broadcast it across MarketLink.`;
       }
       // 3. Analytics & Overview
-      else {
+      else if (!replyText) {
         const a = promptContext.analyticsSummary || {};
         replyText = `Platform Overview:\n• Total Orders Placed: ${a.totalOrders || 0}\n• Total Booked Value: Rs. ${a.totalBookedPKR || 0}\n• Active Certified Farmers: ${a.activeFarmers || 0}\n• Pending Farmer Approvals: ${promptContext.pendingFarmers?.length || 0}\n\nHow would you like to direct operations today?`;
       }

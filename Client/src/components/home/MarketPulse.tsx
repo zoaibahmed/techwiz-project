@@ -1,3 +1,4 @@
+import {InteractiveMap} from '../LivingMap';
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -40,60 +41,11 @@ function Count({ value, decimals = 0, suffix = "" }: { value: number; decimals?:
   return <span ref={ref} className="pulse-count" />;
 }
 
-// Coordinate frame that holds every market city (lng 64–80, lat 23.5–35.5), with room for labels.
-const FRAME = { minLng: 64, maxLng: 80, minLat: 23.5, maxLat: 35.5, w: 480, h: 400 };
-const project = (lng: number, lat: number) => ({
-  x: ((lng - FRAME.minLng) / (FRAME.maxLng - FRAME.minLng)) * FRAME.w,
-  y: FRAME.h - ((lat - FRAME.minLat) / (FRAME.maxLat - FRAME.minLat)) * FRAME.h,
-});
-
 function NetworkMap({ pulse }: { pulse: Pulse }) {
-  const cities = pulse.network.cities.filter((c) => c.coordinates);
-  const maxValue = Math.max(1, ...cities.map((c) => c.bookedValueMinor));
-  const points = cities.map((c) => ({ ...c, ...project(c.coordinates!.lng, c.coordinates!.lat), r: 7 + 15 * Math.sqrt(c.bookedValueMinor / maxValue) }));
-  const hub = points.slice().sort((a, b) => b.markets - a.markets)[0];
-  return (
-    <svg className="pulse-map-svg" viewBox={`-20 -20 ${FRAME.w + 40} ${FRAME.h + 40}`} role="img" aria-label={`Markets in ${cities.map((c) => c.city).join(", ")}`}>
-      <g className="pulse-graticule" aria-hidden="true">
-        {Array.from({ length: 9 }, (_, i) => FRAME.minLng + i * 2).map((lng) => {
-          const { x } = project(lng, FRAME.minLat);
-          return (
-            <g key={`lng${lng}`}>
-              <line x1={x} y1={0} x2={x} y2={FRAME.h} />
-              <text x={x + 4} y={FRAME.h - 6}>{lng}°E</text>
-            </g>
-          );
-        })}
-        {Array.from({ length: 7 }, (_, i) => 24 + i * 2).map((lat) => {
-          const { y } = project(FRAME.minLng, lat);
-          return (
-            <g key={`lat${lat}`}>
-              <line x1={0} y1={y} x2={FRAME.w} y2={y} />
-              <text x={4} y={y - 4}>{lat}°N</text>
-            </g>
-          );
-        })}
-      </g>
-      {hub &&
-        points
-          .filter((p) => p !== hub)
-          .map((p) => {
-            const mx = (hub.x + p.x) / 2 - (p.y - hub.y) * 0.25;
-            const my = (hub.y + p.y) / 2 + (p.x - hub.x) * 0.25;
-            return <path key={p.city} className="pulse-arc" d={`M${hub.x},${hub.y} Q${mx},${my} ${p.x},${p.y}`} pathLength={1} />;
-          })}
-      {points.map((p) => (
-        <g key={p.city} className="pulse-node" transform={`translate(${p.x},${p.y})`}>
-          <circle className="pulse-node-halo" r={p.r + 10} />
-          <circle className="pulse-node-core" r={p.r} />
-          <text className="pulse-node-city" x={p.r + 14} y={-4}>{p.city}</text>
-          <text className="pulse-node-meta" x={p.r + 14} y={14}>
-            {p.markets} markets · {p.growers} growers
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
+  const [selected,setSelected]=useState('');
+  const cities=pulse.network.cities.filter(c=>c.coordinates);
+  const markets=cities.map((c,i)=>({id:'network-'+i,name:c.city,area:`${c.markets} markets · ${c.growers} growers`,address:c.city,day:'',hours:'',active:true,coordinates:{latitude:c.coordinates!.lat,longitude:c.coordinates!.lng}}));
+  return <div style={{height:400}}><InteractiveMap markets={markets} selected={selected} onSelect={setSelected} showDetailsLink={false}/></div>;
 }
 
 function ActivityFeed({ pulse }: { pulse: Pulse }) {

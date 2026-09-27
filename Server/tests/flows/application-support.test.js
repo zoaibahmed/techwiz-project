@@ -1,0 +1,38 @@
+import {describe,it,expect,vi,beforeEach} from 'vitest';
+import {ObjectId} from 'mongodb';
+const mocks=vi.hoisted(()=>({findOne:vi.fn(),updateOne:vi.fn(),insertOne:vi.fn(),find:vi.fn(),countDocuments:vi.fn()}));
+vi.mock('../../src/config/db.js',()=>({getDB:()=>({collection:()=>mocks})}));
+vi.mock('../../src/config/env.js',()=>({env:{JWT_SECRET:'unit-test-only'}}));
+import {saveFarmerOnboardingStepService,submitFarmerOnboardingService,getFarmerOnboardingService} from '../../src/services/farmer.service.js';
+import {updateFarmerApprovalService} from '../../src/services/auth.service.js';
+import {ticketAccess,getTicket,replyTicket,closeTicket,inspectConversation,listTickets,createTicket} from '../../src/services/support.service.js';
+const user={id:'66f100000000000000000001',name:'Test farmer',role:'farmer'},other={id:'66f100000000000000000002',role:'customer'},admin={id:'66f100000000000000000003',role:'admin'};
+const validSteps={step1_account:{contactPerson:'Test Farmer',phone:'12345678'},step2_location:{countryCode:'GB',countryName:'United Kingdom',region:'England',city:'London',address:'10 Market Street'},step3_profile:{businessName:'Test Farm',bio:'Fresh local produce for the market.'},step4_markets:{requestedMarketIds:['66f000000000000000000001']},step8_review:{agreedToTerms:true}};
+const profile={_id:new ObjectId(user.id),userId:new ObjectId(user.id),approvalStatus:'draft',onboarding:{status:'in_progress',stepData:{}}};
+beforeEach(()=>{vi.clearAllMocks();mocks.findOne.mockResolvedValue(profile);mocks.updateOne.mockResolvedValue({matchedCount:1,modifiedCount:1});mocks.insertOne.mockResolvedValue({insertedId:new ObjectId()});mocks.countDocuments.mockResolvedValue(0);mocks.find.mockReturnValue({toArray:async()=>[],sort:()=>({limit:()=>({toArray:async()=>[]})})});});
+describe('application lifecycle',()=>{
+ it('does not approve an unsubmitted application',async()=>{await expect(updateFarmerApprovalService(user.id,'approved',admin.id)).rejects.toMatchObject({statusCode:409});expect(mocks.updateOne).not.toHaveBeenCalled()});
+ it('requires rejection reason',async()=>{await expect(updateFarmerApprovalService(user.id,'rejected',admin.id,' ')).rejects.toMatchObject({statusCode:400})});
+ it('synchronizes approval and onboarding state',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'submitted',stepData:validSteps}});await updateFarmerApprovalService(user.id,'approved',admin.id);expect(mocks.updateOne.mock.calls[0][1].$set).toMatchObject({approvalStatus:'approved','onboarding.status':'approved'})});
+ it('persists reasons and allows rejected applications to be corrected',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'submitted',stepData:validSteps}});await updateFarmerApprovalService(user.id,'rejected',admin.id,'Please correct your address');expect(mocks.updateOne.mock.calls[0][1].$set.adminNotes).toBe('Please correct your address')});
+ it('saves step data with canonical keys',async()=>{await saveFarmerOnboardingStepService(user.id,{step:1,data:{contactPerson:'Test Farmer',phone:'12345678'}});expect(mocks.updateOne.mock.calls[0][1].$set['onboarding.stepData.step1_account'].contactPerson).toBe('Test Farmer')});
+ it('validates each step before storage',async()=>{await expect(saveFarmerOnboardingStepService(user.id,{step:2,data:{countryCode:'GB',city:'London'}})).rejects.toThrow();expect(mocks.updateOne).not.toHaveBeenCalled()});
+ it('invalidates old venues after location changes',async()=>{await saveFarmerOnboardingStepService(user.id,{step:2,data:{countryCode:'GB',countryName:'United Kingdom',region:'England',city:'London',address:'10 Market Street',coordinates:{latitude:51.5,longitude:-.1}}});expect(mocks.updateOne.mock.calls[0][1].$set).toMatchObject({countryCode:'GB',marketIds:[],'onboarding.stepData.step4_markets':{requestedMarketIds:[]}})});
+ it('locks submitted details',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'submitted'}});await expect(saveFarmerOnboardingStepService(user.id,{step:1,data:{}})).rejects.toMatchObject({statusCode:409})});
+ it('does not submit incomplete applications',async()=>{await expect(submitFarmerOnboardingService(user.id)).rejects.toMatchObject({code:'ONBOARDING_INCOMPLETE'});expect(mocks.updateOne).not.toHaveBeenCalled()});
+ it('submits a valid application for its selected city',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'in_progress',stepData:validSteps}});mocks.find.mockReturnValue({toArray:async()=>[{countryCode:'GB',city:'London'}]});await submitFarmerOnboardingService(user.id);expect(mocks.updateOne.mock.calls[0][1].$set).toMatchObject({approvalStatus:'pending','onboarding.status':'submitted'})});
+ it('rejects a venue from another country',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'in_progress',stepData:validSteps}});mocks.find.mockReturnValue({toArray:async()=>[{countryCode:'PK',city:'Lahore'}]});await expect(submitFarmerOnboardingService(user.id)).rejects.toMatchObject({code:'ONBOARDING_INCOMPLETE'});expect(mocks.updateOne).not.toHaveBeenCalled()});
+ it('detects a stale admin decision',async()=>{mocks.findOne.mockResolvedValue({...profile,onboarding:{status:'submitted',stepData:validSteps}});mocks.updateOne.mockResolvedValue({matchedCount:0});await expect(updateFarmerApprovalService(user.id,'approved',admin.id)).rejects.toMatchObject({statusCode:409});expect(mocks.insertOne).not.toHaveBeenCalled()});
+ it('approved profile wins over stale pending onboarding display',async()=>{mocks.findOne.mockResolvedValue({...profile,approvalStatus:'approved',onboarding:{status:'submitted'}});expect((await getFarmerOnboardingService(user.id)).status).toBe('approved')});
+});
+describe('support privacy and lifecycle',()=>{
+ const ticket={_id:new ObjectId(),ownerId:new ObjectId(user.id),status:'open',messages:[]};
+ it('allows owner and administrator only',()=>{expect(ticketAccess(ticket,user)).toBe(true);expect(ticketAccess(ticket,admin)).toBe(true);expect(ticketAccess(ticket,other)).toBe(false)});
+ it('hides another users ticket',async()=>{mocks.findOne.mockResolvedValue(ticket);await expect(getTicket(other,String(ticket._id))).rejects.toMatchObject({statusCode:404})});
+ it('rejects replies after closure',async()=>{mocks.findOne.mockResolvedValue({...ticket,status:'closed'});mocks.updateOne.mockResolvedValue({modifiedCount:0});await expect(replyTicket(user,String(ticket._id),{message:'Hello support'})).rejects.toMatchObject({statusCode:409})});
+ it('only administrator can close a ticket',async()=>{await expect(closeTicket(user,String(ticket._id))).rejects.toMatchObject({statusCode:403});expect(mocks.updateOne).not.toHaveBeenCalled()});
+ it('stores closure state',async()=>{mocks.findOne.mockResolvedValue(ticket);await closeTicket(admin,String(ticket._id));expect(mocks.updateOne.mock.calls[0][1].$set.status).toBe('closed')});
+ it('does not let customers inspect conversations',async()=>{await expect(inspectConversation(other,user.id)).rejects.toMatchObject({statusCode:403})});
+ it('scopes ticket search to owner',async()=>{await listTickets(user,'SUP-EXAMPLE');expect(mocks.find.mock.calls[0][0]).toMatchObject({ownerId:new ObjectId(user.id),reference:'SUP-EXAMPLE'})});
+ it('validates new tickets',async()=>{await expect(createTicket(user,{subject:'x',message:''})).rejects.toThrow();expect(mocks.insertOne).not.toHaveBeenCalled()});
+});

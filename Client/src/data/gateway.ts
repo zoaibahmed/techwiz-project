@@ -54,7 +54,7 @@ export type Command =
   | { type: "basket"; id: string; quantity: number }
   | { type: "favourite" | "check" | "restock"; id: string }
   | { type: "checkout"; slots: Record<string, string> }
-  | { type: "stage"; id: string; stage: OrderStage }
+  | { type: "stage"; id: string; stage: OrderStage; reason?: string }
   | { type: "edit-order"; id: string; quantities: Record<string, number> }
   | {
       type: "review";
@@ -123,9 +123,10 @@ export function execute(previous: MarketState, command: Command): MarketState {
         "Choose a whole number of selling units.",
       );
       if (command.quantity > 0) {
+        const available = Math.max(0, p.stock - p.reserved);
         assert(
-          p.available && p.stock - p.reserved >= command.quantity,
-          "The available quantity changed. Review your basket.",
+          p.available && available >= command.quantity,
+          `Stock is not available for ${command.quantity} ${p.unit} of "${p.name}". The available quantity changed (only ${available} ${p.unit} ${available === 1 ? "is" : "are"} available). Please lower the quantity to continue.`,
         );
         assert(
           s.farmers.find((f) => f.id === p.farmerId)?.state === "Approved",
@@ -142,7 +143,7 @@ export function execute(previous: MarketState, command: Command): MarketState {
     case "favourite":
     case "check":
     case "restock": {
-      if (command.type === "restock") requireRole(s, "customer");
+      if (command.type === "restock" || command.type === "favourite") requireRole(s, "customer");
       const list =
         command.type === "check"
           ? s.checklist
@@ -659,7 +660,8 @@ function stockTarget(s: MarketState, p: Product) {
     .filter((m) => ids.includes(m.id) && m.day)
     .sort((a, b) => a.day.localeCompare(b.day));
   const m = options[0];
-  return m ? { marketId: m.id, date: m.day } : null;
+  if (m) return { marketId: m.id, date: m.day };
+  return null;
 }
 
 /** Saves one command through the API. `before` and `after` bracket the local change. */
@@ -709,11 +711,12 @@ async function persist(command: Command, before: MarketState, after: MarketState
           idempotencyKey: `web-${globalThis.crypto.randomUUID()}`,
         });
       }
+      await gateway.refresh();
       return;
     }
     case "stage":
-      if (command.stage === "Cancelled") await cancelCustomerOrderApi(command.id, "Cancelled by customer");
-      else await updateFarmerOrderStatusApi(command.id, STAGE_TO_STATUS[command.stage] as any);
+      if (command.stage === "Cancelled") await cancelCustomerOrderApi(command.id, command.reason || "Cancelled by customer");
+      else await updateFarmerOrderStatusApi(command.id, STAGE_TO_STATUS[command.stage] as any, command.reason);
       return;
     case "edit-order":
       await modifyCustomerOrderItemsApi(
@@ -753,13 +756,22 @@ async function persist(command: Command, before: MarketState, after: MarketState
     case "product": {
       const p = command.value;
       const old = before.products.find((x) => x.id === p.id && isSaved(x.id));
-      const categoryId = before.categoryIds[p.category];
+      const categoryId =
+        before.categoryIds[p.category] ||
+        (p.category ? before.categoryIds[p.category.toLowerCase()] : "") ||
+        p.categoryId ||
+        (p.category && /^[0-9a-fA-F]{24}$/.test(p.category) ? p.category : "") ||
+        "";
+
       const details = {
         name: p.name.trim(),
-        description: p.description,
+        description: p.description || "",
         categoryId,
-        unit: p.unit,
-        basePriceMinor: p.price,
+        category: p.category || "",
+        unit: (p.unit || "kg").toLowerCase().trim(),
+        basePriceMinor: Math.round(Number(p.price) || 100),
+        imageUrl: p.image || "",
+        image: p.image || "",
       };
       let productId = p.id;
       if (old) {
@@ -770,16 +782,16 @@ async function persist(command: Command, before: MarketState, after: MarketState
         }
       } else {
         const created = await createFarmerProductApi(details);
-        productId = created.id;
+        productId = created?.id || created?.data?.id || p.id;
       }
       const target = stockTarget(before, p);
       if (target && (!old || old.stock !== p.stock || old.price !== p.price)) {
         await saveFarmerStockOfferApi({
           ...target,
           productId,
-          totalQuantity: p.stock,
-          priceMinor: p.price,
-          unit: p.unit,
+          totalQuantity: Number(p.stock) || 50,
+          priceMinor: Math.round(Number(p.price) || 100),
+          unit: (p.unit || "kg").toLowerCase().trim(),
         });
       }
       if (old?.offerId && old.available !== p.available)
@@ -798,7 +810,8 @@ async function persist(command: Command, before: MarketState, after: MarketState
         name: m.name.trim(),
         locality: m.area?.trim() ?? "",
         address: m.address.trim(),
-        coordinates: m.coordinates ?? { latitude: 31.5204, longitude: 74.3587 },
+        coordinates: m.coordinates,
+        countryCode: m.countryCode, countryName: m.countryName, city: m.city, region: m.region, timezone: m.timeZone, currency: m.currency,
         operatingDays: m.operatingDays?.length ? m.operatingDays : [day],
         operatingHours: hoursOf(m),
         ...(m.description !== undefined ? { description: m.description } : {}),

@@ -19,6 +19,7 @@ export interface Market {
   day: string;
   hours: string;
   active: boolean;
+  region?: string;
   countryCode?: string;
   countryName?: string;
   city?: string;
@@ -58,6 +59,8 @@ export interface Farmer {
   phone?: string;
   appliedAt?: string | null;
   suspensionReason?: string;
+  approvalStatus?: string;
+  onboardingStatus?: string;
 }
 export interface Offer {
   id: string;
@@ -84,6 +87,7 @@ export interface Product {
   available: boolean;
   categoryId?: string;
   basePrice?: number;
+  currency?: string;
   archived?: boolean;
   /** Market and date of the nearest dated offer that `stock` describes. */
   marketId?: string;
@@ -112,6 +116,7 @@ export interface Line {
   unit: string;
   price: number;
   quantity: number;
+  currency?: string;
 }
 export interface Order {
   id: string;
@@ -128,6 +133,7 @@ export interface Order {
   window?: { start: string; end: string };
   cutoff?: string | null;
   total?: number;
+  currency?: string;
   customerId?: string;
   customerName?: string;
   customerPhone?: string;
@@ -347,12 +353,20 @@ export function emptyState(): MarketState {
   };
 }
 export const currency = localization.currency;
-export const money = (minor: number) =>
-  new Intl.NumberFormat(localization.locale, {
+export const money = (minor: number, curr?: string) => {
+  const c = curr || currency;
+  const loc =
+    c === "GBP" ? "en-GB" :
+    c === "USD" ? "en-US" :
+    c === "AED" ? "en-AE" :
+    localization.locale;
+  return new Intl.NumberFormat(loc, {
     style: "currency",
-    currency,
-    maximumFractionDigits: 0,
+    currency: c,
+    maximumFractionDigits: c === "PKR" ? 0 : 2,
+    minimumFractionDigits: c === "PKR" ? 0 : 2,
   }).format(minor / 100);
+};
 export const total = (lines: Line[]) =>
   lines.reduce((n, l) => n + l.price * l.quantity, 0);
 /** Display reference for an order: its order number when known. */

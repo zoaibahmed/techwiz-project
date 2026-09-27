@@ -3,6 +3,13 @@ import { getDB } from '../config/db.js';
 import { triggerRestockAlertsForOfferService } from './restockAlert.service.js';
 
 // --- WEEKLY RECURRING STOCK TEMPLATES ---
+async function assertParticipation(farmerId,marketId) {
+ const db=getDB();
+ const farmer=await db.collection('farmerProfiles').findOne({_id:farmerId,approvalStatus:'approved',marketIds:marketId});
+ const market=await db.collection('markets').findOne({_id:marketId,isActive:true});
+ if(!farmer||!market)throw Object.assign(new Error('You must have approved participation in this active market.'),{statusCode:403});
+}
+
 export async function getWeeklyTemplateService(farmerProfileId, marketId, dayOfWeek) {
   const db = getDB();
   const fId = new ObjectId(farmerProfileId);
@@ -41,6 +48,7 @@ export async function updateWeeklyTemplateService(farmerProfileId, data) {
   const db = getDB();
   const fId = new ObjectId(farmerProfileId);
   const mId = new ObjectId(data.marketId);
+  await assertParticipation(fId,mId);
 
   const formattedItems = data.items.map((it) => ({
     productId: new ObjectId(it.productId),
@@ -107,6 +115,7 @@ export async function createOrUpdateStockOfferService(farmerProfileId, data) {
   const db = getDB();
   const fId = new ObjectId(farmerProfileId);
   const mId = new ObjectId(data.marketId);
+  await assertParticipation(fId,mId);
   const pId = new ObjectId(data.productId);
 
   // Check product belongs to farmer
@@ -254,6 +263,7 @@ export async function createPickupWindowService(farmerProfileId, data) {
   const db = getDB();
   const fId = new ObjectId(farmerProfileId);
   const mId = new ObjectId(data.marketId);
+  await assertParticipation(fId,mId);
 
   const doc = {
     farmerId: fId,

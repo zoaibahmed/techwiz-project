@@ -273,6 +273,7 @@ export function CustomerInboxWorkspace() {
                 </Link>
               </div>
 
+              <p className="conversation-reference">Conversation ID: <code>{selectedConvo.id}</code> · Share this ID with support if you report this conversation.</p>
               <div className="farmer-inbox-conv-messages">
                 {messagesLoading ? (
                   <div style={{ margin: 'auto', textAlign: 'center', color: '#5a665c', fontSize: '13px' }}>

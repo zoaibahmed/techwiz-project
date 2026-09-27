@@ -1,3 +1,7 @@
+import {FarmerMarkets} from './FarmerMarkets';
+import {FarmerSettings} from './FarmerSettings';
+import {FarmerApplication} from './FarmerApplication';
+import {SupportDesk} from './SupportDesk';
 import { useState, useMemo } from "react";
 import { Link, useLocation, useParams, useNavigate } from "react-router-dom";
 import {
@@ -27,6 +31,7 @@ import {
   Status,
   Empty,
   Confirm,
+  Modal,
 } from "../components/ui";
 import { money, total, date, time, activeOrder, orderRef } from "../data/market";
 import { PHOTO_LIBRARY } from "../data/photos";
@@ -34,8 +39,7 @@ import type { Product, Order } from "../data/market";
 import { Notifications } from "./Customer";
 import { NotFound } from "./Public";
 import {
-  saveFarmerOnboardingStepApi,
-  submitFarmerOnboardingApi,
+
 } from "../data/api";
 import {
   FarmerOperationalStatsArea,
@@ -48,6 +52,9 @@ export function FarmerPage() {
   const { pathname } = useLocation();
   const page = pathname.split("/")[2] ?? "";
   const f = s.farmers.find((f) => f.id === s.farmerId)!;
+  if (!f) return <div className="container section">Loading your farmer profile…</div>;
+  if (page === "support") return <SupportDesk />;
+  if (page === "access" || page === "onboarding" || f.state !== "Approved") return <FarmerApplication />;
   const ownProducts = s.products.filter((p) => p.farmerId === f.id);
   const ownOrders = s.orders.filter((o) => o.farmerId === f.id);
 
@@ -59,11 +66,11 @@ export function FarmerPage() {
     return <ProductEditor />;
   if (page === "orders" && pathname.split("/").length > 3)
     return <FarmerOrder />;
-  if (page === "access" || page === "onboarding" || f.state !== "Approved")
-    return <FarmerOnboardingWizard f={f} />;
 
-  if (page === "profile" || page === "markets")
-    return <FarmerProfilePage f={f} page={page} />;
+
+  if (page === "markets") return <FarmerMarkets />;
+  if (page === "profile")
+    return <FarmerSettings page={page} />;
   if (page === "products") return <FarmerCatalogue ownProducts={ownProducts} />;
   if (page === "stock") return <Stock ownProducts={ownProducts} />;
   if (page === "stock-templates") return <StockTemplates ownProducts={ownProducts} />;
@@ -435,12 +442,125 @@ function FarmerOrdersQueue({ ownOrders }: { ownOrders: Order[] }) {
 }
 
 /* =========================================================================
+   DECLINE ORDER REASON MODAL
+   ========================================================================= */
+function DeclineOrderModal({
+  order,
+  onClose,
+  onConfirm,
+}: {
+  order: Order;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const PRESET_REASONS = [
+    "Harvest shortage / produce out of stock",
+    "Produce did not meet harvest quality standards",
+    "Stall capacity reached for this pickup window",
+    "Unable to harvest in time for market day",
+  ];
+  const [reason, setReason] = useState(PRESET_REASONS[0]);
+
+  return (
+    <Modal title="Decline Reservation" onClose={onClose}>
+      <div className="fw-decline-modal-body">
+        <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "14px", lineHeight: "1.5" }}>
+          Please specify a reason for declining reservation <strong>{orderRef(order)}</strong> for{" "}
+          <strong>{order.customerName || "Customer"}</strong>. This reason will be recorded and shared with the customer.
+        </p>
+
+        <div
+          style={{
+            background: "var(--soft)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            padding: "12px 14px",
+            marginBottom: "16px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted)" }}>
+              Reserved Items
+            </span>
+            <strong style={{ fontSize: "13px" }}>{money(total(order.lines))}</strong>
+          </div>
+          <div style={{ fontSize: "13px", color: "var(--ink)" }}>
+            {order.lines.map((l) => `${l.quantity} × ${l.name} (${l.unit})`).join(", ")}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "14px" }}>
+          <label style={{ display: "block", fontSize: "12.5px", fontWeight: 600, marginBottom: "8px", color: "var(--ink)" }}>
+            Select a common reason:
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {PRESET_REASONS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`fw-pill ${reason === preset ? "active" : ""}`}
+                style={{ fontSize: "12px", padding: "6px 12px", textAlign: "left" }}
+                onClick={() => setReason(preset)}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "18px" }}>
+          <label style={{ display: "block", fontSize: "12.5px", fontWeight: 600, marginBottom: "6px", color: "var(--ink)" }}>
+            Or customize the note to customer:
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            maxLength={250}
+            placeholder="Explain why this reservation cannot be fulfilled…"
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              background: "var(--white)",
+              color: "var(--ink)",
+              fontSize: "13.5px",
+              resize: "vertical",
+            }}
+            required
+          />
+          <span style={{ display: "block", textAlign: "right", fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
+            {reason.length} / 250 characters
+          </span>
+        </div>
+
+        <div className="actions" style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Keep Reservation
+          </button>
+          <button
+            type="button"
+            className="button danger"
+            disabled={!reason.trim()}
+            onClick={() => onConfirm(reason.trim())}
+          >
+            Confirm Decline & Release Stock
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* =========================================================================
    ORDER CARD COMPONENT WITH 1-CLICK ACTIONS
    ========================================================================= */
 function FarmerOrderCard({ o }: { o: Order }) {
   const s = useMarket();
   const act = useAction();
   const slot = s.slots.find((x) => x.id === o.slotId);
+  const [declineOpen, setDeclineOpen] = useState(false);
 
   const stageClass = o.stage.toLowerCase().replace(/\s+/g, "");
 
@@ -490,7 +610,7 @@ function FarmerOrderCard({ o }: { o: Order }) {
               <button
                 className="button secondary compact"
                 style={{ color: "var(--fw-danger)", borderColor: "#f6e8e4" }}
-                onClick={() => act({ type: "stage", id: o.id, stage: "Declined" }, `Order ${orderRef(o)} declined.`)}
+                onClick={() => setDeclineOpen(true)}
               >
                 Decline
               </button>
@@ -530,6 +650,19 @@ function FarmerOrderCard({ o }: { o: Order }) {
           </Link>
         </div>
       </div>
+      {declineOpen && (
+        <DeclineOrderModal
+          order={o}
+          onClose={() => setDeclineOpen(false)}
+          onConfirm={(reason) => {
+            act(
+              { type: "stage", id: o.id, stage: "Declined", reason },
+              `Order ${orderRef(o)} declined and stock released.`
+            );
+            setDeclineOpen(false);
+          }}
+        />
+      )}
     </article>
   );
 }
@@ -787,7 +920,7 @@ function StockTableRow({ p }: { p: Product }) {
       </td>
       <td>
         <span className={`fw-status-chip ${p.available ? "accepted" : "declined"}`}>
-          {p.available ? "Available" : "Sold Out"}
+          {p.available ? "Available" : p.stock - p.reserved > 0 ? "Not accepting orders" : "Sold Out"}
         </span>
       </td>
       <td>
@@ -969,7 +1102,7 @@ function PickupWindows({ f }: { f: any }) {
           <span className="fw-status-chip accepted">Stall Operations</span>
           <h1>Pickup Windows & Capacity</h1>
           <p className="fw-header-sub">
-            Manage staggered customer pickup arrival windows to avoid stall congestion in Lahore.
+            Manage staggered customer pickup arrival windows to avoid stall congestion.
           </p>
         </div>
       </div>
@@ -977,6 +1110,7 @@ function PickupWindows({ f }: { f: any }) {
       <div className="two-col">
         <div>
           <h2 style={{ fontSize: "20px", marginBottom: "16px" }}>Scheduled Pickup Windows</h2>
+          {!ownSlots.length && <div className="paper-panel"><h3>No pickup windows published yet</h3><p>Customers cannot reserve from your stall until you add a pickup window. Choose the same market date as your dated stock, and a future reservation cutoff.</p><Link to="/farmer/stock">Check your stock dates</Link></div>}
           {ownSlots.map((x) => {
             const activeRes = s.orders.filter((o) => o.slotId === x.id && activeOrder(o)).length;
             return (
@@ -1031,77 +1165,6 @@ function PickupWindows({ f }: { f: any }) {
           <button className="button">Add Pickup Window</button>
         </Form>
       </div>
-    </div>
-  );
-}
-
-function FarmerProfilePage({ f, page }: { f: any; page: string }) {
-  const s = useMarket();
-  const [validated, setValidated] = useState(false);
-
-  return (
-    <div className="farmer-workbench container narrow">
-      <div className="fw-header">
-        <div>
-          <span className="fw-status-chip accepted">Stall Identity</span>
-          <h1>{page === "profile" ? "Producer Story & Details" : "Market Presence & Stall Location"}</h1>
-          <p className="fw-header-sub">
-            Customize how customers discover your farm, your growing practices, and your stall pins in Lahore.
-          </p>
-        </div>
-      </div>
-
-      <Form onSubmit={() => setValidated(true)}>
-        {page === "profile" ? (
-          <>
-            <Field label="Stall / Farm Name">
-              <input required defaultValue={f.name} />
-            </Field>
-            <Field label="Contact Person">
-              <input required defaultValue={f.person} />
-            </Field>
-            <Field label="Your Public Harvest Story">
-              <textarea rows={5} required defaultValue={f.story} />
-            </Field>
-            <Field label="Hero Banner Image URL">
-              <input defaultValue={f.image} />
-            </Field>
-          </>
-        ) : (
-          <>
-            <Field label="Primary Market">
-              <select defaultValue={f.marketId}>
-                {s.markets.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.city})
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Stall Location Instructions">
-              <textarea
-                required
-                rows={3}
-                defaultValue={f.stall ? `Stall ${f.stall}` : ""}
-              />
-            </Field>
-            <div className="two-col">
-              <Field label="Latitude">
-                <input type="number" step="any" defaultValue="31.4707" required />
-              </Field>
-              <Field label="Longitude">
-                <input type="number" step="any" defaultValue="74.3168" required />
-              </Field>
-            </div>
-          </>
-        )}
-        <button className="button">Save Profile Updates</button>
-        {validated && (
-          <p role="status" style={{ color: "var(--fw-success)", marginTop: "12px", fontWeight: "500" }}>
-            ✓ Stall settings saved.
-          </p>
-        )}
-      </Form>
     </div>
   );
 }
@@ -1164,7 +1227,28 @@ function ProductEditor() {
             </select>
           </Field>
           <Field label="Selling Unit">
-            <input name="unit" required defaultValue={p?.unit ?? "kg"} placeholder="e.g. kg, bunch, box" />
+            <input
+              name="unit"
+              required
+              defaultValue={p?.unit ?? "kg"}
+              placeholder="e.g. kg, bunch, box"
+              list="selling-units-options"
+            />
+            <datalist id="selling-units-options">
+              <option value="kg">kg (Kilogram)</option>
+              <option value="g">g (Gram)</option>
+              <option value="bunch">bunch</option>
+              <option value="box">box</option>
+              <option value="dozen">dozen</option>
+              <option value="litre">litre</option>
+              <option value="item">item (Single piece)</option>
+              <option value="piece">piece</option>
+              <option value="jar">jar</option>
+              <option value="pack">pack</option>
+              <option value="bag">bag</option>
+              <option value="basket">basket</option>
+              <option value="loaf">loaf</option>
+            </datalist>
           </Field>
         </div>
         <div className="two-col">
@@ -1224,6 +1308,7 @@ function ProductEditor() {
 function FarmerOrder() {
   const s = useMarket();
   const act = useAction();
+  const [declineOpen, setDeclineOpen] = useState(false);
   const { orderId } = useParams();
   const o = s.orders.find((o) => o.id === orderId && o.farmerId === s.farmerId);
 
@@ -1275,7 +1360,7 @@ function FarmerOrder() {
               <button
                 className="button secondary"
                 style={{ color: "var(--fw-danger)" }}
-                onClick={() => act({ type: "stage", id: o.id, stage: "Declined" })}
+                onClick={() => setDeclineOpen(true)}
               >
                 Decline & Release Stock
               </button>
@@ -1299,6 +1384,19 @@ function FarmerOrder() {
             </button>
           )}
         </div>
+        {declineOpen && (
+          <DeclineOrderModal
+            order={o}
+            onClose={() => setDeclineOpen(false)}
+            onConfirm={(reason) => {
+              act(
+                { type: "stage", id: o.id, stage: "Declined", reason },
+                `Order ${orderRef(o)} declined and stock released.`
+              );
+              setDeclineOpen(false);
+            }}
+          />
+        )}
       </div>
 
       <h2 style={{ fontSize: "20px", marginTop: "32px", marginBottom: "16px" }}>Timeline & History</h2>
@@ -1426,300 +1524,6 @@ export function Reports({ farmer = false }: { farmer?: boolean }) {
 /* =========================================================================
    10. GUIDED MULTI-STEP ONBOARDING WIZARD
    ========================================================================= */
-function FarmerOnboardingWizard({ f }: { f: any }) {
-  const s = useMarket();
-  const act = useAction();
-  const [currentStep, setStep] = useState(1);
-  const [statusMsg, setStatusMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(f.state === "Pending");
-
-  // Step 1: Contact
-  const [contactPerson, setContactPerson] = useState(f.person || "Tariq Mahmood");
-  const [phone, setPhone] = useState("+92 300 8472910");
-  const [secondaryPhone, setSecondaryPhone] = useState("+92 321 4455667");
-
-  // Step 2: Location
-  const [region, setRegion] = useState("Punjab");
-  const [city, setCity] = useState("Lahore");
-  const [address, setAddress] = useState("Bedian Road Farm Estate, Sector 8, Lahore");
-
-  // Step 3: Profile & Practices
-  const [businessName, setBusinessName] = useState(f.name || "");
-  const [bio, setBio] = useState(
-    f.story || "Dedicated family farm cultivating pesticide-free vegetables, heirloom greens and seasonal field crops."
-  );
-  const [practices, setPractices] = useState<string[]>([
-    "Certified Organic Soil",
-    "Drip Irrigation",
-    "Pesticide-Free",
-  ]);
-
-  // Step 4: Markets
-  const [selectedMarketId, setSelectedMarketId] = useState(
-    f.marketId || s.markets[0]?.id || ""
-  );
-
-  const saveStep = async (stepNum: number) => {
-    setLoading(true);
-    setStatusMsg("");
-    try {
-      let data: Record<string, any> = {};
-      if (stepNum === 1) data = { contactPerson, phone, secondaryPhone };
-      else if (stepNum === 2)
-        data = { countryCode: "PK", countryName: "Pakistan", region, city, address };
-      else if (stepNum === 3)
-        data = { businessName, bio, farmingPractices: practices };
-      else if (stepNum === 4)
-        data = {
-          requestedMarketIds: [
-            selectedMarketId.startsWith("6")
-              ? selectedMarketId
-              : "66f000000000000000000001",
-          ],
-        };
-      await saveFarmerOnboardingStepApi(stepNum, data);
-      setStatusMsg(`Step ${stepNum} draft saved to database.`);
-    } catch {
-      setStatusMsg(`Step ${stepNum} draft saved locally.`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmitForApproval = async () => {
-    setLoading(true);
-    setStatusMsg("");
-    try {
-      await saveStep(4);
-      await submitFarmerOnboardingApi();
-      setSubmitted(true);
-      act(
-        { type: "farmer", value: { ...f, state: "Pending" } },
-        "Application submitted to administrator for verification."
-      );
-    } catch {
-      setSubmitted(true);
-      act(
-        { type: "farmer", value: { ...f, state: "Pending" } },
-        "Application submitted for administrator verification."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="farmer-workbench container">
-      <div className="fw-header">
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-            <span className={`fw-status-chip ${f.state === "Approved" ? "accepted" : "placed"}`}>
-              {f.state === "Approved" ? "Approved Stall" : "Application Under Review"}
-            </span>
-            <span style={{ fontSize: "13px", color: "var(--fw-muted)" }}>
-              Step {currentStep} of 5 · Guided Stall Verification
-            </span>
-          </div>
-          <h1>{submitted ? "Your stall application is under review." : "Grower & Stall Onboarding"}</h1>
-          <p className="fw-header-sub">
-            {submitted
-              ? "Your farm identity, venue nomination, and growing practices have been submitted. An administrator verifies all producers before live catalog publication."
-              : "Complete the 5 steps below to publish your harvest catalogue and receive market pre-orders."}
-          </p>
-        </div>
-      </div>
-
-      {/* Step Indicators */}
-      <div className="fw-action-bar" style={{ marginBottom: "24px" }}>
-        <div className="fw-filter-pills">
-          {["1. Identity", "2. Location", "3. Farm Profile", "4. Market Venues", "5. Review & Submit"].map(
-            (label, idx) => (
-              <button
-                key={label}
-                className={`fw-pill ${currentStep === idx + 1 ? "active" : ""}`}
-                onClick={() => {
-                  saveStep(currentStep);
-                  setStep(idx + 1);
-                }}
-              >
-                {label}
-              </button>
-            )
-          )}
-        </div>
-      </div>
-
-      {statusMsg && <Notice>{statusMsg}</Notice>}
-
-      {/* Step Content */}
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid var(--fw-border-subtle)",
-          borderRadius: "6px",
-          padding: "28px",
-          maxWidth: "760px",
-        }}
-      >
-        {currentStep === 1 && (
-          <div className="stack">
-            <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Primary Contact & Farmer Identity</h2>
-            <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Provide the direct contact details of the head grower or stall manager attending market days.
-            </p>
-            <Field label="Contact Person Name">
-              <input value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} required />
-            </Field>
-            <Field label="Primary Phone (WhatsApp Enabled for Market Day)">
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} required type="tel" />
-            </Field>
-            <Field label="Secondary / Emergency Phone">
-              <input value={secondaryPhone} onChange={(e) => setSecondaryPhone(e.target.value)} type="tel" />
-            </Field>
-            <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-              <button className="button" type="button" onClick={() => { saveStep(1); setStep(2); }}>
-                Save & Continue to Location →
-              </button>
-              <button className="button secondary" type="button" onClick={() => saveStep(1)} disabled={loading}>
-                Save Draft
-              </button>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 2 && (
-          <div className="stack">
-            <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Farm Location & Region</h2>
-            <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Where is your harvest cultivated? Gather & Grow prioritises local growers within 150 km of venue clusters.
-            </p>
-            <Field label="Province / Region">
-              <input value={region} onChange={(e) => setRegion(e.target.value)} required />
-            </Field>
-            <Field label="City / Tehsil">
-              <input value={city} onChange={(e) => setCity(e.target.value)} required />
-            </Field>
-            <Field label="Farm Estate / Field Address">
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={3} />
-            </Field>
-            <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-              <button className="button secondary" type="button" onClick={() => setStep(1)}>
-                ← Back
-              </button>
-              <button className="button" type="button" onClick={() => { saveStep(2); setStep(3); }}>
-                Save & Continue to Profile →
-              </button>
-              <button className="button secondary" type="button" onClick={() => saveStep(2)} disabled={loading}>
-                Save Draft
-              </button>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 3 && (
-          <div className="stack">
-            <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Stall Profile & Growing Practices</h2>
-            <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Share your farm story, values, and agricultural techniques with community market patrons.
-            </p>
-            <Field label="Stall / Business Display Name">
-              <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} required />
-            </Field>
-            <Field label="Farm Story & Bio">
-              <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} required />
-            </Field>
-            <Field label="Verified Agricultural Practices (Comma-separated)">
-              <input
-                value={practices.join(", ")}
-                onChange={(e) =>
-                  setPractices(
-                    e.target.value
-                      .split(",")
-                      .map((s) => s.trim())
-                      .filter(Boolean)
-                  )
-                }
-              />
-            </Field>
-            <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-              <button className="button secondary" type="button" onClick={() => setStep(2)}>
-                ← Back
-              </button>
-              <button className="button" type="button" onClick={() => { saveStep(3); setStep(4); }}>
-                Save & Continue to Markets →
-              </button>
-              <button className="button secondary" type="button" onClick={() => saveStep(3)} disabled={loading}>
-                Save Draft
-              </button>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 4 && (
-          <div className="stack">
-            <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Nominated Farmers Market Venues</h2>
-            <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Choose the markets where you will run a stall.
-            </p>
-            <Field label="Primary Target Market Venue">
-              <select value={selectedMarketId} onChange={(e) => setSelectedMarketId(e.target.value)}>
-                {s.markets.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.area}, {m.city}) · {m.day}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-              <button className="button secondary" type="button" onClick={() => setStep(3)}>
-                ← Back
-              </button>
-              <button className="button" type="button" onClick={() => { saveStep(4); setStep(5); }}>
-                Review Application →
-              </button>
-              <button className="button secondary" type="button" onClick={() => saveStep(4)} disabled={loading}>
-                Save Draft
-              </button>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 5 && (
-          <div className="stack">
-            <h2 style={{ fontSize: "20px", margin: "0 0 8px" }}>Review & Submit for Administrator Approval</h2>
-            <p style={{ fontSize: "14px", color: "var(--fw-muted)", margin: "0 0 16px" }}>
-              Verify your details before submission. Once submitted, our operations team will review credentials within 24 hours.
-            </p>
-
-            <div style={{ background: "var(--fw-sage)", padding: "16px 20px", borderRadius: "4px", fontSize: "14px" }}>
-              <p><strong>Producer:</strong> {businessName} ({contactPerson})</p>
-              <p><strong>Location:</strong> {address}, {city}, {region}</p>
-              <p><strong>Contact:</strong> {phone}</p>
-              <p><strong>Practices:</strong> {practices.join(", ")}</p>
-              <p><strong>Selected Venue:</strong> {s.markets.find((m) => m.id === selectedMarketId)?.name ?? "—"}</p>
-            </div>
-
-            <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
-              <button className="button secondary" type="button" onClick={() => setStep(4)}>
-                ← Edit Details
-              </button>
-              <button
-                className="button"
-                type="button"
-                disabled={loading}
-                onClick={handleSubmitForApproval}
-              >
-                {loading ? "Submitting Application..." : "Submit Application for Approval"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* =========================================================================
    11. FARMER REVIEWS & REPUTATION HUB
    ========================================================================= */

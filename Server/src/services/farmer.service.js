@@ -1,3 +1,4 @@
+import { normalizeOnboardingSteps, completeApplication, step1AccountSchema, step2LocationSchema, step3ProfileSchema, step4MarketsSchema, step5ProductsSchema, step6ScheduleSchema, step7PickupSchema, step8ReviewSchema } from '../validation/farmerOnboarding.schema.js';
 import { ObjectId } from 'mongodb';
 import { getDB } from '../config/db.js';
 import { resolveDateRange, calculateComparison } from '../utils/date-range.js';
@@ -102,6 +103,10 @@ export async function getMyFarmerProfileService(userId) {
     bio: profile.bio || '',
     profileImageUrl: profile.profileImageUrl || '',
     stallCoordinates: stallCoords ? { latitude: stallCoords[1], longitude: stallCoords[0] } : null,
+    countryCode: profile.countryCode || '',
+    countryName: profile.countryName || '',
+    city: profile.city || '',
+    stallNumber: profile.stallNumber || '',
     approvalStatus: profile.approvalStatus,
     marketIds: (profile.marketIds || []).map((id) => id.toString()),
     operatingDays: profile.operatingDays || [],
@@ -113,15 +118,17 @@ export async function updateMyFarmerProfileService(userId, data) {
   const db = getDB();
   const updateFields = { updatedAt: new Date() };
 
+  if (data.businessName !== undefined) updateFields.businessName = data.businessName;
+  if (data.contactPerson !== undefined) updateFields.contactPerson = data.contactPerson;
+  if (data.profileImageUrl !== undefined) updateFields.profileImageUrl = data.profileImageUrl;
   if (data.bio !== undefined) updateFields.bio = data.bio;
   if (data.phone !== undefined) updateFields.phone = data.phone;
   if (data.address !== undefined) updateFields.address = data.address;
   if (data.stallNumber !== undefined) updateFields.stallNumber = data.stallNumber;
   if (data.operatingDays !== undefined) updateFields.operatingDays = data.operatingDays;
 
-  if (data.marketIds) {
-    updateFields.marketIds = data.marketIds.map((id) => new ObjectId(id));
-  }
+  // Venue participation is changed only through the reviewed request workflow.
+
 
   if (data.stallCoordinates) {
     updateFields.stallCoordinates = {
@@ -661,8 +668,8 @@ export async function getFarmerOnboardingService(userId) {
       phone: user?.phone || '',
       email: user?.email || '',
       approvalStatus: 'draft',
-      countryCode: 'PK',
-      city: 'Lahore',
+      countryCode: '',
+      city: '',
       onboarding: {
         currentStep: 1,
         status: 'in_progress',
@@ -691,9 +698,9 @@ export async function getFarmerOnboardingService(userId) {
   return {
     farmerProfileId: profile._id.toString(),
     currentStep: onboarding.currentStep || 1,
-    status: onboarding.status || 'in_progress',
+    status: ['approved','rejected','suspended'].includes(profile.approvalStatus) ? profile.approvalStatus : (onboarding.status || 'in_progress'),
     completedSteps: onboarding.completedSteps || [],
-    stepData: onboarding.stepData || {},
+    stepData: normalizeOnboardingSteps(onboarding.stepData || {step1_account:{contactPerson:profile.contactPerson||"",phone:profile.phone||""},step3_profile:{businessName:profile.businessName||"",bio:profile.bio||""}}),
     approvalStatus: profile.approvalStatus || 'draft',
     submittedAt: onboarding.submittedAt ? onboarding.submittedAt.toISOString() : null,
     adminNotes: profile.adminNotes || '',
@@ -704,12 +711,21 @@ export async function saveFarmerOnboardingStepService(userId, { step, data }) {
   const db = getDB();
   const uId = new ObjectId(userId);
 
-  const stepKey = `onboarding.stepData.step${step}`;
+  const profile = await db.collection('farmerProfiles').findOne({ userId: uId });
+  if (!profile) throw Object.assign(new Error('Farmer profile not found.'),{statusCode:404});
+  if (['approved','suspended'].includes(profile.approvalStatus) || profile.onboarding?.status === 'submitted')
+    throw Object.assign(new Error('This application is locked while under review or approved.'),{statusCode:409});
+  const schemas=[null,step1AccountSchema,step2LocationSchema,step3ProfileSchema,step4MarketsSchema,step5ProductsSchema,step6ScheduleSchema,step7PickupSchema,step8ReviewSchema];
+  data=schemas[step].parse(data);
+  const keys=['','account','location','profile','markets','products','schedule','pickup','review'];
+  const stepKey = `onboarding.stepData.step${step}_${keys[step]}`;
   const now = new Date();
 
   const updateDoc = {
     $set: {
       [stepKey]: data,
+      "onboarding.status": "in_progress",
+      approvalStatus: "draft",
       'onboarding.currentStep': Math.min(8, Math.max(step + 1, 1)),
       updatedAt: now,
     },
@@ -728,6 +744,9 @@ export async function saveFarmerOnboardingStepService(userId, { step, data }) {
     if (data.region) updateDoc.$set.region = data.region;
     if (data.city) updateDoc.$set.city = data.city;
     if (data.address) updateDoc.$set.address = data.address;
+    if (data.coordinates) updateDoc.$set.stallCoordinates = {type:'Point',coordinates:[data.coordinates.longitude,data.coordinates.latitude]};
+    updateDoc.$set.marketIds = [];
+    updateDoc.$set['onboarding.stepData.step4_markets'] = {requestedMarketIds:[]};
   } else if (step === 3) {
     if (data.businessName) updateDoc.$set.businessName = data.businessName;
     if (data.bio) updateDoc.$set.bio = data.bio;
@@ -765,7 +784,11 @@ export async function submitFarmerOnboardingService(userId) {
     throw err;
   }
 
-  const stepData = profile.onboarding?.stepData || {};
+  if (profile.approvalStatus === 'approved' || profile.approvalStatus === 'suspended' || profile.onboarding?.status === 'submitted')
+    throw Object.assign(new Error('Application is already submitted, approved or suspended.'),{statusCode:409});
+  const stepData = normalizeOnboardingSteps(profile.onboarding?.stepData || {});
+
+  if (!completeApplication(stepData)) throw Object.assign(new Error("Complete and save all required steps and accept the seller terms."),{statusCode:400,code:"ONBOARDING_INCOMPLETE"});
 
   // Check required steps: 1 (Account), 2 (Location), 3 (Profile), 4 (Markets)
   const missing = [];
@@ -782,6 +805,10 @@ export async function submitFarmerOnboardingService(userId) {
     missing.push('Step 4: At least one market selection is required.');
   }
 
+  if (!stepData.step8_review?.agreedToTerms) missing.push('Please accept the seller terms.');
+  const ids=(stepData.step4_markets?.requestedMarketIds||[]).filter(ObjectId.isValid).map(id=>new ObjectId(id));
+  const venues=await db.collection('markets').find({_id:{$in:ids},isActive:true}).toArray();
+  if (venues.length !== ids.length || venues.some(m=>m.countryCode !== stepData.step2_location?.countryCode || m.city?.trim().toLowerCase() !== stepData.step2_location?.city?.trim().toLowerCase())) missing.push('Choose active venues in your selected country and city.');
   if (missing.length > 0) {
     const err = new Error(`Onboarding submission incomplete. ${missing.join(' ')}`);
     err.code = 'ONBOARDING_INCOMPLETE';

@@ -23,7 +23,7 @@ export function HarvestItem({ product }: { product: Product }) {
       </Link>
       <div className="harvest-price">
         <span>
-          <strong>{money(product.price)}</strong>
+          <strong>{money(product.price, product.currency)}</strong>
           <small> / {product.unit}</small>
         </span>
         <motion.button

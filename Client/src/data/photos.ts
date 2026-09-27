@@ -6,6 +6,10 @@
 export const PRODUCE_PHOTOS = new Set<string>([]);
 
 const FALLBACKS: [RegExp, string][] = [
+  [/apple/i, "/images/apples.jpg"],
+  [/egg/i, "/images/eggs.jpg"],
+  [/honey/i, "/images/honey.jpg"],
+  [/bread|sourdough/i, "/images/bread.jpg"],
   [/tomato/i, "/images/tomatoes.jpg"],
   [/carrot/i, "/images/carrots.jpg"],
   [/fruit basket|harvest basket|mixed/i, "/images/harvest.jpg"],
@@ -28,7 +32,7 @@ export function produceSlug(image: string) {
 export function productPhoto(p: { name: string; image: string; category: string }) {
   const slug = produceSlug(p.image);
   if (slug && PRODUCE_PHOTOS.has(slug)) return p.image;
-  if (p.image && !slug) return p.image;
+  if (p.image && !slug && !p.image.includes("/illustrations/")) return p.image;
   return (
     FALLBACKS.find(([re]) => re.test(p.name))?.[1] ??
     CATEGORY_FALLBACK[p.category] ??

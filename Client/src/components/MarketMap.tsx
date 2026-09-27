@@ -17,7 +17,7 @@ export function MarketMap({
 }: MarketMapViewProps & {
   geographicRenderer?: ComponentType<MarketMapViewProps>;
 }) {
-  const illustrative = props.markets.every((m) => m.id.startsWith("demo-"));
+  const illustrative = props.markets.length > 0 && props.markets.every((m) => m.id.startsWith("demo-"));
   return (
     <div
       className="market-map-boundary"

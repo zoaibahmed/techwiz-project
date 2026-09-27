@@ -6,7 +6,10 @@ export function marketDayView(s: MarketState, day: string) {
   const markets = s.markets.filter((m) => m.active && m.day === day);
   const marketIds = new Set(markets.map((m) => m.id));
   const growers = s.farmers.filter(
-    (f) => f.state === "Approved" && marketIds.has(f.marketId),
+    (f) =>
+      f.state === "Approved" &&
+      (marketIds.has(f.marketId) ||
+        (f.marketIds ?? []).some((id) => marketIds.has(id))),
   );
   const growerIds = new Set(growers.map((f) => f.id));
   const products = s.products.filter(

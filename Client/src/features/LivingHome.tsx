@@ -1,3 +1,4 @@
+import { StartHere } from "../components/home/StartHere";
 import { MarketHero } from "../components/MarketHero";
 import { HarvestIndex } from "../components/HarvestIndex";
 import { MarketPulse } from "../components/home/MarketPulse";
@@ -100,8 +101,7 @@ export function LivingHome() {
             </button>
           </div>
       </MarketHero>
-      <MarketPulse />
-      <MarketJourney />
+      <StartHere />
       {!covered ? (
         <>
           <CoverageEmpty />
@@ -132,6 +132,8 @@ export function LivingHome() {
         </>
       )}
       {covered && <HarvestIndex products={view.products.filter(p => s.farmers.some(f => f.id === p.farmerId && markets.some(m => m.id === f.marketId || (f.marketIds ?? []).includes(m.id))))} />}
+      <MarketJourney />
+      <MarketPulse />
       <CopilotShowcase />
       <TrustLayer />
     </div>

@@ -26,7 +26,7 @@ const draw = (delay: number) => ({
  */
 export function MarketPreloader() {
   const reduced = useReducedMotion();
-  const [visible, setVisible] = useState(() => !alreadyShown());
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     if (!visible) return;
@@ -43,7 +43,7 @@ export function MarketPreloader() {
     const hero = new Image();
     hero.src = "/images/market-arrival.jpg";
     const failSafe = window.setTimeout(done, 2600);
-    Promise.allSettled([document.fonts.ready, hero.decode(), new Promise((r) => window.setTimeout(r, 1500))]).then(done);
+    Promise.allSettled([document.fonts.ready, hero.decode(), new Promise((r) => window.setTimeout(r, alreadyShown() ? 650 : 1500))]).then(done);
     return () => {
       alive = false;
       clearTimeout(failSafe);

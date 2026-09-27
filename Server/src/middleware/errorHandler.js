@@ -16,6 +16,8 @@ export function errorHandler(err, req, res, next) {
       message: issue.message,
     }));
 
+    console.warn('[400 Validation Error]', req.method, req.originalUrl, req.body, fields);
+
     return res.status(400).json({
       error: {
         code: 'VALIDATION_ERROR',
@@ -27,6 +29,7 @@ export function errorHandler(err, req, res, next) {
   }
 
   const statusCode = err.statusCode || (res.statusCode !== 200 && res.statusCode !== 204 ? res.statusCode : 500);
+  console.warn('[API Error]', statusCode, req.method, req.originalUrl, err.code, err.message);
 
   // Clean error message without exposing connection strings or sensitive paths
   let message = err.message || 'Internal Server Error';

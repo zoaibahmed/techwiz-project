@@ -25,6 +25,6 @@ export const loginSchema = z.object({
 });
 
 export const farmerStatusUpdateSchema = z.object({
-  approvalStatus: z.enum(['pending', 'approved', 'suspended']),
+  approvalStatus: z.enum(['approved', 'rejected', 'suspended']),
   reason: z.string().max(250).optional(),
 });

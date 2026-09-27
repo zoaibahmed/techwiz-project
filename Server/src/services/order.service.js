@@ -137,17 +137,52 @@ export async function checkoutService(customerId, data) {
   const stockOfferMap = new Map(stockOffers.map((so) => [so.productId.toString(), so]));
 
   for (const item of data.items) {
-    const offer = stockOfferMap.get(item.productId);
+    let offer = stockOfferMap.get(item.productId);
+    if (!offer) {
+      // If a specific dated offer does not exist for this date yet, pull from the latest active market stock
+      const fallback = await db.collection('stockOffers').findOne(
+        {
+          marketId: mId,
+          productId: new ObjectId(item.productId),
+          status: 'available',
+        },
+        { sort: { date: -1 } }
+      );
+
+      if (fallback) {
+        const newOffer = {
+          productId: new ObjectId(item.productId),
+          farmerId: fallback.farmerId,
+          marketId: mId,
+          date: data.marketDate,
+          totalQuantity: fallback.totalQuantity,
+          reservedQuantity: 0,
+          availableQuantity: fallback.availableQuantity,
+          priceMinor: fallback.priceMinor,
+          unit: fallback.unit || 'unit',
+          status: 'available',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        const insertRes = await db.collection('stockOffers').insertOne(newOffer);
+        offer = { ...newOffer, _id: insertRes.insertedId };
+        stockOfferMap.set(item.productId, offer);
+      }
+    }
+
     if (!offer || offer.availableQuantity < item.quantity) {
       const p = productMap.get(item.productId);
-      const err = new Error(`Insufficient stock for "${p.name}". Available: ${offer ? offer.availableQuantity : 0} ${p.unit}`);
+      const available = offer ? Math.max(0, offer.availableQuantity) : 0;
+      const err = new Error(
+        `Insufficient stock for "${p.name}". You requested ${item.quantity} ${p.unit}, but only ${available} ${p.unit} ${available === 1 ? 'is' : 'are'} available. Please lower your quantity to continue.`
+      );
       err.code = 'INSUFFICIENT_STOCK';
       err.statusCode = 400;
       err.details = {
         productId: item.productId,
         productName: p.name,
         requestedQuantity: item.quantity,
-        availableQuantity: offer ? offer.availableQuantity : 0,
+        availableQuantity: available,
       };
       throw err;
     }
@@ -180,6 +215,31 @@ export async function checkoutService(customerId, data) {
         err.statusCode = 409;
         throw err;
       }
+
+      // If availableQuantity dropped to 0, mark offer sold_out
+      const newAvail = offer.availableQuantity - item.quantity;
+      if (newAvail <= 0) {
+        await db.collection('stockOffers').updateOne(
+          { _id: offer._id },
+          { $set: { status: 'sold_out' } }
+        );
+      }
+
+      // Sync other active offers for this product so stock does not exceed remaining physical inventory
+      await db.collection('stockOffers').updateMany(
+        {
+          productId: offer.productId,
+          _id: { $ne: offer._id },
+          availableQuantity: { $gt: Math.max(0, newAvail) },
+        },
+        {
+          $set: {
+            availableQuantity: Math.max(0, newAvail),
+            status: newAvail <= 0 ? 'sold_out' : 'available',
+            updatedAt: new Date(),
+          },
+        }
+      );
 
       reservedOfferUpdates.push({ offerId: offer._id, quantity: item.quantity });
     }
@@ -580,7 +640,7 @@ export async function cancelCustomerOrderService(customerId, orderId, reason = '
           reservedQuantity: -item.quantity,
           availableQuantity: item.quantity,
         },
-        $set: { updatedAt: new Date() },
+        $set: { status: 'available', updatedAt: new Date() },
       }
     );
   }
@@ -730,12 +790,7 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
 
   // Decline: Release stock and decrement pickup window count
   if (canonicalNextStatus === 'declined') {
-    if (!reason) {
-      const err = new Error('A reason is required when declining an order.');
-      err.code = 'REASON_REQUIRED';
-      err.statusCode = 400;
-      throw err;
-    }
+    const effectiveReason = (reason && String(reason).trim()) ? String(reason).trim() : 'Stock unavailable / harvest capacity reached';
 
     for (const item of order.items) {
       await db.collection('stockOffers').updateOne(
@@ -759,13 +814,13 @@ export async function updateFarmerOrderStatusService(farmerUserId, orderId, next
       { $inc: { reservedOrdersCount: -1 }, $set: { updatedAt: new Date() } }
     );
 
-    updateFields.declineReason = reason;
+    updateFields.declineReason = effectiveReason;
 
     await createNotification(
       order.customerId.toString(),
       'order_declined',
       'Order Declined by Farmer',
-      `Farmer declined ${order.orderNumber}. Reason: ${reason}.`,
+      `Farmer declined ${order.orderNumber}. Reason: ${effectiveReason}.`,
       { orderId: orderId, orderNumber: order.orderNumber }
     );
   }

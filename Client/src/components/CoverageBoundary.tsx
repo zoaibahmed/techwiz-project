@@ -7,7 +7,7 @@ import { countryName, hasMarketCoverage } from "../data/visitor";
 import { useMarket } from "./ui";
 
 export function CoverageEmpty({ heading = false }: { heading?: boolean }) {
-  const { visitor, openModal, resetToDemo, t } = useVisitor();
+  const { visitor, openModal, t } = useVisitor();
   const reduce = useReducedMotion();
   const Title = heading ? "h1" : "h2";
   return (
@@ -40,11 +40,7 @@ export function CoverageEmpty({ heading = false }: { heading?: boolean }) {
             {t("change")}
             <ArrowRight size={17} />
           </button>
-          <button className="global-secondary" onClick={resetToDemo}>
-            {t("demo")}
-          </button>
         </div>
-        <span className="coverage-disclaimer">{t("demoNote")}</span>
       </div>
     </motion.section>
   );

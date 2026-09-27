@@ -43,8 +43,8 @@ export function MarketHero({headline, lead, children}:{headline:string;lead:stri
         <h1 className="market-cinema-title" tabIndex={-1}>{headline.split(' ').map((word,i)=><span className="market-cinema-mask" key={i}><span>{word}&nbsp;</span></span>)}</h1>
         <p className="market-cinema-intro">{lead}</p>
       </div>
-      <div className="market-cinema-next" aria-hidden="true"><span>From the people who grow it.</span><span>To the morning you make of it.</span></div>
-      <div className="market-cinema-bottom"><div className="market-cinema-finder">{children}</div><div className="market-cinema-footnote"><span>Lahore · weekend markets</span><span>Scroll into the market <ArrowDown size={15}/></span></div></div>
+      <div className="market-cinema-next" aria-hidden="true"><span>Choose your market.</span><span>Reserve fresh. Collect locally.</span></div>
+      <div className="market-cinema-bottom"><div className="market-cinema-finder">{children}</div><div className="market-cinema-footnote"><span>Reserve online · pay at pickup</span><span>Scroll into the market <ArrowDown size={15}/></span></div></div>
     </div>
   </section>;
 }

@@ -364,7 +364,7 @@ export function CustomerCommand() {
               </tbody>
             </table>
             {!history.length && (
-              <p className="command-empty">No other sample orders.</p>
+              <p className="command-empty">No previous orders yet.</p>
             )}
           </div>
         </section>

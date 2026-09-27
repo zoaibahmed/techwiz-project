@@ -20,7 +20,7 @@ const COLLECTIONS = [
   'announcements',
   'contactInquiries',
 ];
-const CLEARED_ONLY = ['auditLogs', 'aiActionDrafts'];
+const CLEARED_ONLY = ['auditLogs', 'aiActionDrafts', 'conversations', 'messages', 'supportTickets'];
 
 /** Replace every MarketLink collection in the active database with the seed dataset. */
 export async function seedDatabase(db, options = {}) {

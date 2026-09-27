@@ -9,7 +9,7 @@ export const en = {
   languageNote: 'English throughout. Urdu preview translates location settings and homepage content; navigation, map controls and account pages still include English.',
   lahore: 'Lahore', selectCity: 'Choose a city', noCities: 'No participating cities yet', noDays: 'Market days appear when a city has participating markets.',
   demo: 'Explore Lahore markets', demoNote: 'Four weekly markets · pre-order online, pay at the stall.', saved: 'Preferences saved on this device.', storage: 'Browser storage is unavailable. Preferences last for this visit only.',
-  headline: 'Good food starts with a good market day.', lead: 'Discover growers, reserve fresh produce and collect it at the market. One place to plan the whole morning.',
+  headline: 'Reserve fresh produce. Collect from local farmers.', lead: 'Choose a market, browse farmers’ available produce and reserve your order for pickup. Pay the farmer in person when you collect.',
   living: 'Gather & Grow / The Living Market', discover: 'Find your market', noAccount: 'Browse freely. No account needed.', change: 'Change location',
   harvest: 'A little closer to the harvest.', editorial: 'Market mornings across Lahore.',
   fresh: 'What is fresh?', people: 'Who is growing it?', collect: 'When can I collect?', freshBody: 'Dated availability, selling units and prices.', peopleBody: 'Meet the grower behind every offer.', collectBody: 'Choose a pickup window. Pay at the stall.',

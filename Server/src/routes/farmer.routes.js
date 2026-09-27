@@ -1,3 +1,4 @@
+import {marketRequests,requestMarket} from '../services/marketParticipation.service.js';
 import { Router } from 'express';
 import {
   getPublicFarmerProfile,
@@ -30,7 +31,7 @@ const router = Router();
 
 // 1. Authenticated Farmer operations (Must be defined BEFORE /:id to avoid route collision!)
 router.get('/profile', authenticateToken, requireRole(['farmer']), getMyFarmerProfile);
-router.patch('/profile', authenticateToken, requireRole(['farmer']), csrfProtection, updateMyFarmerProfile);
+router.patch('/profile', authenticateToken, requireApprovedFarmer, csrfProtection, updateMyFarmerProfile);
 router.get('/reports', authenticateToken, requireRole(['farmer']), getFarmerReports);
 router.get('/insights', authenticateToken, requireRole(['farmer']), getFarmerReports); // SRS alias
 router.get('/analytics', authenticateToken, requireRole(['farmer']), getFarmerReports); // Analytics alias
@@ -41,6 +42,10 @@ router.put('/onboarding', authenticateToken, requireRole(['farmer']), csrfProtec
 router.post('/onboarding/submit', authenticateToken, requireRole(['farmer']), csrfProtection, submitFarmerOnboarding);
 
 
+
+const participationAction = fn => async (req,res,next) => {try {res.json({data:await fn(req)})} catch(e){next(e)}};
+router.get('/market-requests', authenticateToken, requireApprovedFarmer, participationAction(r=>marketRequests(r.farmerProfile.id)));
+router.post('/market-requests', authenticateToken, requireApprovedFarmer, csrfProtection, participationAction(r=>requestMarket(r.farmerProfile.id,r.body.marketId)));
 
 // Product CRUD (Requires Approved Farmer)
 router.get('/products', authenticateToken, requireApprovedFarmer, listFarmerProducts);

@@ -12,6 +12,7 @@ export function ScrollChoreography({children}:{children:ReactNode}) {
   const root=useRef<HTMLDivElement>(null);
   const {pathname}=useLocation();
   useEffect(()=>{
+    if (/^\/(farmer|admin|customer)(\/|$)/.test(pathname)) return;
     const media=gsap.matchMedia();
     media.add('(prefers-reduced-motion: no-preference)',()=>{
       const host=root.current;

@@ -20,7 +20,6 @@ import {
   getAvailableCities,
   getAvailableDays,
   formatMarketDay,
-  demoLocation,
 } from "../data/visitor";
 import type { Locale } from "../data/visitor";
 import { en, ur } from "../data/messages";
@@ -95,10 +94,6 @@ export function LocationModal() {
     setSelectedDay(days[0] ?? "");
   }
 
-  function handleDemo() {
-    updateVisitor({locale:selectedLocale,country:demoLocation.country,city:demoLocation.city,day:demoLocation.days[0],seen:true});
-    closeModal();
-  }
 
   function handleApply() {
     updateVisitor({
@@ -370,13 +365,6 @@ export function LocationModal() {
             </button>
 
             <div className="primary-actions">
-              <button
-                type="button"
-                className="demo-switch-btn"
-                onClick={handleDemo}
-              >
-                {t("demo")}
-              </button>
               <button type="button" className="apply-btn" disabled={!selectedCountry} onClick={handleApply}>
                 <span>{t("apply")}</span>
                 <ArrowRight size={16} />

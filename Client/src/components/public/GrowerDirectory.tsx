@@ -101,7 +101,9 @@ export function GrowerDirectory({
   const [sort, setSort] = useState<Sort>("rating");
 
   const attends = (f: Farmer, id: string) => f.marketId === id || (f.marketIds ?? []).includes(id);
-  const approved = farmers.filter((f) => f.state === "Approved");
+  const approved = farmers.filter(
+    (f) => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"
+  );
   const routesFor = useMemo(() => {
     const map = new Map<string, Route[]>();
     for (const r of pulse?.routes ?? []) map.set(r.grower, [...(map.get(r.grower) ?? []), r]);
@@ -198,11 +200,11 @@ export function GrowerDirectory({
                 key={f.id}
                 className="gd-card"
                 layout={!reduce}
-                initial={reduce ? false : { clipPath: "inset(100% 0% 0% 0%)", y: 24 }}
-                whileInView={{ clipPath: "inset(0% 0% 0% 0%)", y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
+                initial={reduce ? false : { opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.05 }}
                 exit={{ opacity: 0, scale: reduce ? 1 : 0.96 }}
-                transition={{ duration: reduce ? 0 : 0.8, delay: reduce ? 0 : (i % 3) * 0.08, ease: EASE.riseCurve }}
+                transition={{ duration: reduce ? 0 : 0.4, delay: reduce ? 0 : (i % 6) * 0.04 }}
               >
                 <div className="gd-map">
                   {routes.length ? (

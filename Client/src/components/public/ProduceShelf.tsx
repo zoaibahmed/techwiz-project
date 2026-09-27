@@ -78,7 +78,7 @@ function ShelfCard({ p, farmer, market, index }: { p: Product; farmer?: Farmer; 
         </div>
         <div className="ps-foot">
           <span className="ps-price">
-            <strong>{money(p.price)}</strong> <small>/ {p.unit}</small>
+            <strong>{money(p.price, p.currency)}</strong> <small>/ {p.unit}</small>
           </span>
           <motion.button
             className="ps-add"
@@ -129,17 +129,8 @@ export function ProduceShelf({
   const active = [filters.q, filters.category, filters.farmer, filters.market, filters.available ? "1" : ""].filter(Boolean).length;
   return (
     <section className="ps" id="harvest-filters" aria-label="Produce">
+      <p className="ps-photo-note">Choose your variety, farmer and pickup day. Stock photography is illustrative; listing details describe the produce offered.</p>
       <div className="ps-bar">
-        <div className="ps-cats" role="group" aria-label="Category">
-          {[{ name: "", count: allCount }, ...categories].map((c) => (
-            <button key={c.name || "all"} aria-pressed={filters.category === c.name} onClick={() => onChange("category", c.name)}>
-              {filters.category === c.name && <motion.span className="ps-cat-active" layoutId="ps-cat" transition={{ duration: reduce ? 0 : 0.3 }} />}
-              <span>
-                {c.name || "All produce"} <em>{c.count}</em>
-              </span>
-            </button>
-          ))}
-        </div>
         <div className="ps-tools">
           <label className="ps-search">
             <Search size={17} />
@@ -165,6 +156,7 @@ export function ProduceShelf({
           <span className="ps-count" aria-live="polite">
             {products.length} of {allCount}
           </span>
+          <label className="ps-select ps-category-dropdown"><span>Category</span><select aria-label="Filter by category" value={filters.category} onChange={e=>onChange("category",e.target.value)}><option value="">All products ({allCount})</option>{categories.map(c=><option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}</select></label>
           {active > 0 && (
             <button className="ps-reset" onClick={onReset}>
               <X size={14} /> Clear {active}
