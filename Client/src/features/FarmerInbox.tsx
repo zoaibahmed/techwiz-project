@@ -47,6 +47,7 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failCountRef = useRef(0);
 
   // 1. Fetch conversations list
   async function loadConversations(isSilent = false) {
@@ -108,20 +109,40 @@ export function FarmerInboxWorkspace({ f: _f, ownProducts: _ownProducts, ownOrde
     };
   }, [selectedConvoId]);
 
-  // 3. Periodic Background Polling
+  // 3. Periodic Background Polling — exponential backoff on failures, pause when tab hidden
   useEffect(() => {
-    pollingRef.current = setInterval(async () => {
+    let cancelled = false;
+    failCountRef.current = 0;
+
+    async function poll() {
+      if (cancelled) return;
+      if (document.hidden) {
+        // Tab not visible — retry later without counting as failure
+        pollingRef.current = setTimeout(poll, 8000);
+        return;
+      }
       try {
-        loadConversations(true);
-        if (selectedConvoId) {
+        await loadConversations(true);
+        if (selectedConvoId && !cancelled) {
           const freshMsgs = await fetchMessagesApi(selectedConvoId);
-          setMessages(freshMsgs);
+          if (!cancelled) setMessages(freshMsgs);
         }
-      } catch {}
-    }, 4000);
+        failCountRef.current = 0; // reset on success
+      } catch {
+        failCountRef.current = Math.min(failCountRef.current + 1, 5);
+      }
+      if (!cancelled) {
+        // Backoff: 4s, 8s, 16s, 32s, 32s max
+        const delay = Math.min(4000 * Math.pow(2, failCountRef.current - 1), 32000);
+        pollingRef.current = setTimeout(poll, failCountRef.current === 0 ? 4000 : delay);
+      }
+    }
+
+    pollingRef.current = setTimeout(poll, 4000);
 
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      cancelled = true;
+      if (pollingRef.current) clearTimeout(pollingRef.current);
     };
   }, [selectedConvoId, filter, search]);
 

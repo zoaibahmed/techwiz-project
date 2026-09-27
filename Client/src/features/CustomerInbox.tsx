@@ -34,6 +34,7 @@ export function CustomerInboxWorkspace() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failCountRef = useRef(0);
 
   async function loadConversations(isSilent = false) {
     if (!isSilent) setLoading(true);
@@ -90,19 +91,40 @@ export function CustomerInboxWorkspace() {
     };
   }, [selectedConvoId]);
 
+  // Polling — exponential backoff on failures, pause when tab hidden
   useEffect(() => {
-    pollingRef.current = setInterval(async () => {
+    let cancelled = false;
+    failCountRef.current = 0;
+
+    async function poll() {
+      if (cancelled) return;
+      if (document.hidden) {
+        pollingRef.current = setTimeout(poll, 8000);
+        return;
+      }
       try {
-        loadConversations(true);
-        if (selectedConvoId) {
+        await loadConversations(true);
+        if (selectedConvoId && !cancelled) {
           const freshMsgs = await fetchMessagesApi(selectedConvoId);
-          setMessages(freshMsgs);
+          if (!cancelled) setMessages(freshMsgs);
         }
-      } catch {}
-    }, 4000);
+        failCountRef.current = 0;
+      } catch {
+        failCountRef.current = Math.min(failCountRef.current + 1, 5);
+      }
+      if (!cancelled) {
+        const delay = failCountRef.current === 0
+          ? 4000
+          : Math.min(4000 * Math.pow(2, failCountRef.current - 1), 32000);
+        pollingRef.current = setTimeout(poll, delay);
+      }
+    }
+
+    pollingRef.current = setTimeout(poll, 4000);
 
     return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+      cancelled = true;
+      if (pollingRef.current) clearTimeout(pollingRef.current);
     };
   }, [selectedConvoId, search]);
 
