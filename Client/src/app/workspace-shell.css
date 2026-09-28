@@ -1,16 +1,25 @@
 /* A stable desktop shell: only the workspace content and long navigation scroll. */
 @media(min-width:1001px){
-  .header.workspace-header{height:72px;min-height:72px;box-sizing:border-box;padding-top:0;padding-bottom:0;position:relative}
-  .workspace{height:calc(100dvh - 72px);min-height:0!important;overflow:hidden;grid-template-columns:228px minmax(0,1fr)!important}
-  .workspace>.sidebar{position:relative!important;top:0!important;height:100%;max-height:none;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;padding:22px 14px 0;overflow:hidden}
-  .workspace>.sidebar nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:16px;scrollbar-width:thin}
-  .workspace>.sidebar nav a{min-height:42px;padding:11px 13px;font-size:13px;margin-bottom:5px;border-radius:6px}
-  .workspace>.sidebar .sidebar-label{margin:0 12px 20px;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#b2c5b9}
-  .workspace>.sidebar .sidebar-note{position:static;margin:0;padding:18px 10px;flex:none;border-top:1px solid #ffffff24}
-  .sidebar-account-label{display:block;font-size:10px;color:#b5c7bd;margin-bottom:12px}
-  .workspace>.sidebar .sidebar-note button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 0;color:#f7f8ed;font-size:13px}
-  .workspace>.workspace-main{height:100%;min-height:0;overflow:auto;overscroll-behavior:contain;min-width:0}
-  .workspace .workspace-top{position:sticky;top:0;z-index:25;min-height:58px;padding:9px 30px;box-sizing:border-box}
+  .header.workspace-header{height:68px;min-height:68px;box-sizing:border-box;padding-top:0;padding-bottom:0;position:relative}
+  .workspace{height:calc(100vh - 68px);min-height:0!important;overflow:hidden;grid-template-columns:216px minmax(0,1fr)!important}
+  .workspace>.sidebar{position:relative!important;top:0!important;height:100%;max-height:100%;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;padding:14px 10px 10px!important;overflow:hidden;background:#142d22}
+  .workspace-admin .sidebar{background:#0f2720!important}
+  .workspace>.sidebar .sidebar-label{margin:0 8px 10px!important;padding:0!important;font-size:10px!important;font-weight:700!important;text-transform:uppercase;letter-spacing:.1em;color:#9bb5a4!important}
+  .workspace>.sidebar nav{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-bottom:8px;padding-right:3px;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent}
+  .workspace>.sidebar nav::-webkit-scrollbar{width:4px}
+  .workspace>.sidebar nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:4px}
+  .workspace>.sidebar nav::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.35)}
+  .workspace>.sidebar nav a{min-height:33px!important;height:33px!important;padding:0 10px!important;font-size:12.5px!important;margin:0 0 2px!important;border-radius:6px!important;display:flex!important;align-items:center!important;gap:9px!important;color:#d8e5dc!important;text-decoration:none!important;border:1px solid transparent!important;transition:background .12s ease,color .12s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .workspace>.sidebar nav a svg{width:15px!important;height:15px!important;flex:none!important;opacity:.82!important}
+  .workspace>.sidebar nav a:hover:not(.active){background:rgba(255,255,255,0.08)!important;color:#fff!important}
+  .workspace>.sidebar nav a.active{background:#fff!important;color:#143525!important;font-weight:600!important;box-shadow:0 1px 4px rgba(0,0,0,0.12)!important}
+  .workspace>.sidebar nav a.active svg{opacity:1!important;color:#143525!important}
+  .workspace>.sidebar .sidebar-note{position:static;margin:0;margin-top:auto!important;padding:10px 8px 4px!important;flex:none;border-top:1px solid rgba(255,255,255,0.14)!important;font-family:inherit!important}
+  .sidebar-account-label{display:block;font-size:9.5px!important;color:#92ab9b!important;margin-bottom:6px!important;text-transform:uppercase;letter-spacing:.06em}
+  .workspace>.sidebar .sidebar-note button{display:flex;align-items:center;gap:8px;width:100%;padding:4px 0;color:#f0f4ec;font-size:12px;background:none;border:0;cursor:pointer;opacity:.88}
+  .workspace>.sidebar .sidebar-note button:hover{opacity:1;text-decoration:underline}
+  .workspace>.workspace-main{height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;min-width:0;scrollbar-width:thin}
+  .workspace .workspace-top{position:sticky;top:0;z-index:25;min-height:54px;padding:8px 24px;box-sizing:border-box;background:#ffffff;border-bottom:1px solid #d8dfd1}
 }
 
 @media(max-width:1000px){.sidebar-account-label{display:none}}
@@ -295,89 +304,312 @@
   text-decoration: none;
 }
 
-/* --- Global Platform Announcements & Notices Banner --- */
-.workspace-notices {
-  margin: 16px 24px;
-  padding: 14px 18px;
-  background: #fcf9ef;
-  border: 1px solid #dfd8ba;
-  border-radius: 10px;
+/* --- Announcement Icon in Navbar & Workspace Top (Strictly NO Gradients) --- */
+.announcement-nav-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #c8d4c3;
+  color: #173827;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  flex: none;
 }
-.notices-header {
+.announcement-nav-btn:hover {
+  background: #edf3e7;
+  border-color: #244d37;
+  color: #143525;
+}
+.announcement-nav-icon {
+  width: 17px;
+  height: 17px;
+  color: inherit;
+  transition: transform 0.15s ease;
+}
+
+/* Pulsing / Blinking Beacon Dot when there are active announcements */
+.announcement-nav-btn.has-active .announcement-nav-beacon {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626; /* Solid bright crimson alert, NO GRADIENTS */
+  border: 1.5px solid #ffffff;
+  animation: beacon-blink 1.4s ease-in-out infinite, beacon-ring 2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+}
+
+/* When there are urgent announcements, also give the icon a gentle attractive tilt */
+.announcement-nav-btn.has-urgent {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.announcement-nav-btn.has-urgent .announcement-nav-icon {
+  animation: announcement-gentle-wiggle 3.2s ease-in-out infinite;
+}
+
+@keyframes beacon-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes beacon-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+@keyframes announcement-gentle-wiggle {
+  0%, 82%, 100% { transform: rotate(0deg); }
+  86% { transform: rotate(-9deg); }
+  90% { transform: rotate(9deg); }
+  94% { transform: rotate(-5deg); }
+}
+
+/* --- Announcements Pop-up Modal --- */
+.announcements-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 28, 19, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  box-sizing: border-box;
+  animation: modal-fade-in 0.2s ease;
+}
+
+.announcements-modal {
+  background: #ffffff;
+  border: 1px solid #c8d4c3;
+  border-radius: 12px;
+  max-width: 580px;
+  width: 100%;
+  max-height: min(85vh, 640px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(10, 26, 17, 0.26);
+  overflow: hidden;
+  animation: modal-slide-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-slide-in {
+  from { transform: translateY(12px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.announcements-modal-header {
+  padding: 16px 20px;
+  background: #eef3e8;
+  border-bottom: 1px solid #d2decc;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  flex: none;
 }
-.notices-title-badge {
+
+.announcements-modal-title-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font: 600 13px 'Public Sans', sans-serif;
-  color: #5c4e20;
+  gap: 12px;
 }
-.notices-all-link {
-  font-size: 12px;
-  font-weight: 600;
-  color: #244934;
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.notices-list {
-  display: grid;
-  gap: 7px;
-}
-.notice-item {
-  border: 1px solid #e5dfc9;
+
+.announcements-modal-icon-badge {
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
-  background: #ffffff;
-  padding: 10px 14px;
+  background: #173827;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  flex: none;
 }
-.notice-item summary {
+
+.announcements-modal-header h2 {
+  font: 600 17px/1.3 'Public Sans', sans-serif;
+  color: #173827;
+  margin: 0;
+}
+
+.announcements-modal-subtitle {
+  font-size: 11.5px;
+  color: #55695a;
+  margin: 2px 0 0;
+}
+
+.announcements-modal-close {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  color: #4b6251;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+.announcements-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #173827;
+}
+
+.announcements-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fffdfa;
+}
+
+.announcements-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.announcement-modal-card {
+  background: #ffffff;
+  border: 1px solid #d4decb;
+  border-radius: 8px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.announcement-modal-card.is-urgent {
+  border-color: #f87171;
+  border-left: 4px solid #b91c1c;
+  background: #fffcfc;
+}
+
+.announcement-modal-card-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #213a28;
-  list-style: none;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.notice-item summary::-webkit-details-marker {
-  display: none;
-}
-.notice-badge {
+
+.announcement-priority-chip {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 7px;
   border-radius: 4px;
+}
+.announcement-priority-chip.urgent {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.announcement-priority-chip.normal {
+  background: #e2ecd9;
+  color: #1d462f;
+}
+
+.announcement-modal-time {
+  font-size: 11px;
+  color: #728473;
+}
+
+.announcement-modal-card-title {
+  font: 600 15px/1.35 'Public Sans', sans-serif;
+  color: #163625;
+  margin: 0 0 6px;
+}
+
+.announcement-modal-card-body {
+  font: 13.5px/1.6 'Public Sans', sans-serif;
+  color: #3e5042;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.announcements-modal-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #5e7262;
+}
+
+.announcements-empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #edf3e8;
+  color: #244d37;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+}
+
+.announcements-modal-empty h3 {
+  font: 600 17px 'Public Sans', sans-serif;
+  color: #173827;
+  margin: 0 0 4px;
+}
+
+.announcements-modal-empty p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #637766;
+  margin: 0;
+}
+
+.announcements-modal-footer {
+  padding: 12px 20px;
+  background: #f4f7f0;
+  border-top: 1px solid #d7e0cf;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex: none;
 }
-.notice-badge.urgent {
-  background: #fae6e4;
-  color: #9c2e1f;
+
+.announcements-footer-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #204a32;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.notice-badge.normal {
-  background: #e8efe2;
-  color: #294c36;
-}
-.notice-item time {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 400;
-  color: #72816f;
-}
-.notice-item p {
-  margin: 9px 0 3px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #425244;
-  white-space: pre-wrap;
+.announcements-footer-link:hover {
+  text-decoration: underline;
 }
 
 /* --- Mobile View Dashboards (< 1024px) --- */
@@ -526,11 +758,6 @@
   .workspace textarea {
     max-width: 100% !important;
     box-sizing: border-box !important;
-  }
-
-  .workspace-notices {
-    margin: 12px 12px !important;
-    padding: 12px 14px !important;
   }
 }
 

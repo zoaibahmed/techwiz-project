@@ -123,6 +123,7 @@ export function Layout() {
   const drawerRef = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState(false);
   const [assistant, setAssistant] = useState(false);
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const role: Role | null =
     pathname.startsWith("/farmer/") || pathname === "/farmer"
@@ -135,6 +136,24 @@ export function Layout() {
   const workspace = role === "farmer" || role === "admin";
   const restrictedFarmer = role === "farmer" && s.farmers.find(f=>f.id===s.farmerId)?.state !== "Approved";
   const roleNav = role ? (restrictedFarmer ? nav.farmer.filter(([path])=>["/farmer","/farmer/support"].includes(path)) : nav[role]) : [];
+
+  const publishedAnnouncements = s.announcements.filter((a) => a.published);
+  const hasUrgent = publishedAnnouncements.some((a) => a.priority === "urgent");
+
+  // Keyboard shortcut (Escape) to close announcements modal and lock background scroll
+  useEffect(() => {
+    if (!announcementsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAnnouncementsOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [announcementsOpen]);
 
   // Unread message badge for the signed-in workspace.
   useEffect(() => {
@@ -201,6 +220,18 @@ export function Layout() {
           <NavLink to="/help">{t('navHelp')}</NavLink>
         </nav>
         <div className="header-actions">
+          <button
+            type="button"
+            className={`announcement-nav-btn ${publishedAnnouncements.length > 0 ? "has-active" : ""} ${hasUrgent ? "has-urgent" : ""}`}
+            onClick={() => setAnnouncementsOpen(true)}
+            aria-label={`Market announcements (${publishedAnnouncements.length} available)`}
+            title={publishedAnnouncements.length > 0 ? `${publishedAnnouncements.length} active market notice${publishedAnnouncements.length > 1 ? "s" : ""}` : "Market notices"}
+          >
+            <Megaphone size={17} className="announcement-nav-icon" />
+            {publishedAnnouncements.length > 0 && (
+              <span className="announcement-nav-beacon" aria-hidden="true" />
+            )}
+          </button>
           <button
             type="button"
             className="header-location-pill"
@@ -525,10 +556,11 @@ export function Layout() {
               {roleNav.map(([path, label]) => {
                 const isMessages = path.endsWith('/messages');
                 const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
+                const IconComponent = getNavIcon(path);
                 return (
                   <NavLink key={path} end to={path}>
-                    {path.endsWith('/markets')?<MapPin size={17}/>:path.endsWith('/farmers')||path.endsWith('/customers')?<UserRound size={17}/>:path.endsWith('/support')||path.endsWith('/messages')?<MessageSquare size={17}/>:path.endsWith('/notifications')?<Bell size={17}/>:path.endsWith('/reports')||path.endsWith('/insights')?<ClipboardList size={17}/>:<LayoutDashboard size={17}/>}
-                    {label}{badge}
+                    <IconComponent size={15} />
+                    <span>{label}{badge}</span>
                   </NavLink>
                 );
               })}
@@ -539,7 +571,7 @@ export function Layout() {
                 className="text-button"
                 onClick={handleSignOut}
               >
-                <LogOut size={17}/> Sign out
+                <LogOut size={15}/> Sign out
               </button>
             </div>
           </aside>
@@ -564,6 +596,18 @@ export function Layout() {
                     : "Gather & Grow operations"}
               </span>
               <div className="actions">
+                <button
+                  type="button"
+                  className={`announcement-nav-btn ${publishedAnnouncements.length > 0 ? "has-active" : ""} ${hasUrgent ? "has-urgent" : ""}`}
+                  onClick={() => setAnnouncementsOpen(true)}
+                  aria-label={`Market announcements (${publishedAnnouncements.length} available)`}
+                  title={publishedAnnouncements.length > 0 ? `${publishedAnnouncements.length} active market notice${publishedAnnouncements.length > 1 ? "s" : ""}` : "Market notices"}
+                >
+                  <Megaphone size={17} className="announcement-nav-icon" />
+                  {publishedAnnouncements.length > 0 && (
+                    <span className="announcement-nav-beacon" aria-hidden="true" />
+                  )}
+                </button>
                 <Link
                   className="icon-button"
                   aria-label="Notifications"
@@ -592,39 +636,6 @@ export function Layout() {
                 </NavLink>
               ))}
             </nav>
-          )}
-          {/* Active Platform Announcements / Bulletins Banner */}
-          {s.announcements.some((a) => a.published) && (
-            <section className="workspace-notices" aria-label="Market announcements">
-              <div className="notices-header">
-                <div className="notices-title-badge">
-                  <Megaphone size={15} />
-                  <span>Market Bulletins & Notices</span>
-                </div>
-                <Link
-                  to={role ? `/${role}/notifications` : "/help"}
-                  className="notices-all-link"
-                >
-                  View all ({s.announcements.filter((a) => a.published).length}) <ArrowUpRight size={13} />
-                </Link>
-              </div>
-              <div className="notices-list">
-                {s.announcements
-                  .filter((a) => a.published)
-                  .map((a) => (
-                    <details key={a.id} className="notice-item" open={a.priority === "urgent"}>
-                      <summary>
-                        <span className={`notice-badge ${a.priority || "normal"}`}>
-                          {a.priority === "urgent" ? "Urgent" : a.type || "Notice"}
-                        </span>
-                        <strong>{a.title}</strong>
-                        {a.at && <time>{date(a.at)}</time>}
-                      </summary>
-                      <p>{a.body}</p>
-                    </details>
-                  ))}
-              </div>
-            </section>
           )}
           <ScrollChoreography><CoverageBoundary><Outlet /></CoverageBoundary></ScrollChoreography>
         </main>
@@ -661,6 +672,92 @@ export function Layout() {
           </p>
         </footer>
       )}
+      {/* Announcements Pop-up Modal */}
+      {announcementsOpen && (
+        <div
+          className="announcements-modal-backdrop"
+          onClick={() => setAnnouncementsOpen(false)}
+        >
+          <div
+            className="announcements-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="announcements-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="announcements-modal-header">
+              <div className="announcements-modal-title-wrap">
+                <div className="announcements-modal-icon-badge">
+                  <Megaphone size={18} />
+                </div>
+                <div>
+                  <h2 id="announcements-modal-title">Market Bulletins & Notices</h2>
+                  <p className="announcements-modal-subtitle">
+                    Official updates from Gather & Grow operations
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="announcements-modal-close"
+                onClick={() => setAnnouncementsOpen(false)}
+                aria-label="Close notices"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="announcements-modal-body">
+              {publishedAnnouncements.length > 0 ? (
+                <div className="announcements-modal-list">
+                  {publishedAnnouncements.map((a) => (
+                    <article
+                      key={a.id}
+                      className={`announcement-modal-card ${a.priority === "urgent" ? "is-urgent" : ""}`}
+                    >
+                      <div className="announcement-modal-card-top">
+                        <span className={`announcement-priority-chip ${a.priority || "normal"}`}>
+                          {a.priority === "urgent" ? "Urgent Notice" : a.type || "Market Advisory"}
+                        </span>
+                        {a.at && <time className="announcement-modal-time">{date(a.at)}</time>}
+                      </div>
+                      <h3 className="announcement-modal-card-title">{a.title}</h3>
+                      <p className="announcement-modal-card-body">{a.body}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="announcements-modal-empty">
+                  <div className="announcements-empty-icon">
+                    <Megaphone size={28} />
+                  </div>
+                  <h3>No active notices</h3>
+                  <p>All clear! There are no active platform announcements or advisories at this time.</p>
+                </div>
+              )}
+            </div>
+
+            <footer className="announcements-modal-footer">
+              <Link
+                to={role ? `/${role}/notifications` : "/help"}
+                className="announcements-footer-link"
+                onClick={() => setAnnouncementsOpen(false)}
+              >
+                <span>View full notification history</span>
+                <ArrowUpRight size={14} />
+              </Link>
+              <button
+                type="button"
+                className="button secondary compact"
+                onClick={() => setAnnouncementsOpen(false)}
+              >
+                Dismiss
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {!/^\/(admin|farmer|customer|login|register)(\/|$)/.test(pathname) && <PublicGuide/>}
       {assistant && <Copilot onClose={() => setAssistant(false)} />}
     </CompanionContext.Provider>

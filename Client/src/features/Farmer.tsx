@@ -20,7 +20,6 @@ import {
   DollarSign,
   Printer,
   Sliders,
-  Megaphone,
 } from "lucide-react";
 import {
   useMarket,
@@ -161,37 +160,6 @@ function FarmerOverviewCockpit({
         </div>
       </div>
 
-      {/* Active Market Bulletins / Platform Announcements */}
-      {s.announcements.some((a) => a.published) && (
-        <div className="farmer-bulletin-strip" style={{ margin: "16px 0", padding: "16px 18px", background: "var(--fw-surface)", border: "1px solid var(--fw-border)", borderRadius: "var(--fw-radius, 10px)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--fw-forest)" }}>
-              <Megaphone size={16} />
-              <strong style={{ fontSize: "13.5px" }}>Market Bulletins & Field Notices</strong>
-            </div>
-            <Link to="/farmer/notifications" style={{ fontSize: "12px", color: "var(--fw-forest)", fontWeight: 600, textDecoration: "underline" }}>
-              View all ({s.announcements.filter((a) => a.published).length}) →
-            </Link>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px" }}>
-            {s.announcements
-              .filter((a) => a.published)
-              .slice(0, 2)
-              .map((a) => (
-                <div key={a.id} style={{ background: "#ffffff", border: "1px solid var(--fw-border)", borderRadius: "8px", padding: "12px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                    <span className={`fw-status-chip ${a.priority === "urgent" ? "placed" : "accepted"}`}>
-                      {a.priority === "urgent" ? "Urgent update" : a.type || "Market Notice"}
-                    </span>
-                    {a.at && <time style={{ fontSize: "11px", color: "var(--fw-muted)" }}>{date(a.at)}</time>}
-                  </div>
-                  <h3 style={{ margin: "4px 0 6px", fontSize: "14px", fontWeight: 600, color: "var(--fw-ink)" }}>{a.title}</h3>
-                  <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.55", color: "var(--fw-muted)" }}>{a.body}</p>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
 
       {next && (
         <div className="fw-next-market-card">
