@@ -1,5 +1,7 @@
 # Gather & Grow — project reference draft
 
+> **Note:** For the exhaustive 28-chapter master website documentation, see [COMPLETE_WEBSITE_DOCUMENTATION.md](../COMPLETE_WEBSITE_DOCUMENTATION.md) and the formatted Word document [Gather-and-Grow-Complete-Website-Documentation.docx](./Gather-and-Grow-Complete-Website-Documentation.docx).
+
 This is an AI-assisted technical reference based on the current implementation. It is not a claim of student-only authorship or a final competition submission. The project owner should check it against the official SRS, add their own observations and screenshots, and follow the competition documentation rules.
 
 ## Project purpose
