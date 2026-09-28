@@ -8,6 +8,8 @@ import {
   ShoppingBasket,
   Check,
   MessageSquare,
+  Megaphone,
+  Bell,
 } from "lucide-react";
 import { CustomerChatModal } from "../components/CustomerChatModal";
 import {
@@ -977,65 +979,121 @@ export function Notifications() {
   const notices = s.notices.filter(
     (n) => n.role === s.role && (!unread || !n.read),
   );
+  const announcements = s.announcements.filter((a) => a.published);
+
   return (
     <div className="page-pad">
       <Heading
-        title="A note from the market."
-        intro="Updates that help you plan your next visit."
+        title="Market Bulletins & Notifications"
+        intro="Platform announcements, market day changes, and your personal activity alerts."
       >
         <button
           className="button secondary"
           onClick={() => act({ type: "read", id: "all" })}
         >
-          Mark all as read
+          Mark alerts as read
         </button>
       </Heading>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={unread}
-          onChange={(e) => set(e.target.checked)}
-        />
-        Unread only
-      </label>
-      <div className="record-list">
-        {notices.map((n) => (
-          <article
-            className={`notification ${n.read ? "" : "unread"}`}
-            key={n.id}
-          >
-            <div>
-              <span className="small muted">
-                {n.read ? "Read" : "New"}{n.at ? ` · ${date(n.at)}` : ""}
-              </span>
-              <h3>
-                <Link
-                  to={n.href}
+
+      {/* 1. Platform Announcements / Bulletins */}
+      <section style={{ marginBottom: "32px" }}>
+        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--forest-900)", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <Megaphone size={18} /> Official Market Bulletins ({announcements.length})
+        </h2>
+        {announcements.length ? (
+          <div className="record-list" style={{ gap: "10px" }}>
+            {announcements.map((a) => (
+              <article
+                key={a.id}
+                className="notification"
+                style={{
+                  borderLeft: `4px solid ${a.priority === "urgent" ? "#c93b2b" : "#204b34"}`,
+                  background: "#fffdf9",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        padding: "2px 7px",
+                        borderRadius: "4px",
+                        background: a.priority === "urgent" ? "#fae6e4" : "#e8efe2",
+                        color: a.priority === "urgent" ? "#9c2e1f" : "#294c36",
+                      }}
+                    >
+                      {a.priority === "urgent" ? "Urgent Broadcast" : a.type || "Market Notice"}
+                    </span>
+                    {a.at && <span className="small muted">{date(a.at)}</span>}
+                  </div>
+                  <h3 style={{ margin: "4px 0 6px", fontSize: "16px", fontWeight: 600 }}>{a.title}</h3>
+                  <p style={{ margin: 0, fontSize: "13.5px", lineHeight: "1.6", color: "var(--ink)" }}>{a.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted" style={{ fontSize: "13px" }}>No platform bulletins currently active.</p>
+        )}
+      </section>
+
+      {/* 2. Personal Activity Alerts */}
+      <section>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+          <h2 style={{ fontSize: "17px", fontWeight: 600, color: "var(--forest-900)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            <Bell size={18} /> Your Activity Alerts ({notices.length})
+          </h2>
+          <label className="checkbox" style={{ margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={unread}
+              onChange={(e) => set(e.target.checked)}
+            />
+            Unread only
+          </label>
+        </div>
+        <div className="record-list">
+          {notices.map((n) => (
+            <article
+              className={`notification ${n.read ? "" : "unread"}`}
+              key={n.id}
+            >
+              <div>
+                <span className="small muted">
+                  {n.read ? "Read" : "New"}{n.at ? ` · ${date(n.at)}` : ""}
+                </span>
+                <h3>
+                  <Link
+                    to={n.href}
+                    onClick={() => act({ type: "read", id: n.id })}
+                  >
+                    {n.title}
+                  </Link>
+                </h3>
+                <p>{n.text}</p>
+              </div>
+              {!n.read && (
+                <button
+                  className="button quiet"
                   onClick={() => act({ type: "read", id: n.id })}
                 >
-                  {n.title}
-                </Link>
-              </h3>
-              <p>{n.text}</p>
-            </div>
-            {!n.read && (
-              <button
-                className="button quiet"
-                onClick={() => act({ type: "read", id: n.id })}
-              >
-                Mark read
-              </button>
-            )}
-          </article>
-        ))}
-      </div>
-      {!notices.length && (
-        <Empty
-          title="You’re all caught up."
-          href={`/${s.role}`}
-          action="Back to workspace"
-        />
-      )}
+                  Mark read
+                </button>
+              )}
+            </article>
+          ))}
+        </div>
+        {!notices.length && (
+          <Empty
+            title="You’re all caught up on personal alerts."
+            href={`/${s.role}`}
+            action="Back to workspace"
+          />
+        )}
+      </section>
     </div>
   );
 }

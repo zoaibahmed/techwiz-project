@@ -98,3 +98,7 @@ export async function sendContactFormEmail(data) {
   await transporter.sendMail({from:env.EMAIL_FROM,to:data.email,subject:'We received your message — Gather & Grow',text:`Hello ${data.name},\n\nThank you for contacting Gather & Grow. Our team has received your message and will reply as soon as possible.\n\nSubject: ${data.subject}\n\nGather & Grow support`});
   return {autoReplySent:true};
 }
+export async function sendRegistrationOtpEmail(to,code,name){
+ const transporter=getTransporter();
+ await transporter.sendMail({from:env.EMAIL_FROM,to,subject:'Verify your Gather & Grow account',text:`Hello ${name},\n\nYour email verification code is ${code}. It expires in 10 minutes.\n\nIf you did not request an account, ignore this email.`});
+}

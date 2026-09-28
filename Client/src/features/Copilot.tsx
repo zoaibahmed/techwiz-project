@@ -1,3 +1,5 @@
+import {ChatText} from '../components/ChatText';
+import '../components/assistant-experience.css';
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { X, Sparkles, ArrowUp, BookOpen, CheckCircle, RotateCcw, MessageSquare } from "lucide-react";
@@ -28,8 +30,8 @@ export function Copilot({ onClose }: { onClose: () => void }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const role = s.role ?? "customer";
-  const storageKeyReplies = `ml_copilot_${role}_replies`;
-  const storageKeyHistory = `ml_copilot_${role}_history`;
+  const storageKeyReplies = `ml_copilot_${s.session?.id || "anonymous"}_${role}_replies`;
+  const storageKeyHistory = `ml_copilot_${s.session?.id || "anonymous"}_${role}_history`;
 
   const [question, setQuestion] = useState("");
   const [replies, setReplies] = useState<Reply[]>(() => {
@@ -49,7 +51,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
     }
   });
   const [busy, setBusy] = useState(false);
-  const [off, setOff] = useState(false);
+  const off = false;
 
   useEffect(() => {
     ref.current?.showModal();
@@ -98,17 +100,17 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           "Check customer messages and inquiries",
           "How is my business performing this week?",
           "Compare my tomato prices and suggest how I can improve sales",
-          "Create four products: Heirloom Tomatoes (250/kg), Organic Spinach (120/bunch), Fresh Mint (50/bunch), Strawberries (400/box)",
+          "What can you do in my workspace?",
         ]
       : role === "admin"
         ? [
             "Which farmers are waiting for approval?",
-            "Platform health overview",
+            "Summarise platform activity",
             "Draft a Saturday morning reminder announcement",
           ]
         : [
             "What tomatoes are available this Saturday?",
-            "What can I cook with fresh Lahore tomatoes and vegetables?",
+            "What can I cook with available seasonal vegetables?",
             "Help me plan my market morning visit",
           ];
 
@@ -330,7 +332,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
       <header>
         <div>
           <span className="eyebrow">
-            MarketLink Operating Intelligence
+            Gather & Grow · Workspace assistant
           </span>
           <h2 id="copilot-title">{title}</h2>
         </div>
@@ -357,18 +359,11 @@ export function Copilot({ onClose }: { onClose: () => void }) {
 
       <div className="copilot-context">
         <span>Workspace: {role === "farmer" ? "Farm Workbench" : role === "admin" ? "Command Centre" : "Shopper"}</span>
-        <span>Route: {loc.pathname}</span>
+        <span>Changes need your confirmation</span>
       </div>
 
       <div className="copilot-body">
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={off}
-            onChange={(e) => setOff(e.target.checked)}
-          />
-          <span>Simulate Copilot offline</span>
-        </label>
+
 
         {off ? (
           <div className="notice" role="status">
@@ -383,7 +378,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <h3>A little help with your market day?</h3>
+            <h3>What needs your attention?</h3>
             <div className="suggestions">
               {prompts.map((p) => (
                 <button disabled={busy} key={p} onClick={() => send(p)}>
@@ -396,7 +391,7 @@ export function Copilot({ onClose }: { onClose: () => void }) {
             {replies.map((r, i) => (
               <article className="conversation" key={i}>
                 <p className="question">{r.question}</p>
-                <p style={{ whiteSpace: "pre-line" }}>{r.text}</p>
+                <ChatText text={r.text}/>
 
                 <div className="source-list">
                   {r.sources.map((source) => (
@@ -530,15 +525,16 @@ export function Copilot({ onClose }: { onClose: () => void }) {
           rows={2}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder={`Ask ${title} about products, stock, pricing or operations…`}
+          placeholder={`Ask ${title}…`}
           disabled={busy || off}
         />
         <button
           className="button"
+          aria-label="Send message"
           type="submit"
           disabled={!question.trim() || busy || off}
         >
-          Send
+          <ArrowUp size={20}/>
         </button>
       </form>
     </dialog>

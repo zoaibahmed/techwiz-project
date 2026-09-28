@@ -1,3 +1,4 @@
+import publicGuideRouter from './publicGuide.routes.js';
 import supportRouter from './support.routes.js';
 import locationRouter from './location.routes.js';
 import { Router } from 'express';
@@ -29,6 +30,7 @@ apiRouter.use('/health', healthRoutes);
 
 // Version 1 Sub-Router
 const v1Router = Router();
+v1Router.use('/', publicGuideRouter);
 v1Router.use('/', locationRouter);
 v1Router.use('/support', supportRouter);
 v1Router.use('/health', healthRoutes);

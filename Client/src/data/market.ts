@@ -41,6 +41,9 @@ export interface Farmer {
   id: string;
   name: string;
   person: string;
+  countryCode?: string;
+  countryName?: string;
+  city?: string;
   story: string;
   marketId: string;
   state: "Pending" | "Approved" | "Suspended";

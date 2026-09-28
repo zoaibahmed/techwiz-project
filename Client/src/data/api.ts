@@ -142,12 +142,12 @@ export async function registerCustomerApi(data: {
   password: string;
   phone: string;
   address: string;
-}): Promise<UserSession> {
-  const res = await request<any>('/auth/register/customer', {
+}): Promise<RegistrationChallenge> {
+  const res = await request<RegistrationChallenge>('/auth/register/customer', {
     method: 'POST',
     body: JSON.stringify(data),
   });
-  return (res?.user || res) as UserSession;
+  return res;
 }
 
 export async function registerFarmerApi(data: {
@@ -159,12 +159,12 @@ export async function registerFarmerApi(data: {
   businessName: string;
   contactPerson: string;
   bio?: string;
-}): Promise<UserSession> {
-  const res = await request<any>('/auth/register/farmer', {
+}): Promise<RegistrationChallenge> {
+  const res = await request<RegistrationChallenge>('/auth/register/farmer', {
     method: 'POST',
     body: JSON.stringify(data),
   });
-  return (res?.user || res) as UserSession;
+  return res;
 }
 
 export async function fetchMeApi(): Promise<UserSession> {
@@ -967,3 +967,7 @@ export const marketParticipationApi = {
  apply: (marketId:string) => request<MarketJoinRequest[]>('/farmer/market-requests',{method:'POST',body:JSON.stringify({marketId})}),
  decide: (farmerId:string,marketId:string,status:'approved'|'rejected',reason:string) => request<MarketJoinRequest[]>(`/admin/farmers/${farmerId}/market-requests/${marketId}`,{method:'PATCH',body:JSON.stringify({status,reason})}),
 };
+export interface RegistrationChallenge {challengeId:string;email:string;verificationRequired:true}
+export const beginRegistrationApi=(role:'customer'|'farmer',data:Record<string,string>)=>request<RegistrationChallenge>(`/auth/register/${role}`,{method:'POST',body:JSON.stringify(data)});
+export const verifyRegistrationApi=async(challengeId:string,code:string)=>{const result=await request<{user:UserSession}>('/auth/register/verify',{method:'POST',body:JSON.stringify({challengeId,code})});return result.user};
+export const askPublicGuideApi=(message:string,country:string,city:string)=>request<{reply:string;sources:{title:string;href:string;detail:string}[];engine:string;readOnly:true}>('/public-guide',{method:'POST',body:JSON.stringify({message,country,city})});

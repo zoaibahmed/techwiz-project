@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  verifyRegistration,
   registerCustomer,
   registerFarmer,
   logout,
@@ -35,6 +36,7 @@ router.post('/register', (req, res, next) => {
   return registerCustomer(req, res, next);
 });
 
+router.post('/register/verify', verifyRegistration);
 router.post('/register/customer', registerCustomer);
 router.post('/register/farmer', registerFarmer);
 router.post('/login', (req,res)=>res.status(409).json({error:{code:'OTP_REQUIRED',message:'Sign in using email verification.'}}));

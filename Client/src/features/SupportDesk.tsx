@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import './support-inbox.css';
+import { useEffect, useRef, useState } from 'react';
 import { supportApi } from '../data/api';
 import type { SupportTicket, SupportConversationInspect } from '../data/api';
 import { useMarket } from '../components/ui';
@@ -20,12 +21,16 @@ export function SupportDesk() {
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticket, setTicket] = useState<SupportTicket | null>(null);
+  const [status, setStatus] = useState('all');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [chatId, setChatId] = useState('');
   const [chat, setChat] = useState<SupportConversationInspect | null>(null);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inspectEndRef = useRef<HTMLDivElement>(null);
 
   async function refresh() {
     setTickets(await supportApi.list(query));
@@ -34,6 +39,14 @@ export function SupportDesk() {
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [ticket?.messages?.length, ticket?.id]);
+
+  useEffect(() => {
+    inspectEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat?.messages?.length, chat?.id]);
 
   useEffect(() => {
     if (!ticket) return;
@@ -112,10 +125,11 @@ export function SupportDesk() {
         </p>
       )}
 
-      <div className="support-layout">
+      <div className="support-status-tabs" role="group" aria-label="Filter support tickets">{['all','open','closed'].map(value=><button key={value} aria-pressed={status===value} onClick={()=>setStatus(value)}>{value==='all'?'All conversations':value==='open'?'Open':'Closed'} <span>{tickets.filter(t=>value==='all'||t.status===value).length}</span></button>)}</div>
+      <div className={`support-layout ${ticket || creating ? 'thread-selected' : ''}`}>
         <aside aria-label="Support tickets">
-          {tickets.length ? (
-            tickets.map((t) => (
+          {tickets.filter(t=>status==='all'||t.status===status).length ? (
+            tickets.filter(t=>status==='all'||t.status===status).map((t) => (
               <button
                 className={`support-ticket ${ticket?.id === t.id ? 'selected' : ''}`}
                 key={t.id}
@@ -135,11 +149,11 @@ export function SupportDesk() {
               </button>
             ))
           ) : (
-            <p className="no-tickets-hint">No tickets found. Open a ticket to start a conversation.</p>
+            <p className="no-tickets-hint">No conversations in this view.</p>
           )}
         </aside>
 
-        <section className="support-thread">
+        <section className="support-thread">{(ticket||creating)&&<button className="support-back" onClick={()=>{setTicket(null);setCreating(false)}}>← All conversations</button>}
           {creating ? (
             <form
               onSubmit={(e) => {
@@ -213,7 +227,7 @@ export function SupportDesk() {
                     return (
                       <div
                         key={m.id}
-                        className={`support-bubble-row ${isSupport ? 'outgoing' : 'incoming'}`}
+                        className={`support-bubble-row ${(admin ? isSupport : m.senderRole === role) ? 'outgoing' : 'incoming'}`}
                       >
                         <div className="support-bubble-sender-line">
                           <span
@@ -240,6 +254,7 @@ export function SupportDesk() {
                 ) : (
                   <p className="support-no-messages">No messages in this ticket yet.</p>
                 )}
+                <div ref={chatEndRef} />
               </div>
 
               {ticket.status === 'open' ? (
@@ -248,7 +263,8 @@ export function SupportDesk() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     const form = e.currentTarget;
-                    const message = String(new FormData(form).get('message'));
+                    const message = String(new FormData(form).get('message')).trim();
+                    if (!message) return;
                     void run(async () => {
                       setTicket(await supportApi.reply(ticket.id, message));
                       form.reset();
@@ -258,12 +274,19 @@ export function SupportDesk() {
                 >
                   <textarea
                     name="message"
+                    aria-label="Reply to support conversation"
                     required
                     minLength={2}
                     maxLength={4000}
                     rows={2}
-                    placeholder="Type your response here…"
+                    placeholder="Type your response here… (Press Enter to send, Shift+Enter for new line)"
                     className="support-reply-textarea"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        e.currentTarget.form?.requestSubmit();
+                      }
+                    }}
                   />
                   <button className="button support-reply-send-btn" disabled={busy}>
                     <Send size={15} />
@@ -413,6 +436,7 @@ export function SupportDesk() {
                     <p>No messages have been recorded in this conversation.</p>
                   </div>
                 )}
+                <div ref={inspectEndRef} />
               </div>
             </div>
           )}

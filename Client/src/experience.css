@@ -44,6 +44,68 @@
 .customer-command .command-produce .harvest-price small {
   font-size: 9px;
 }
+
+/* Announcements & Bulletins Card in Customer Command */
+.command-announcements-card {
+  margin-bottom: 20px;
+  background: #fbf9ef;
+  border: 1px solid #ded6b8;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.command-bulletins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.command-bulletin-item {
+  background: #ffffff;
+  border: 1px solid #e2dac0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.command-bulletin-item h3 {
+  font: 600 14px 'Public Sans', sans-serif;
+  color: #1e3828;
+  margin: 0;
+}
+.command-bulletin-item p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #4b5c4e;
+  margin: 0;
+}
+.bulletin-header-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bulletin-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.bulletin-tag.urgent {
+  background: #fae6e4;
+  color: #9c2e1f;
+}
+.bulletin-tag.normal {
+  background: #e7efe1;
+  color: #274933;
+}
+.bulletin-header-line time {
+  font-size: 11px;
+  color: #718170;
+}
+
 /* Compact customer operations: isolated from public scene styling. */
 .customer-command.market-studio {
   padding: 22px 24px;
@@ -1077,51 +1139,64 @@
     font-size: 10px;
   }
   .customer-command.market-studio {
-    padding: 17px 14px;
+    padding: 16px 12px;
   }
   .command-title {
-    display: block;
-    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
   }
   .command-title h1 {
-    font-size: 27px;
-    margin: 7px 0 14px;
+    font-size: 24px;
+    line-height: 1.25;
+    margin: 4px 0 6px;
   }
   .command-title > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     justify-content: space-between;
   }
   .command-title label,
   .command-planner {
-    padding: 8px 10px;
-    font-size: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
   }
   .command-summary {
     grid-template-columns: 1fr 1fr;
+    gap: 8px;
     margin-bottom: 14px;
+    background: transparent;
+    border: 0;
   }
   .command-summary > div,
   .command-summary > a {
-    padding: 12px;
-    border-bottom: 1px solid var(--sage-200);
-  }
-  .command-summary > div:nth-child(2) {
-    border-right: 0;
-  }
-  .command-summary > div:nth-child(3),
-  .command-summary > a {
-    border-bottom: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--sage-200);
+    border-radius: 8px;
+    background: #ffffff;
   }
   .command-summary span {
-    font-size: 9px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     margin-bottom: 6px;
   }
   .command-summary strong {
-    font-size: 22px;
-    gap: 10px;
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   .command-summary small {
-    font-size: 8px;
-    max-width: 60px;
+    font-size: 11px;
+    font-weight: 400;
+    color: #617364;
+    max-width: none;
   }
   .command-workspace {
     grid-template-columns: 1fr;
@@ -1143,39 +1218,51 @@
   .command-history {
     order: 4;
   }
+  .command-history-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    border: 1px solid var(--sage-200);
+    border-radius: 8px;
+  }
+  .command-history table {
+    min-width: 460px;
+    width: 100%;
+  }
   .command-updates {
     order: 5;
   }
   .command-map-layout .living-map {
-    height: 260px;
+    height: 220px;
   }
   .command-market-list {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
   .command-market-list button {
-    gap: 6px;
-    padding: 8px 2px;
+    gap: 10px;
+    padding: 10px 12px;
   }
   .command-market-list strong {
-    font-size: 10px;
+    font-size: 13px;
   }
   .command-market-list small {
-    font-size: 8px;
+    font-size: 11.5px;
   }
   .command-produce.studio-harvest {
     grid-template-columns: 1fr;
     padding: 2px 14px;
   }
   .command-produce .harvest-item {
-    grid-template-columns: 65px 1fr;
+    grid-template-columns: 75px 1fr;
     min-height: 92px;
     padding: 10px 0;
   }
   .command-produce .harvest-photo {
-    height: 70px;
+    height: 75px;
   }
   .command-produce .harvest-item > small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .command-produce .harvest-item h3 {
     font-size: 12px;

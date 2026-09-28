@@ -1,9 +1,11 @@
+import './workspace-shell.css';
+import {PublicGuide} from '../components/PublicGuide';
 import { BrandMark } from "../components/BrandMark";
 import { ScrollChoreography } from "../components/ScrollChoreography";
 import { MarketPreloader } from "../components/MarketPreloader";
 import { SmoothScroll } from "../motion/SmoothScroll";
 import { CoverageBoundary } from "../components/CoverageBoundary";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, Navigate, useNavigate } from "react-router-dom";
 import {
   ShoppingBasket,
@@ -22,12 +24,29 @@ import {
   LogOut,
   Globe,
   MessageSquare,
+  Store,
+  Package,
+  Sliders,
+  ShieldAlert,
+  Users,
+  Layers,
+  LifeBuoy,
+  Megaphone,
+  UserCheck,
+  TrendingUp,
+  Settings,
+  HelpCircle,
+  Apple,
+  LogIn,
+  UserPlus,
+  ShieldCheck,
 } from "lucide-react";
 import { useMarket } from "../components/ui";
 import { useVisitor } from "../data/visitor-context";
 import { countryName } from "../data/visitor";
 import { gateway } from "../data/gateway";
 import { fetchUnreadChatCountApi } from "../data/api";
+import { date } from "../data/market";
 import type { Role } from "../data/market";
 import { Copilot } from "../features/Copilot";
 import { CompanionContext } from "./companion-context";
@@ -73,12 +92,35 @@ export const nav: Record<Role, [string, string][]> = {
     ["/admin/notifications", "Notifications"],
   ],
 };
+
+function getNavIcon(path: string) {
+  if (path === "/farmer" || path === "/customer" || path === "/admin") return LayoutDashboard;
+  if (path.endsWith("/pickups") || path.endsWith("/orders")) return ClipboardList;
+  if (path.endsWith("/stock") || path.endsWith("/stock-templates")) return Sliders;
+  if (path.endsWith("/pickup-windows") || path.endsWith("/market-day")) return CalendarDays;
+  if (path.endsWith("/markets")) return MapPin;
+  if (path.endsWith("/messages")) return MessageSquare;
+  if (path.endsWith("/support")) return LifeBuoy;
+  if (path.endsWith("/notifications") || path.endsWith("/announcements")) return Megaphone;
+  if (path.endsWith("/reports") || path.endsWith("/insights") || path.endsWith("/analytics")) return TrendingUp;
+  if (path.endsWith("/farmers")) return Users;
+  if (path.endsWith("/customers")) return UserCheck;
+  if (path.endsWith("/moderation")) return ShieldAlert;
+  if (path.endsWith("/categories")) return Layers;
+  if (path.endsWith("/favourites")) return Heart;
+  if (path.endsWith("/products")) return Package;
+  if (path.endsWith("/profile") || path.endsWith("/settings")) return Settings;
+  if (path.endsWith("/reviews")) return Heart;
+  return LayoutDashboard;
+}
+
 export function Layout() {
   const s = useMarket();
   const navigate = useNavigate();
   const { visitor, openModal, t } = useVisitor();
   const { pathname } = useLocation();
   const reduceMotion = useReducedMotion();
+  const drawerRef = useRef<HTMLElement>(null);
   const [menu, setMenu] = useState(false);
   const [assistant, setAssistant] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
@@ -113,6 +155,16 @@ export function Layout() {
     };
   }, [role, pathname]);
 
+  useEffect(() => {
+    if (!menu) return;
+    const previous=document.activeElement as HTMLElement|null, overflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    const elements=()=>Array.from(drawerRef.current?.querySelectorAll<HTMLElement>('a[href],button:not(:disabled)')||[]).filter(e=>e.getClientRects().length);
+    elements()[0]?.focus();
+    const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setMenu(false);if(e.key==='Tab'){const a=elements();if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a.at(-1)?.focus()}else if(!e.shiftKey&&document.activeElement===a.at(-1)){e.preventDefault();a[0]?.focus()}}};
+    document.addEventListener('keydown',key);
+    return ()=>{document.body.style.overflow=overflow;document.removeEventListener('keydown',key);previous?.focus()};
+  },[menu]);
   const handleSignOut = async () => {
     await gateway.signOut();
     navigate("/");
@@ -136,7 +188,7 @@ export function Layout() {
         {t('skipContent')}
       </a>
       <header
-        className={`header ${role === "customer" ? "customer-header" : ""}`}
+        className={`header ${role === "customer" ? "customer-header" : ""} ${workspace ? "workspace-header" : ""}`}
       >
         <Link to="/" className="brand">
           <BrandMark size={32} />
@@ -186,108 +238,207 @@ export function Layout() {
         </div>
       </header>
       {/* Mobile Left Sidebar Drawer */}
+      {/* Mobile Left Sidebar Drawer */}
       <div
         className={`mobile-drawer-backdrop ${menu ? "open" : ""}`}
         onClick={() => setMenu(false)}
         aria-hidden="true"
       />
       <aside
-        className={`mobile-drawer-sidebar ${menu ? "open" : ""}`}
+        ref={drawerRef}
+        role="dialog"
+        aria-modal={menu || undefined}
+        inert={!menu}
+        className={`mobile-drawer-sidebar ${role ? `dashboard-drawer role-${role}` : "public-drawer"} ${menu ? "open" : ""}`}
         aria-label="Mobile navigation"
       >
         <div className="mobile-drawer-header">
-          <div className="mobile-drawer-brand">
-            <Link to="/" onClick={() => setMenu(false)}>
-              <strong>MarketLink</strong>
-              <small>Gather & Grow</small>
-            </Link>
-          </div>
+          {role ? (
+            <div className="drawer-profile-card">
+              <div className="drawer-avatar">
+                {role === "farmer" ? <Store size={20} /> : role === "admin" ? <ShieldCheck size={20} /> : <UserRound size={20} />}
+              </div>
+              <div className="drawer-user-meta">
+                <strong>
+                  {role === "farmer"
+                    ? s.farmers.find((f) => f.id === s.farmerId)?.name || "Grower Stall"
+                    : role === "admin"
+                      ? "Operations Admin"
+                      : s.session?.name || "Shopper Space"}
+                </strong>
+                <span className="drawer-role-chip">
+                  {role === "farmer"
+                    ? ((s.farmers.find((f) => f.id === s.farmerId)?.stall ? `Stall ${s.farmers.find((f) => f.id === s.farmerId)?.stall} · ` : "") + "Grower")
+                    : role === "admin"
+                      ? "System Administrator"
+                      : "Verified Shopper"}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="mobile-drawer-brand">
+              <Link to="/" onClick={() => setMenu(false)}>
+                <strong>Gather & Grow</strong>
+                <small>Farm to table · Local markets</small>
+              </Link>
+            </div>
+          )}
           <button
             type="button"
             className="icon-button mobile-drawer-close"
             aria-label="Close navigation"
             onClick={() => setMenu(false)}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
         <div className="mobile-drawer-body">
+          {role ? (
+            <>
+              {/* Primary: Workspace Navigation */}
+              <div className="drawer-nav-group">
+                <p className="drawer-group-title">
+                  {role === "farmer" ? "Grower Workbench" : role === "admin" ? "Administration Hub" : "Your Market Space"}
+                </p>
+                <nav className="mobile-drawer-nav">
+                  {roleNav.map(([path, label]) => {
+                    const Icon = getNavIcon(path);
+                    const isMessages = path.endsWith("/messages");
+                    const count = isMessages ? unreadChatCount : 0;
+                    return (
+                      <NavLink
+                        key={path}
+                        end={path === `/${role}`}
+                        to={path}
+                        onClick={() => setMenu(false)}
+                        className={({ isActive }) => `drawer-nav-link ${isActive ? "active" : ""}`}
+                      >
+                        <Icon size={18} />
+                        <span className="drawer-nav-label">{label}</span>
+                        {count > 0 && <span className="drawer-counter-badge">{count}</span>}
+                      </NavLink>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              <div className="mobile-drawer-divider" />
+
+              {/* Secondary: Explore Marketplace */}
+              <div className="drawer-nav-group">
+                <p className="drawer-group-title">Explore Marketplace</p>
+                <nav className="mobile-drawer-nav secondary-nav">
+                  <NavLink to="/markets" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Store size={17} />
+                    <span className="drawer-nav-label">{t("navMarkets")}</span>
+                  </NavLink>
+                  <NavLink to="/products" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Apple size={17} />
+                    <span className="drawer-nav-label">{t("navProduce")}</span>
+                  </NavLink>
+                  <NavLink to="/farmers" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Users size={17} />
+                    <span className="drawer-nav-label">{t("navGrowers")}</span>
+                  </NavLink>
+                  <NavLink to="/help" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <HelpCircle size={17} />
+                    <span className="drawer-nav-label">{t("navHelp")}</span>
+                  </NavLink>
+                </nav>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Public Navigation */}
+              <div className="drawer-nav-group">
+                <p className="drawer-group-title">Marketplace</p>
+                <nav className="mobile-drawer-nav">
+                  <NavLink to="/markets" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Store size={18} />
+                    <span className="drawer-nav-label">{t("navMarkets")}</span>
+                  </NavLink>
+                  <NavLink to="/products" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Apple size={18} />
+                    <span className="drawer-nav-label">{t("navProduce")}</span>
+                  </NavLink>
+                  <NavLink to="/farmers" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Users size={18} />
+                    <span className="drawer-nav-label">{t("navGrowers")}</span>
+                  </NavLink>
+                  <NavLink to="/help" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <HelpCircle size={18} />
+                    <span className="drawer-nav-label">{t("navHelp")}</span>
+                  </NavLink>
+                </nav>
+              </div>
+
+              <div className="mobile-drawer-divider" />
+
+              {/* Public Accounts */}
+              <div className="drawer-nav-group">
+                <p className="drawer-group-title">Account & Access</p>
+                <nav className="mobile-drawer-nav secondary-nav">
+                  <NavLink to="/login" onClick={() => setMenu(false)} className="drawer-nav-link highlight">
+                    <LogIn size={18} />
+                    <span className="drawer-nav-label">{t("signIn")}</span>
+                  </NavLink>
+                  <NavLink to="/register/customer" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <UserPlus size={18} />
+                    <span className="drawer-nav-label">Join as shopper</span>
+                  </NavLink>
+                  <NavLink to="/register/farmer" onClick={() => setMenu(false)} className="drawer-nav-link">
+                    <Sprout size={18} />
+                    <span className="drawer-nav-label">Sell produce (Grower)</span>
+                  </NavLink>
+                </nav>
+              </div>
+            </>
+          )}
+
+          <div className="mobile-drawer-divider" />
+
+          {/* Location & Language Pill */}
           <button
             type="button"
-            className="header-location-pill mobile-drawer-pill"
+            className="mobile-drawer-region-btn"
             onClick={() => {
               setMenu(false);
               openModal();
             }}
           >
-            <Globe size={14} />
-            <span>
-              {visitor.locale === "ur" ? "اردو" : "EN"} ·{" "}
-              {visitor.country
-                ? countryName(visitor.country, visitor.locale)
-                : t("anywhere")}
-            </span>
+            <Globe size={15} />
+            <div className="region-meta">
+              <span className="region-title">Regional Hub</span>
+              <span className="region-value">
+                {visitor.locale === "ur" ? "اردو" : "English"} ·{" "}
+                {visitor.country
+                  ? countryName(visitor.country, visitor.locale) + (visitor.city ? ` (${visitor.city})` : "")
+                  : t("anywhere")}
+              </span>
+            </div>
+            <ArrowUpRight size={14} className="region-arrow" />
           </button>
+        </div>
 
-          <nav className="mobile-drawer-nav" aria-label="Main links">
-            <NavLink to="/markets" onClick={() => setMenu(false)}>
-              {t("navMarkets")}
-            </NavLink>
-            <NavLink to="/products" onClick={() => setMenu(false)}>
-              {t("navProduce")}
-            </NavLink>
-            <NavLink to="/farmers" onClick={() => setMenu(false)}>
-              {t("navGrowers")}
-            </NavLink>
-            <NavLink to="/help" onClick={() => setMenu(false)}>
-              {t("navHelp")}
-            </NavLink>
-          </nav>
-
-          <div className="mobile-drawer-divider" />
-
-          <div className="mobile-drawer-account">
-            <Link
-              to={s.role ? `/${s.role}` : "/login"}
-              onClick={() => setMenu(false)}
-              className="mobile-drawer-workspace-btn"
+        <div className="mobile-drawer-footer">
+          {s.role ? (
+            <button
+              className="drawer-signout-btn"
+              onClick={() => {
+                setMenu(false);
+                void handleSignOut();
+              }}
             >
-              <LayoutDashboard size={16} />
-              <span>{s.role ? t("workspace") : t("signIn")}</span>
+              <LogOut size={16} />
+              <span>Sign out ({s.role})</span>
+            </button>
+          ) : (
+            <Link to="/register" onClick={() => setMenu(false)} className="drawer-register-btn">
+              <span>Create free account</span>
+              <ArrowUpRight size={15} />
             </Link>
-
-            {role && (
-              <div className="mobile-drawer-role-section">
-                <p className="mobile-drawer-section-title">
-                  {role === "farmer"
-                    ? "Grower Workbench"
-                    : role === "admin"
-                      ? "Administration"
-                      : "My Market Space"}
-                </p>
-                <div className="mobile-drawer-role-links">
-                  {roleNav.map(([path, label]) => {
-                    const isMessages = path.endsWith("/messages");
-                    const badge =
-                      isMessages && unreadChatCount > 0
-                        ? ` (${unreadChatCount})`
-                        : "";
-                    return (
-                      <NavLink
-                        key={path}
-                        to={path}
-                        onClick={() => setMenu(false)}
-                      >
-                        {label}
-                        {badge}
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </aside>
       <div
@@ -376,23 +527,19 @@ export function Layout() {
                 const badge = isMessages && unreadChatCount > 0 ? ` (${unreadChatCount})` : '';
                 return (
                   <NavLink key={path} end to={path}>
+                    {path.endsWith('/markets')?<MapPin size={17}/>:path.endsWith('/farmers')||path.endsWith('/customers')?<UserRound size={17}/>:path.endsWith('/support')||path.endsWith('/messages')?<MessageSquare size={17}/>:path.endsWith('/notifications')?<Bell size={17}/>:path.endsWith('/reports')||path.endsWith('/insights')?<ClipboardList size={17}/>:<LayoutDashboard size={17}/>}
                     {label}{badge}
                   </NavLink>
                 );
               })}
             </nav>
             <div className="sidebar-note">
-              <Sprout />
-              <p>
-                {role === "farmer"
-                  ? "A good market day starts with a little planning."
-                  : "Thoughtful markets. Clear decisions."}
-              </p>
+              <span className="sidebar-account-label">{role === "farmer" ? "Grower workspace" : "Administrator workspace"}</span>
               <button
                 className="text-button"
                 onClick={handleSignOut}
               >
-                Sign out
+                <LogOut size={17}/> Sign out
               </button>
             </div>
           </aside>
@@ -446,6 +593,39 @@ export function Layout() {
               ))}
             </nav>
           )}
+          {/* Active Platform Announcements / Bulletins Banner */}
+          {s.announcements.some((a) => a.published) && (
+            <section className="workspace-notices" aria-label="Market announcements">
+              <div className="notices-header">
+                <div className="notices-title-badge">
+                  <Megaphone size={15} />
+                  <span>Market Bulletins & Notices</span>
+                </div>
+                <Link
+                  to={role ? `/${role}/notifications` : "/help"}
+                  className="notices-all-link"
+                >
+                  View all ({s.announcements.filter((a) => a.published).length}) <ArrowUpRight size={13} />
+                </Link>
+              </div>
+              <div className="notices-list">
+                {s.announcements
+                  .filter((a) => a.published)
+                  .map((a) => (
+                    <details key={a.id} className="notice-item" open={a.priority === "urgent"}>
+                      <summary>
+                        <span className={`notice-badge ${a.priority || "normal"}`}>
+                          {a.priority === "urgent" ? "Urgent" : a.type || "Notice"}
+                        </span>
+                        <strong>{a.title}</strong>
+                        {a.at && <time>{date(a.at)}</time>}
+                      </summary>
+                      <p>{a.body}</p>
+                    </details>
+                  ))}
+              </div>
+            </section>
+          )}
           <ScrollChoreography><CoverageBoundary><Outlet /></CoverageBoundary></ScrollChoreography>
         </main>
       </div>
@@ -481,6 +661,7 @@ export function Layout() {
           </p>
         </footer>
       )}
+      {!/^\/(admin|farmer|customer|login|register)(\/|$)/.test(pathname) && <PublicGuide/>}
       {assistant && <Copilot onClose={() => setAssistant(false)} />}
     </CompanionContext.Provider>
   );
@@ -533,3 +714,4 @@ export function Guard({ role }: { role: Role }) {
     );
   return <Outlet />;
 }
+

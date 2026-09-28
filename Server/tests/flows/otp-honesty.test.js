@@ -5,8 +5,9 @@ vi.mock('../../src/config/db.js',()=>({getDB:()=>({collection:()=>({findOne:mock
 vi.mock('../../src/config/env.js',()=>({env:{}}));
 vi.mock('../../src/utils/token.js',()=>({comparePassword:mock.compare,hashPassword:async()=>'',signToken:()=> 'test-token'}));
 vi.mock('../../src/services/email.service.js',()=>({sendLoginOtpEmail:mock.send,sendPasswordResetOtpEmail:mock.send}));
-import {sendLoginOtpService,verifyLoginOtpService} from '../../src/services/auth.service.js';
+import {sendLoginOtpService,verifyLoginOtpService,forgotPasswordService} from '../../src/services/auth.service.js';
 describe('Email verification without demo bypasses',()=>{
+ it('reports unregistered emails for login and reset',async()=>{mock.findOne.mockResolvedValue(null);await expect(sendLoginOtpService('missing@example.test','password')).rejects.toMatchObject({statusCode:404,code:'EMAIL_NOT_REGISTERED'});await expect(forgotPasswordService('missing@example.test')).rejects.toMatchObject({statusCode:404,code:'EMAIL_NOT_REGISTERED'})});
  it('returns no code; emailed code is required and cannot be replayed',async()=>{
   const email='isolated-login@example.test';mock.findOne.mockResolvedValue({_id:new ObjectId(),role:'customer',name:'Test',email,passwordHash:'test'});mock.send.mockResolvedValue(undefined);
   const response=await sendLoginOtpService(email,'test-password');expect(response).toEqual({otpSent:true,email});
@@ -34,3 +35,4 @@ describe('Email verification without demo bypasses',()=>{
  });
 
 });
+

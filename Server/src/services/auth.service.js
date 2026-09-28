@@ -17,7 +17,7 @@ function generateOtp() {
 }
 
 
-export async function registerCustomerService(data) {
+export async function registerCustomerService(data, verifiedPasswordHash) {
   const db = getDB();
 
   // 1. Check email uniqueness
@@ -30,7 +30,7 @@ export async function registerCustomerService(data) {
   }
 
   // 2. Hash password
-  const passwordHash = await hashPassword(data.password);
+  const passwordHash = verifiedPasswordHash || await hashPassword(data.password);
 
   // 3. Insert user record
   const now = new Date();
@@ -65,7 +65,7 @@ export async function registerCustomerService(data) {
   };
 }
 
-export async function registerFarmerService(data) {
+export async function registerFarmerService(data, verifiedPasswordHash) {
   const db = getDB();
 
   // 1. Check email uniqueness
@@ -78,7 +78,7 @@ export async function registerFarmerService(data) {
   }
 
   // 2. Hash password
-  const passwordHash = await hashPassword(data.password);
+  const passwordHash = verifiedPasswordHash || await hashPassword(data.password);
   const now = new Date();
 
   // 3. Insert user record
@@ -515,7 +515,7 @@ export async function forgotPasswordService(email) {
   const db = getDB();
   const key = email.toLowerCase().trim();
   const user = await db.collection('users').findOne({ email: key, isActive: true });
-  if (!user) return { sent: true }; // silently return to avoid enumeration
+  if (!user) throw Object.assign(new Error('This email is not registered. Create an account first.'),{statusCode:404,code:'EMAIL_NOT_REGISTERED'});
   const recent=otpStore.get('reset:'+key);
   if(recent && recent.expiresAt-Date.now()>OTP_TTL_MS-60000)throw Object.assign(new Error('Wait a minute before requesting another code.'),{statusCode:429});
   const otp = generateOtp();
@@ -561,9 +561,9 @@ export async function sendLoginOtpService(email, password) {
   const key = email.toLowerCase().trim();
   const user = await db.collection('users').findOne({ email: key, isActive: true });
   if (!user) {
-    const error = new Error('Invalid email or password.');
-    error.code = 'INVALID_CREDENTIALS';
-    error.statusCode = 401;
+    const error = new Error('This email is not registered or the account is inactive.');
+    error.code = 'EMAIL_NOT_REGISTERED';
+    error.statusCode = 404;
     throw error;
   }
 

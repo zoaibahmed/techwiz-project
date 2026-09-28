@@ -1,3 +1,5 @@
+import {AdminOperations} from './AdminOperations';
+import './admin-operations.css';
 import {ApplicationReview} from './ApplicationReview';
 import {SupportDesk} from './SupportDesk';
 import {VenueEditor} from './VenueEditor';
@@ -58,7 +60,7 @@ export function AdminPage() {
 function AdminOverviewCockpit() {
   const s = useMarket();
   const m = s.metrics;
-  const pendingFarmers = s.farmers.filter((f) => f.state === "Pending");
+  const pendingFarmers = s.farmers.filter((f) => f.state === "Pending" && f.onboardingStatus === "submitted");
   const flagged = s.reviews.filter((r) => r.status === "flagged");
   const pendingReviews = s.reviews.filter((r) => r.status === "pending");
   const hiddenProducts = s.products.filter((p) => !p.visible && !p.archived);
@@ -109,7 +111,7 @@ function AdminOverviewCockpit() {
   ];
 
   return (
-    <div className="farmer-workbench container">
+    <div className="farmer-workbench container admin-command-page">
       <div className="fw-header">
         <div className="fw-header-info">
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px", flexWrap: "wrap" }}>
@@ -137,42 +139,15 @@ function AdminOverviewCockpit() {
         </div>
       </div>
 
-      <div className="fw-briefing">
-        <div className="fw-briefing-head">
-          <span className="fw-briefing-badge">Today</span>
-          <strong>What needs a decision</strong>
-        </div>
-        <div className="fw-briefing-grid">
-          <div>
-            <strong>Growers</strong>
-            <span>
-              {pendingFarmers.length
-                ? `${pendingFarmers.length} application${pendingFarmers.length === 1 ? "" : "s"} to review.`
-                : "Every registered grower has a decision."}
-            </span>
-          </div>
-          <div>
-            <strong>Community</strong>
-            <span>
-              {pendingReviews.length
-                ? `${pendingReviews.length} review${pendingReviews.length === 1 ? "" : "s"} waiting for approval.`
-                : flagged.length
-                ? `${flagged.length} review${flagged.length === 1 ? "" : "s"} flagged for abuse or spam.`
-                : `No flagged reviews. Average rating ${m?.reviews.average?.toFixed(1) ?? "—"} from ${m?.reviews.count ?? 0} reviews.`}
-            </span>
-          </div>
-          <div>
-            <strong>Inbox</strong>
-            <span>
-              {openInquiries.length
-                ? `${openInquiries.length} contact message${openInquiries.length === 1 ? "" : "s"} open.`
-                : "No open contact messages."}
-            </span>
-          </div>
-        </div>
-      </div>
+      <nav className="admin-attention-strip" aria-label="Needs attention">
+        <span>Needs attention</span>
+        <Link to="/admin/farmers"><strong>{pendingFarmers.length}</strong> submitted applications <ArrowUpRight size={14}/></Link>
+        <Link to="/admin/moderation"><strong>{flagged.length + pendingReviews.length}</strong> reviews to check <ArrowUpRight size={14}/></Link>
+        <Link to="/admin/support"><strong>{openInquiries.length}</strong> contact inquiries <ArrowUpRight size={14}/></Link>
+      </nav>
 
       <AdminCommandOperationalStats />
+      <AdminOperations />
 
       <div className="adm-overview-grid">
         <div>
@@ -887,3 +862,5 @@ function AdminCustomersHub() {
     </div>
   );
 }
+
+

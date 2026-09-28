@@ -12,6 +12,7 @@ import {
   Sparkles,
   Bell,
   ListChecks,
+  Megaphone,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useMarket, useAction, Status } from "../components/ui";
@@ -123,6 +124,38 @@ export function CustomerCommand() {
           </strong>
         </Link>
       </div>
+
+      {/* Active Platform Announcements / Bulletins */}
+      {s.announcements.some((a) => a.published) && (
+        <section className="command-announcements-card">
+          <div className="command-panel-heading">
+            <h2>
+              <Megaphone size={16} /> Market Bulletins & Announcements
+            </h2>
+            <Link to="/customer/notifications">
+              All notifications ({s.announcements.filter((a) => a.published).length}) <ArrowUpRight size={14} />
+            </Link>
+          </div>
+          <div className="command-bulletins-grid">
+            {s.announcements
+              .filter((a) => a.published)
+              .slice(0, 3)
+              .map((a) => (
+                <article key={a.id} className={`command-bulletin-item ${a.priority || "normal"}`}>
+                  <div className="bulletin-header-line">
+                    <span className={`bulletin-tag ${a.priority || "normal"}`}>
+                      {a.priority === "urgent" ? "Urgent" : a.type || "Notice"}
+                    </span>
+                    {a.at && <time>{date(a.at)}</time>}
+                  </div>
+                  <h3>{a.title}</h3>
+                  <p>{a.body}</p>
+                </article>
+              ))}
+          </div>
+        </section>
+      )}
+
       <div className="command-workspace">
         <div className="command-discovery">
           <div className="command-panel-heading">

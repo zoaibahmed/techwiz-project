@@ -1,3 +1,5 @@
+import {beginRegistration,finishRegistration} from '../services/registration.service.js';
+import {strongPasswordSchema} from '../validation/auth.schema.js';
 import {
   registerCustomerSchema,
   registerFarmerSchema,
@@ -22,57 +24,14 @@ import {
 import { env } from '../config/env.js';
 import { getAuthCookieOptions, getCsrfCookieOptions, generateCsrfToken } from '../utils/token.js';
 
-export async function registerCustomer(req, res, next) {
-  try {
-    const validatedData = registerCustomerSchema.parse(req.body);
-    const result = await registerCustomerService(validatedData);
-
-    // 1. Set strict HTTP-Only cookie for JWT (no JavaScript access)
-    res.cookie('token', result.token, getAuthCookieOptions());
-
-    // 2. Issue fresh CSRF cookie
-    const csrfToken = generateCsrfToken();
-    res.cookie('marketlink_csrf', csrfToken, getCsrfCookieOptions());
-
-    // 3. Return user profile without exposing raw JWT in JSON
-    res.status(201).json({
-      data: {
-        user: result.user,
-      },
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function registerFarmer(req, res, next) {
-  try {
-    const validatedData = registerFarmerSchema.parse(req.body);
-    const result = await registerFarmerService(validatedData);
-
-    // 1. Set strict HTTP-Only cookie for JWT
-    res.cookie('token', result.token, getAuthCookieOptions());
-
-    // 2. Issue fresh CSRF cookie
-    const csrfToken = generateCsrfToken();
-    res.cookie('marketlink_csrf', csrfToken, getCsrfCookieOptions());
-
-    // 3. Return user & farmer profile without exposing raw JWT
-    res.status(201).json({
-      data: {
-        user: result.user,
-      },
-      meta: {
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+export async function registerCustomer(req,res,next){try{res.status(202).json({data:await beginRegistration(registerCustomerSchema.parse(req.body),'customer')})}catch(e){next(e)}}
+export async function registerFarmer(req,res,next){try{res.status(202).json({data:await beginRegistration(registerFarmerSchema.parse(req.body),'farmer')})}catch(e){next(e)}}
+export async function verifyRegistration(req,res,next){try{
+ const result=await finishRegistration(req.body.challengeId,req.body.code);
+ res.cookie('token',result.token,getAuthCookieOptions());
+ res.cookie('marketlink_csrf',generateCsrfToken(),getCsrfCookieOptions());
+ res.status(201).json({data:{user:result.user}});
+}catch(e){next(e)}}
 
 export async function login(req, res, next) {
   try {
@@ -210,9 +169,9 @@ export async function forgotPassword(req, res, next) {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: { code: 'VALIDATION', message: 'Email is required.' } });
     const result = await forgotPasswordService(email);
-    // Always return 200 so attackers cannot enumerate registered emails
+    // Unknown addresses receive the explicit registration error requested by the product.
     res.status(200).json({
-      data: { sent: true, ...(result?.devOtp ? { devOtp: result.devOtp } : {}) },
+      data: { sent: true },
       meta: { timestamp: new Date().toISOString() },
     });
   } catch (error) {
@@ -226,9 +185,7 @@ export async function resetPassword(req, res, next) {
     if (!email || !otp || !newPassword) {
       return res.status(400).json({ error: { code: 'VALIDATION', message: 'email, otp, and newPassword are required.' } });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: { code: 'VALIDATION', message: 'Password must be at least 8 characters.' } });
-    }
+    strongPasswordSchema.parse(newPassword);
     await resetPasswordService(email, otp, newPassword);
     res.status(200).json({ data: { reset: true }, meta: { timestamp: new Date().toISOString() } });
   } catch (error) {
