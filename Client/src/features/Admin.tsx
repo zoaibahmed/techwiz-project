@@ -38,7 +38,8 @@ export function AdminPage() {
   const page = pathname.split("/")[2] ?? "";
   const id = pathname.split("/")[3];
 
-  if (page === "support") return <SupportDesk />;
+  if (page === "inquiries") return <SupportDesk initialDeskTab="inquiries" />;
+  if (page === "support") return <SupportDesk initialDeskTab="tickets" />;
   if (page === "notifications") return <Notifications />;
   if (page === "reports" || page === "analytics") return <AdminAnalyticsWorkspace />;
   if (page === "markets" && (id || pathname.includes("/new"))) return <VenueEditor />;
@@ -143,7 +144,7 @@ function AdminOverviewCockpit() {
         <span>Needs attention</span>
         <Link to="/admin/farmers"><strong>{pendingFarmers.length}</strong> submitted applications <ArrowUpRight size={14}/></Link>
         <Link to="/admin/moderation"><strong>{flagged.length + pendingReviews.length}</strong> reviews to check <ArrowUpRight size={14}/></Link>
-        <Link to="/admin/support"><strong>{openInquiries.length}</strong> contact inquiries <ArrowUpRight size={14}/></Link>
+        <Link to="/admin/inquiries"><strong>{openInquiries.length}</strong> contact inquiries <ArrowUpRight size={14}/></Link>
       </nav>
 
       <AdminCommandOperationalStats />

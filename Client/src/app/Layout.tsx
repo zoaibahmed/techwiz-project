@@ -1,3 +1,4 @@
+import './customer-rail-fix.css';
 import './workspace-shell.css';
 import {PublicGuide} from '../components/PublicGuide';
 import { BrandMark } from "../components/BrandMark";
@@ -40,6 +41,7 @@ import {
   LogIn,
   UserPlus,
   ShieldCheck,
+  Inbox,
 } from "lucide-react";
 import { useMarket } from "../components/ui";
 import { useVisitor } from "../data/visitor-context";
@@ -82,6 +84,7 @@ export const nav: Record<Role, [string, string][]> = {
   admin: [
     ["/admin", "Command centre"],
     ["/admin/farmers", "Farmers"],
+    ["/admin/inquiries", "Website Inquiries"],
     ["/admin/support", "Support inbox"],
     ["/admin/customers", "Customers"],
     ["/admin/markets", "Markets"],
@@ -100,6 +103,7 @@ function getNavIcon(path: string) {
   if (path.endsWith("/pickup-windows") || path.endsWith("/market-day")) return CalendarDays;
   if (path.endsWith("/markets")) return MapPin;
   if (path.endsWith("/messages")) return MessageSquare;
+  if (path.endsWith("/inquiries")) return Inbox;
   if (path.endsWith("/support")) return LifeBuoy;
   if (path.endsWith("/notifications") || path.endsWith("/announcements")) return Megaphone;
   if (path.endsWith("/reports") || path.endsWith("/insights") || path.endsWith("/analytics")) return TrendingUp;
@@ -176,14 +180,19 @@ export function Layout() {
 
   useEffect(() => {
     if (!menu) return;
-    const previous=document.activeElement as HTMLElement|null, overflow=document.body.style.overflow;
+    const previous=document.activeElement as HTMLElement|null;
+    const bodyOverflow=document.body.style.overflow;
+    const htmlOverflow=document.documentElement.style.overflow;
+    // Lock both body AND html for iOS Safari compatibility
     document.body.style.overflow='hidden';
+    document.documentElement.style.overflow='hidden';
     const elements=()=>Array.from(drawerRef.current?.querySelectorAll<HTMLElement>('a[href],button:not(:disabled)')||[]).filter(e=>e.getClientRects().length);
     elements()[0]?.focus();
     const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setMenu(false);if(e.key==='Tab'){const a=elements();if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a.at(-1)?.focus()}else if(!e.shiftKey&&document.activeElement===a.at(-1)){e.preventDefault();a[0]?.focus()}}};
     document.addEventListener('keydown',key);
-    return ()=>{document.body.style.overflow=overflow;document.removeEventListener('keydown',key);previous?.focus()};
+    return ()=>{document.body.style.overflow=bodyOverflow;document.documentElement.style.overflow=htmlOverflow;document.removeEventListener('keydown',key);previous?.focus()};
   },[menu]);
+
   const handleSignOut = async () => {
     await gateway.signOut();
     navigate("/");
@@ -811,4 +820,3 @@ export function Guard({ role }: { role: Role }) {
     );
   return <Outlet />;
 }
-

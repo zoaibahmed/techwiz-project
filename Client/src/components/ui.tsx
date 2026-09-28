@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ReactNode, FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ArrowUpRight, Heart, X, MapPin, ArrowRight } from "lucide-react";
 import { gateway } from "../data/gateway";
 import type { Command } from "../data/gateway";
@@ -111,27 +111,54 @@ export function Status({ children }: { children: ReactNode }) {
     </span>
   );
 }
-export function Favourite({ id }: { id: string }) {
+export function Favourite({
+  id,
+  showLabel = false,
+  className = "",
+}: {
+  id: string;
+  showLabel?: boolean;
+  className?: string;
+}) {
   const s = useMarket();
   const act = useAction();
+  const location = useLocation();
   const selected = s.favourites.includes(id);
   if (s.role && s.role !== "customer") return null;
-  if (!s.role) return <Link className="icon-button favourite" to="/login" aria-label="Sign in to save favourites"><Heart size={19}/></Link>;
+
+  const redirectUrl = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+
+  if (!s.role) {
+    return (
+      <Link
+        className={`icon-button favourite ${showLabel ? "with-label" : ""} ${className}`.trim()}
+        to={redirectUrl}
+        aria-label="Sign in to save favourites"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Heart size={18} />
+        {showLabel && <span>Save to favourites</span>}
+      </Link>
+    );
+  }
+
   return (
     <button
-      className={`icon-button favourite ${selected ? "selected" : ""}`}
+      type="button"
+      className={`icon-button favourite ${selected ? "selected" : ""} ${showLabel ? "with-label" : ""} ${className}`.trim()}
       aria-label={selected ? "Remove from favourites" : "Save to favourites"}
       aria-pressed={selected}
-      onClick={() =>
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
         act(
           { type: "favourite", id },
-          selected
-            ? "Removed from favourites."
-            : "Saved to favourites.",
-        )
-      }
+          selected ? "Removed from favourites." : "Saved to favourites.",
+        );
+      }}
     >
-      <Heart size={19} fill={selected ? "currentColor" : "none"} />
+      <Heart size={18} fill={selected ? "currentColor" : "none"} />
+      {showLabel && <span>{selected ? "Saved in favourites" : "Save to favourites"}</span>}
     </button>
   );
 }

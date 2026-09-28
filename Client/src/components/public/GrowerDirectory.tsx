@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowUpRight, MapPin, Search, Star } from "lucide-react";
+import { ArrowUpRight, MapPin, Search, Star, ArrowUpDown, ChevronDown, Check } from "lucide-react";
 import { usePulse } from "../../data/pulse";
 import type { Pulse } from "../../data/pulse";
 import { date } from "../../data/market";
@@ -82,6 +82,111 @@ function nextDay(f: Farmer, products: Product[], today: string) {
 }
 
 type Sort = "rating" | "nearest" | "name";
+
+const GROWER_SORT_OPTIONS: { id: Sort; label: string; desc: string; icon: any }[] = [
+  { id: "rating", label: "Top rated", desc: "Highest customer review score", icon: Star },
+  { id: "nearest", label: "Nearest farm", desc: "Shortest farm-to-market distance", icon: MapPin },
+  { id: "name", label: "A–Z", desc: "Alphabetical business name", icon: ArrowUpDown },
+];
+
+function GrowerSortDropdown({
+  value,
+  onChange,
+}: {
+  value: Sort;
+  onChange: (sort: Sort) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const current = GROWER_SORT_OPTIONS.find((o) => o.id === value) || GROWER_SORT_OPTIONS[0];
+  const Icon = current.icon;
+
+  return (
+    <div className={`gd-custom-select-wrap ${open ? "is-open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="gd-custom-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="gd-custom-select-left">
+          <Icon size={14} className="gd-select-icon" />
+          <span className="gd-select-label-text">
+            <span className="gd-select-prefix">Sort:</span>{" "}
+            <strong>{current.label}</strong>
+          </span>
+        </span>
+        <ChevronDown size={15} className={`gd-select-chevron ${open ? "rotated" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="gd-custom-select-menu"
+            role="listbox"
+            tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="gd-custom-select-header">Sort growers by</div>
+            {GROWER_SORT_OPTIONS.map((opt) => {
+              const isSelected = opt.id === value;
+              const OptIcon = opt.icon;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`gd-custom-select-item ${isSelected ? "selected" : ""}`}
+                  onClick={() => {
+                    onChange(opt.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="gd-item-left">
+                    <span className="gd-item-icon-box">
+                      <OptIcon size={14} />
+                    </span>
+                    <span className="gd-item-text">
+                      <strong>{opt.label}</strong>
+                      <small>{opt.desc}</small>
+                    </span>
+                  </span>
+                  {isSelected && <Check size={16} className="gd-item-check" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function GrowerDirectory({
   farmers,
@@ -178,14 +283,7 @@ export function GrowerDirectory({
             );
           })}
         </div>
-        <label className="gd-sort">
-          <span>Sort</span>
-          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            <option value="rating">Top rated</option>
-            <option value="nearest">Nearest farm</option>
-            <option value="name">A–Z</option>
-          </select>
-        </label>
+        <GrowerSortDropdown value={sort} onChange={setSort} />
       </div>
 
       <div className="gd-grid">

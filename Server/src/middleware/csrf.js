@@ -22,7 +22,10 @@ const EXEMPT_PATHS = [
   '/api/auth/register/farmer',
   '/api/v1/contact',
   '/api/contact',
+  '/api/public-guide',
+  '/api/v1/public-guide',
 ];
+
 
 /**
  * Double-submit cookie CSRF protection middleware.

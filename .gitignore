@@ -36,3 +36,9 @@ Server/uploads/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Private submission bundles and database exports
+Submission/
+.submission-private/
+~$*.docx
+Documentation/Frontend/word-assets/

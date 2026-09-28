@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Check, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { Check, Plus, Search, X, ChevronDown, Tag, ArrowUpDown, Store, Users } from "lucide-react";
 import { useMarket, useAction, Favourite } from "../ui";
 import { date, money } from "../../data/market";
 import type { Farmer, Market, Product } from "../../data/market";
-import { EASE } from "../../motion/motion";
 import "./directory.css";
 
 export type ShelfFilters = {
@@ -16,6 +15,453 @@ export type ShelfFilters = {
   sort: string;
   available: boolean;
 };
+
+const PRODUCE_SORT_OPTIONS = [
+  { id: "name", label: "A–Z", desc: "Alphabetical" },
+  { id: "low", label: "Price: low to high", desc: "Most affordable" },
+  { id: "high", label: "Price: high to low", desc: "Premium selection" },
+  { id: "left", label: "Fewest left", desc: "Urgent seasonal stock" },
+];
+
+function ProduceSortDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (sort: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const current = PRODUCE_SORT_OPTIONS.find((o) => o.id === value) || PRODUCE_SORT_OPTIONS[0];
+
+  return (
+    <div className={`ps-custom-select-wrap ${open ? "is-open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="ps-custom-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="ps-custom-select-left">
+          <ArrowUpDown size={14} className="ps-select-icon" />
+          <span className="ps-select-label-text">
+            <span className="ps-select-prefix">Sort:</span>{" "}
+            <strong>{current.label}</strong>
+          </span>
+        </span>
+        <ChevronDown size={15} className={`ps-select-chevron ${open ? "rotated" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="ps-custom-select-menu"
+            role="listbox"
+            tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="ps-custom-select-header">Sort produce</div>
+            {PRODUCE_SORT_OPTIONS.map((opt) => {
+              const isSelected = opt.id === value;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`ps-custom-select-item ${isSelected ? "selected" : ""}`}
+                  onClick={() => {
+                    onChange(opt.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="ps-item-text">
+                    <strong>{opt.label}</strong>
+                    <small>{opt.desc}</small>
+                  </span>
+                  {isSelected && <Check size={14} className="ps-item-check" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ProduceCategoryDropdown({
+  categories,
+  allCount,
+  selected,
+  onChange,
+}: {
+  categories: { name: string; count: number }[];
+  allCount: number;
+  selected: string;
+  onChange: (category: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const currentCategory = categories.find((c) => c.name === selected);
+  const currentCount = currentCategory ? currentCategory.count : allCount;
+  const currentLabel = selected || "All Products";
+
+  return (
+    <div className={`ps-custom-select-wrap ps-category-dropdown ${open ? "is-open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="ps-custom-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="ps-custom-select-left">
+          <Tag size={14} className="ps-select-icon" />
+          <span className="ps-select-label-text">
+            <span className="ps-select-prefix">Category:</span>{" "}
+            <strong>{currentLabel}</strong>
+          </span>
+          <span className="ps-select-badge">{currentCount}</span>
+        </span>
+        <ChevronDown size={15} className={`ps-select-chevron ${open ? "rotated" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="ps-custom-select-menu"
+            role="listbox"
+            tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="ps-custom-select-header">Category filter</div>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!selected}
+              className={`ps-custom-select-item ${!selected ? "selected" : ""}`}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              <span className="ps-item-text">All products</span>
+              <span className="ps-item-right">
+                <span className="ps-item-count">{allCount}</span>
+                {!selected && <Check size={14} className="ps-item-check" />}
+              </span>
+            </button>
+            {categories.length > 0 && <div className="ps-custom-select-divider" />}
+            <div className="ps-custom-select-scroll">
+              {categories.map((c) => {
+                const isSelected = selected === c.name;
+                return (
+                  <button
+                    key={c.name}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`ps-custom-select-item ${isSelected ? "selected" : ""}`}
+                    onClick={() => {
+                      onChange(c.name);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="ps-item-text">{c.name}</span>
+                    <span className="ps-item-right">
+                      <span className="ps-item-count">{c.count}</span>
+                      {isSelected && <Check size={14} className="ps-item-check" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ProduceMarketDropdown({
+  markets,
+  selected,
+  onChange,
+}: {
+  markets: Market[];
+  selected: string;
+  onChange: (marketId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const currentMarket = markets.find((m) => m.id === selected);
+  const currentLabel = currentMarket ? currentMarket.name : "All markets";
+
+  return (
+    <div className={`ps-custom-select-wrap ps-market-dropdown ${open ? "is-open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="ps-custom-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="ps-custom-select-left">
+          <Store size={14} className="ps-select-icon" />
+          <span className="ps-select-label-text">
+            <span className="ps-select-prefix">Market:</span>{" "}
+            <strong>{currentLabel}</strong>
+          </span>
+          {selected && <span className="ps-select-badge">Active</span>}
+        </span>
+        <ChevronDown size={15} className={`ps-select-chevron ${open ? "rotated" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="ps-custom-select-menu"
+            role="listbox"
+            tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="ps-custom-select-header">Filter by market venue</div>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!selected}
+              className={`ps-custom-select-item ${!selected ? "selected" : ""}`}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              <span className="ps-item-text">
+                <strong>All markets</strong>
+                <small>Show produce across all venues</small>
+              </span>
+              {!selected && <Check size={14} className="ps-item-check" />}
+            </button>
+            <div className="ps-custom-select-divider" />
+            <div className="ps-custom-select-scroll">
+              {markets.map((m) => {
+                const isSelected = selected === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`ps-custom-select-item ${isSelected ? "selected" : ""}`}
+                    onClick={() => {
+                      onChange(m.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="ps-item-text">
+                      <strong>{m.name}</strong>
+                      <small>{m.city}, {m.countryName || m.countryCode}</small>
+                    </span>
+                    {isSelected && <Check size={14} className="ps-item-check" />}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ProduceGrowerDropdown({
+  farmers,
+  selected,
+  onChange,
+}: {
+  farmers: Farmer[];
+  selected: string;
+  onChange: (farmerId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const reduce = useReducedMotion();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const currentFarmer = farmers.find((f) => f.id === selected);
+  const currentLabel = currentFarmer ? currentFarmer.name : "All growers";
+
+  return (
+    <div className={`ps-custom-select-wrap ps-grower-dropdown ${open ? "is-open" : ""}`} ref={containerRef}>
+      <button
+        type="button"
+        className="ps-custom-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="ps-custom-select-left">
+          <Users size={14} className="ps-select-icon" />
+          <span className="ps-select-label-text">
+            <span className="ps-select-prefix">Grower:</span>{" "}
+            <strong>{currentLabel}</strong>
+          </span>
+          {selected && <span className="ps-select-badge">Active</span>}
+        </span>
+        <ChevronDown size={15} className={`ps-select-chevron ${open ? "rotated" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="ps-custom-select-menu"
+            role="listbox"
+            tabIndex={-1}
+            initial={reduce ? false : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="ps-custom-select-header">Filter by farmstead &amp; grower</div>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!selected}
+              className={`ps-custom-select-item ${!selected ? "selected" : ""}`}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              <span className="ps-item-text">
+                <strong>All growers</strong>
+                <small>Show produce from all farmsteads</small>
+              </span>
+              {!selected && <Check size={14} className="ps-item-check" />}
+            </button>
+            <div className="ps-custom-select-divider" />
+            <div className="ps-custom-select-scroll">
+              {farmers.map((f) => {
+                const isSelected = selected === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`ps-custom-select-item ${isSelected ? "selected" : ""}`}
+                    onClick={() => {
+                      onChange(f.id);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="ps-item-text">
+                      <strong>{f.name}</strong>
+                      <small>{f.city || f.location || f.person}</small>
+                    </span>
+                    {isSelected && <Check size={14} className="ps-item-check" />}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /** One product on the shelf: live availability, next market date and quick add. */
 function ShelfCard({ p, farmer, market, index }: { p: Product; farmer?: Farmer; market?: Market; index: number }) {
@@ -36,15 +482,14 @@ function ShelfCard({ p, farmer, market, index }: { p: Product; farmer?: Farmer; 
     <motion.article
       className={`ps-card${soldOut ? " is-out" : ""}`}
       layout={!reduce}
-      initial={reduce ? false : { clipPath: "inset(100% 0% 0% 0%)", y: 20 }}
-      whileInView={{ clipPath: "inset(0% 0% 0% 0%)", y: 0 }}
-      viewport={{ once: true, amount: 0.15 }}
-      exit={{ opacity: 0, scale: reduce ? 1 : 0.94 }}
-      transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : (index % 4) * 0.06, ease: EASE.riseCurve }}
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: reduce ? 1 : 0.95 }}
+      transition={{ duration: reduce ? 0 : 0.25, delay: reduce ? 0 : (index % 4) * 0.03, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="ps-media">
-        <Link to={`/products/${p.id}`} tabIndex={-1} aria-hidden="true">
-          <img src={p.image} alt="" loading="lazy" width={400} height={400} />
+        <Link to={`/products/${p.id}`} className="ps-media-link" aria-label={`View details for ${p.name}`}>
+          <img src={p.image} alt={p.name} loading="lazy" width={400} height={400} />
         </Link>
         <Favourite id={p.id} />
         {soldOut ? (
@@ -124,8 +569,6 @@ export function ProduceShelf({
   onChange: (key: keyof ShelfFilters, value: string) => void;
   onReset: () => void;
 }) {
-  const reduce = useReducedMotion();
-  const [more, setMore] = useState(!!(filters.farmer || filters.market));
   const active = [filters.q, filters.category, filters.farmer, filters.market, filters.available ? "1" : ""].filter(Boolean).length;
   return (
     <section className="ps" id="harvest-filters" aria-label="Produce">
@@ -141,62 +584,32 @@ export function ProduceShelf({
             <span aria-hidden="true" />
             In stock only
           </label>
-          <button className="ps-more-btn" aria-expanded={more} onClick={() => setMore((v) => !v)}>
-            <SlidersHorizontal size={16} /> Market &amp; grower
-          </button>
-          <label className="ps-select">
-            <span>Sort</span>
-            <select value={filters.sort} onChange={(e) => onChange("sort", e.target.value)} aria-label="Sort produce">
-              <option value="name">A–Z</option>
-              <option value="low">Price: low to high</option>
-              <option value="high">Price: high to low</option>
-              <option value="left">Fewest left</option>
-            </select>
-          </label>
+          <ProduceCategoryDropdown
+            categories={categories}
+            allCount={allCount}
+            selected={filters.category}
+            onChange={(cat) => onChange("category", cat)}
+          />
+          <ProduceMarketDropdown
+            markets={markets}
+            selected={filters.market}
+            onChange={(m) => onChange("market", m)}
+          />
+          <ProduceGrowerDropdown
+            farmers={farmers}
+            selected={filters.farmer}
+            onChange={(f) => onChange("farmer", f)}
+          />
+          <ProduceSortDropdown value={filters.sort} onChange={(s) => onChange("sort", s)} />
           <span className="ps-count" aria-live="polite">
             {products.length} of {allCount}
           </span>
-          <label className="ps-select ps-category-dropdown"><span>Category</span><select aria-label="Filter by category" value={filters.category} onChange={e=>onChange("category",e.target.value)}><option value="">All products ({allCount})</option>{categories.map(c=><option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}</select></label>
           {active > 0 && (
             <button className="ps-reset" onClick={onReset}>
               <X size={14} /> Clear {active}
             </button>
           )}
         </div>
-        <AnimatePresence initial={false}>
-          {more && (
-            <motion.div
-              className="ps-more"
-              initial={reduce ? false : { height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={reduce ? undefined : { height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: EASE.riseCurve }}
-            >
-              <label className="ps-select">
-                <span>Market</span>
-                <select value={filters.market} onChange={(e) => onChange("market", e.target.value)}>
-                  <option value="">All markets</option>
-                  {markets.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ps-select">
-                <span>Grower</span>
-                <select value={filters.farmer} onChange={(e) => onChange("farmer", e.target.value)}>
-                  <option value="">All growers</option>
-                  {farmers.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       <div className="ps-grid">

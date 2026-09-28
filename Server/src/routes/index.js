@@ -59,6 +59,7 @@ v1Router.use('/', chatRouter);
 apiRouter.use('/v1', v1Router);
 
 // Fallback convenience aliases directly at /api
+apiRouter.use('/', publicGuideRouter);
 apiRouter.use('/', workspaceRouter);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/admin', adminRoutes);

@@ -39,35 +39,114 @@ import {
   Notice,
 } from "../components/ui";
 import { date, money } from "../data/market";
+import { getAvailableDays } from "../data/visitor";
 import { growerPhoto, marketPhoto } from "../data/photos";
 
 // Scope public records without mutating the account/workspace store.
-function useDiscoveryState() {
+function useDiscoveryState(dayOverride?: string | null) {
   const state = useMarket();
   const { visitor } = useVisitor();
-  const markets = state.markets.filter(
-    (m) =>
-      m.countryCode === visitor.country &&
-      (!visitor.city || m.city?.toLowerCase() === visitor.city.toLowerCase()),
-  );
-  const ids = new Set(markets.map((m) => m.id));
 
-  // Keep growers attending markets in the city, located in the city, or registered without an assigned market
-  const cityLower = visitor.city?.toLowerCase().trim();
+  // If dayOverride is provided (even as empty string to see all days), respect it; otherwise default to visitor.day
+  const activeDay = dayOverride !== undefined ? (dayOverride || "") : (visitor.day || "");
+
+  const hasCountry = Boolean(visitor.country);
+  const selectedCountry = visitor.country?.toUpperCase();
+  const selectedCity = visitor.city?.trim().toLowerCase();
+
+  // 1. Markets Filter
+  const locationMarkets = state.markets.filter((m) => {
+    if (!m.active) return false;
+    if (hasCountry) {
+      if ((m.countryCode ?? "").toUpperCase() !== selectedCountry) return false;
+      if (selectedCity && (m.city ?? "").trim().toLowerCase() !== selectedCity) return false;
+    }
+    return true;
+  });
+
+  const dayOfWeek = activeDay ? new Date(`${activeDay}T12:00:00Z`).getUTCDay() : null;
+  const markets = activeDay
+    ? locationMarkets.filter((m) => {
+        const matchesDate = m.day === activeDay || (m.nextDates && m.nextDates.includes(activeDay));
+        const matchesDayOfWeek = m.operatingDays && dayOfWeek !== null && m.operatingDays.includes(dayOfWeek);
+        return Boolean(matchesDate || matchesDayOfWeek);
+      })
+    : locationMarkets;
+
+  const marketIds = new Set(markets.map((m) => m.id));
+
+  // 2. Farmers (Growers) Filter:
+  // Must be approved and attend at least one of the active matching markets
   const farmers = state.farmers.filter((f) => {
-    if (ids.has(f.marketId) || (f.marketIds ?? []).some((id) => ids.has(id))) return true;
-    if (cityLower && ((f as any).city?.toLowerCase().trim() === cityLower || f.location?.toLowerCase().includes(cityLower))) return true;
-    if (!f.marketIds || f.marketIds.length === 0) return true;
-    return false;
+    const isApproved = String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved";
+    if (!isApproved) return false;
+
+    if (hasCountry || activeDay) {
+      if (markets.length === 0) return false;
+      return (
+        (f.marketId && marketIds.has(f.marketId)) ||
+        (f.marketIds ?? []).some((id) => marketIds.has(id))
+      );
+    }
+    return true;
   });
 
   const farmerIds = new Set(farmers.map((f) => f.id));
+
+  // 3. Products Filter:
+  // Must be visible, belonging to one of the matching growers, and available for that day/market
+  const products = state.products.filter((p) => {
+    if (!p.visible) return false;
+
+    if (hasCountry || activeDay) {
+      if (!farmerIds.has(p.farmerId)) return false;
+    }
+
+    if (activeDay) {
+      const hasOffer = (p.offers ?? []).some(
+        (o) => o.date === activeDay && (marketIds.has(o.marketId) || !o.marketId)
+      );
+      const hasDate = p.date === activeDay && (marketIds.has(p.marketId ?? "") || !p.marketId);
+      const hasSlot = state.slots.some(
+        (slot) =>
+          slot.farmerId === p.farmerId &&
+          marketIds.has(slot.marketId) &&
+          (slot.date === activeDay || slot.start.startsWith(activeDay))
+      );
+
+      const hasDatedOffersOrSlots =
+        (p.offers && p.offers.length > 0) ||
+        Boolean(p.date) ||
+        state.slots.some((s) => s.farmerId === p.farmerId);
+
+      if (hasDatedOffersOrSlots) {
+        if (!hasOffer && !hasDate && !hasSlot) return false;
+      }
+    } else if (hasCountry && markets.length > 0) {
+      if (p.marketId && !marketIds.has(p.marketId)) {
+        if (p.offers && p.offers.length > 0) {
+          return p.offers.some((o) => marketIds.has(o.marketId));
+        }
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // 4. Slots Filter:
+  const slots = state.slots.filter(
+    (slot) =>
+      marketIds.has(slot.marketId) &&
+      (!activeDay || slot.date === activeDay || slot.start.startsWith(activeDay))
+  );
+
   return {
     ...state,
-    markets: markets.length ? markets : state.markets,
-    farmers: farmers.length ? farmers : state.farmers,
-    products: state.products.filter((p) => farmerIds.size === 0 || farmerIds.has(p.farmerId)),
-    slots: state.slots.filter((slot) => ids.has(slot.marketId)),
+    markets: hasCountry || activeDay ? markets : state.markets,
+    farmers: hasCountry || activeDay ? farmers : state.farmers.filter(f => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved"),
+    products: hasCountry || activeDay ? products : state.products,
+    slots,
   };
 }
 
@@ -76,21 +155,29 @@ export const Home = lazy(() =>
 );
 
 export function Markets() {
-  const s = useDiscoveryState();
+  const { visitor } = useVisitor();
+  const rawState = useMarket();
   const reduceMotion = useReducedMotion();
   const [params, set] = useSearchParams();
-  const [selected, select] = useState(s.markets[0]?.id ?? "");
   const [map, showMap] = useState(false);
   const query = params.get("q") ?? "";
-  const day = params.get("day") ?? "";
+
+  // Available days for this location:
+  const availableDays = getAvailableDays(rawState.markets, visitor.country, visitor.city);
+
+  // If ?day in URL, use it; otherwise default to visitor.day
+  const dayParam = params.get("day");
+  const activeDay = dayParam !== null ? dayParam : (visitor.day || "");
+
+  const s = useDiscoveryState(activeDay);
+  const [selected, select] = useState(s.markets[0]?.id ?? "");
 
   const filtered = s.markets.filter(
     (m) =>
       m.active &&
       `${m.name} ${m.area} ${m.city ?? ""}`
         .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (!day || m.day === day),
+        .includes(query.toLowerCase()),
   );
 
   const selectedMarket = filtered.some((m) => m.id === selected)
@@ -121,11 +208,11 @@ export function Markets() {
           Market Day{" "}
           <select
             aria-label="Market day"
-            value={day}
+            value={activeDay}
             onChange={(e) => update("day", e.target.value)}
           >
             <option value="">All Market Days</option>
-            {[...new Set(s.markets.map((m) => m.day))].sort().map((d) => (
+            {availableDays.map((d) => (
               <option key={d} value={d}>
                 {date(d)}
               </option>
@@ -464,19 +551,17 @@ export function MarketDetail() {
 }
 
 export function Farmers() {
-  const state = useMarket();
-  const allApproved = state.farmers.filter(
-    (f) => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved",
-  );
+  const s = useDiscoveryState();
+  const allApproved = s.farmers;
 
   return (
     <div className="grower-editorial-page">
       <SceneHeader kind="growers" target="grower-directory" />
       <GrowerDirectory
         farmers={allApproved}
-        markets={state.markets.filter((m) => m.active)}
-        products={state.products}
-        today={state.now.slice(0, 10)}
+        markets={s.markets.filter((m) => m.active)}
+        products={s.products}
+        today={s.now.slice(0, 10)}
       />
     </div>
   );
@@ -670,8 +755,11 @@ export function FarmerDetail() {
 }
 
 export function Products() {
-  const s = useMarket();
+  const { visitor } = useVisitor();
   const [params, set] = useSearchParams();
+  const dayParam = params.get("day");
+  const day = dayParam !== null ? dayParam : (visitor.day || "");
+  const s = useDiscoveryState(day);
   const filters: ShelfFilters = {
     q: params.get("q") ?? "",
     category: params.get("category") ?? "",
@@ -680,7 +768,6 @@ export function Products() {
     sort: params.get("sort") ?? "name",
     available: params.get("available") === "true",
   };
-  const day = params.get("day") ?? "";
   const max = Number(params.get("max") ?? 0);
 
   const update = (key: string, v: string) => {
@@ -690,9 +777,7 @@ export function Products() {
     set(n, { replace: key === "q" });
   };
 
-  const approved = s.farmers.filter(
-    (f) => String(f.state).toLowerCase() === "approved" || f.approvalStatus === "approved",
-  );
+  const approved = s.farmers;
   const approvedIds = new Set(approved.map((f) => f.id));
   const shelf = s.products.filter((p) => p.visible && approvedIds.has(p.farmerId));
   const attends = (farmerId: string, marketId: string) => {
@@ -708,7 +793,10 @@ export function Products() {
         (!filters.category || p.category === filters.category) &&
         (!filters.farmer || p.farmerId === filters.farmer) &&
         (!filters.market || attends(p.farmerId, filters.market) || p.marketId === filters.market) &&
-        (!day || (p.offers ?? []).some((o) => o.date === day) || s.slots.some((slot) => slot.farmerId === p.farmerId && slot.start.startsWith(day))) &&
+        (!day ||
+          (p.offers ?? []).some((o) => o.date === day) ||
+          s.slots.some((slot) => slot.farmerId === p.farmerId && slot.start.startsWith(day)) ||
+          p.date === day) &&
         (!filters.available || (p.available && left(p) > 0)) &&
         (!max || p.price <= max * 100),
     )
@@ -786,14 +874,16 @@ export function ProductDetail() {
             style={{
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "start",
+              alignItems: "center",
               marginBottom: "8px",
+              gap: "12px",
+              flexWrap: "wrap",
             }}
           >
             <Link className="eyebrow" to={`/farmers/${f.id}`}>
               {f.name}
             </Link>
-            <Favourite id={p.id} />
+            <Favourite id={p.id} showLabel />
           </div>
 
           <h1

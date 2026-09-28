@@ -672,13 +672,27 @@ small {
   max-width: 560px;
   flex: 1;
   min-width: 200px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.search:focus-within {
+  border-color: var(--forest, #1e3f2e) !important;
+  box-shadow: 0 0 0 3px rgba(30, 63, 46, 0.12) !important;
 }
 .search input {
   border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
   background: none;
   min-width: 0;
   width: 100%;
   padding: 14px 0 !important;
+  color: var(--ink);
+  font: inherit;
+}
+.search input:focus,
+.search input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 .inline-field {
   font-size: 13px;
@@ -697,6 +711,13 @@ textarea {
   padding: 11px 13px;
   max-width: 100%;
   min-width: 0;
+}
+input:not([type="checkbox"], [type="radio"], [type="range"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--forest, #1e3f2e);
+  box-shadow: 0 0 0 2px rgba(30, 63, 46, 0.12);
 }
 textarea {
   resize: vertical;

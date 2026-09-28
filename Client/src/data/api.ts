@@ -970,4 +970,30 @@ export const marketParticipationApi = {
 export interface RegistrationChallenge {challengeId:string;email:string;verificationRequired:true}
 export const beginRegistrationApi=(role:'customer'|'farmer',data:Record<string,string>)=>request<RegistrationChallenge>(`/auth/register/${role}`,{method:'POST',body:JSON.stringify(data)});
 export const verifyRegistrationApi=async(challengeId:string,code:string)=>{const result=await request<{user:UserSession}>('/auth/register/verify',{method:'POST',body:JSON.stringify({challengeId,code})});return result.user};
-export const askPublicGuideApi=(message:string,country:string,city:string)=>request<{reply:string;sources:{title:string;href:string;detail:string}[];engine:string;readOnly:true}>('/public-guide',{method:'POST',body:JSON.stringify({message,country,city})});
+export interface PublicProductCard {id:string;name:string;image:string;price:string;currency:string;unit:string;available:boolean;date:string;farmerName:string;farmerId:string;href:string}
+export interface PublicGuideTurnHistory {question:string;reply:string;}
+export interface PublicGuideInquiry {id:string;name:string;email:string;subject:string;createdAt?:string;}
+export const askPublicGuideApi=(message:string,country:string,city:string,history?:PublicGuideTurnHistory[])=>request<{reply:string;sources:{title:string;href:string;detail:string}[];products:PublicProductCard[];engine:string;readOnly:true;needsLocation?:boolean;inquirySent?:boolean;inquiry?:PublicGuideInquiry;needsInquiryFields?:string[]}>('/public-guide',{method:'POST',body:JSON.stringify({message,country,city,history})});
+
+export interface AdminInquiryItem {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+  status: 'new' | 'in_progress' | 'resolved';
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const adminInquiriesApi = {
+  list: (status?: string) =>
+    request<AdminInquiryItem[]>(status ? `/admin/inquiries?status=${status}` : '/admin/inquiries'),
+  updateStatus: (id: string, status: 'new' | 'in_progress' | 'resolved', adminNotes = '') =>
+    request<AdminInquiryItem>(`/admin/inquiries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, adminNotes }),
+    }),
+};
